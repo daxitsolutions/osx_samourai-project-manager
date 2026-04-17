@@ -1,0 +1,1 @@
+# osx_samourai-project-manager

@@ -279,6 +279,7 @@ private struct NormalizedResourceFields {
 
 actor SamouraiPersistence {
     private let fileManager = FileManager.default
+    private let backupRetentionCount = 120
     private let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -296,6 +297,12 @@ actor SamouraiPersistence {
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let appDirectory = baseURL.appending(path: "SamouraiProjectManager", directoryHint: .isDirectory)
         return appDirectory.appending(path: "projects.json")
+    }
+
+    private var backupDirectoryURL: URL {
+        fileURL
+            .deletingLastPathComponent()
+            .appending(path: "auto-backups", directoryHint: .isDirectory)
     }
 
     func load() throws -> SamouraiDatabase {
@@ -318,6 +325,42 @@ actor SamouraiPersistence {
         try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let data = try encoder.encode(database)
         try data.write(to: url, options: [.atomic])
+        try writeAutoBackup(data)
+    }
+
+    private func writeAutoBackup(_ data: Data) throws {
+        let backupDirectoryURL = backupDirectoryURL
+        try fileManager.createDirectory(at: backupDirectoryURL, withIntermediateDirectories: true)
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
+
+        let fileName = "projects-\(formatter.string(from: .now)).json"
+        let backupURL = backupDirectoryURL.appending(path: fileName)
+        try data.write(to: backupURL, options: [.atomic])
+
+        try trimOldBackups(in: backupDirectoryURL)
+    }
+
+    private func trimOldBackups(in directoryURL: URL) throws {
+        let backupURLs = try fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.creationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.pathExtension.lowercased() == "json" }
+        .sorted { lhs, rhs in
+            let lhsDate = (try? lhs.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+            let rhsDate = (try? rhs.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+            return lhsDate > rhsDate
+        }
+
+        guard backupURLs.count > backupRetentionCount else { return }
+        for staleURL in backupURLs.dropFirst(backupRetentionCount) {
+            try? fileManager.removeItem(at: staleURL)
+        }
     }
 }
 
@@ -1503,6 +1546,66 @@ final class SamouraiStore {
         persist()
     }
 
+    func deleteProject(projectID: UUID) {
+        let removedProject = projects.first { $0.id == projectID }
+        guard removedProject != nil else { return }
+
+        projects.removeAll { $0.id == projectID }
+
+        resources = resources.map { resource in
+            var updated = resource
+            updated.assignedProjectIDs.removeAll { $0 == projectID }
+            if updated.assignedProjectIDs != resource.assignedProjectIDs {
+                updated.updatedAt = .now
+            }
+            return updated
+        }
+
+        activities.removeAll { $0.projectID == projectID }
+        events.removeAll { $0.projectID == projectID }
+        actions = actions.map { action in
+            var updated = action
+            if updated.projectID == projectID {
+                updated.projectID = nil
+                updated.activityID = nil
+                updated.updatedAt = .now
+            }
+            return updated
+        }
+        meetings.removeAll { $0.projectID == projectID }
+        decisions.removeAll { $0.projectID == projectID }
+        governanceReports = governanceReports.map { report in
+            var updated = report
+            if let scoped = report.scopedProjectIDs {
+                let filtered = scoped.filter { $0 != projectID }
+                updated.scopedProjectIDs = filtered.isEmpty ? nil : filtered
+            }
+            return updated
+        }
+
+        // Risks carried by the deleted project are preserved as unassigned for traceability.
+        if let removedProject {
+            let orphanRisks = removedProject.risks.map { risk -> Risk in
+                var updated = risk
+                updated.projectNames = "Sans projet"
+                updated.lastModifiedAt = .now
+                return updated
+            }
+            unassignedRisks.append(contentsOf: orphanRisks)
+        }
+
+        projects = sortProjects(projects)
+        resources = sortResources(resources)
+        activities = sortActivities(activities)
+        events = sortEvents(events)
+        actions = sortActions(actions)
+        meetings = sortMeetings(meetings)
+        decisions = sortDecisions(decisions)
+        governanceReports = sortGovernanceReports(governanceReports)
+        unassignedRisks = sortStandaloneRisks(unassignedRisks)
+        persist()
+    }
+
     func replaceProjectTestingPhase(projectID: UUID, phase: ProjectTestingPhase) {
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return }
 
@@ -1622,6 +1725,28 @@ final class SamouraiStore {
         unassignedRisks[riskIndex].riskStatus = cleanedStatus
         unassignedRisks[riskIndex].lastModifiedAt = .now
         unassignedRisks = sortStandaloneRisks(unassignedRisks)
+        persist()
+    }
+
+    func deleteRisk(riskID: UUID) {
+        var didDelete = false
+
+        for projectIndex in projects.indices {
+            let beforeCount = projects[projectIndex].risks.count
+            projects[projectIndex].risks.removeAll { $0.id == riskID }
+            if projects[projectIndex].risks.count != beforeCount {
+                projects[projectIndex].updatedAt = .now
+                didDelete = true
+            }
+        }
+
+        let beforeOrphanCount = unassignedRisks.count
+        unassignedRisks.removeAll { $0.id == riskID }
+        didDelete = didDelete || (unassignedRisks.count != beforeOrphanCount)
+
+        guard didDelete else { return }
+        unassignedRisks = sortStandaloneRisks(unassignedRisks)
+        projects = sortProjects(projects)
         persist()
     }
 

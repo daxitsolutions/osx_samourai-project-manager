@@ -7,6 +7,11 @@ struct EventWorkspaceView: View {
     @State private var searchText = ""
     @State private var editorContext: EventEditorContext?
     @State private var eventPendingDeletion: ProjectEvent?
+    @State private var selectedEventIDs: Set<UUID> = []
+    @State private var isShowingFileExporter = false
+    @State private var exportDocument: EntityCSVDocument?
+    @State private var exportFilename = "events"
+    @State private var isShowingDeleteConfirmation = false
 
     var body: some View {
         @Bindable var appState = appState
@@ -23,20 +28,38 @@ struct EventWorkspaceView: View {
 
                     Spacer()
 
-                    if selectedEvent != nil {
+                    if selectedEventIDs.isEmpty == false {
                         Button {
-                            if let selectedEventID = appState.selectedEventID {
+                            if let selectedEventID = selectedEventIDs.singleSelection {
                                 editorContext = .edit(selectedEventID)
                             }
                         } label: {
                             Label("Modifier", systemImage: "pencil")
                         }
+                        .disabled(selectedEventIDs.count != 1)
 
                         Button(role: .destructive) {
-                            eventPendingDeletion = selectedEvent
+                            isShowingDeleteConfirmation = true
                         } label: {
-                            Label("Supprimer", systemImage: "trash")
+                            Label(
+                                selectedEventIDs.count > 1 ? "Supprimer (\(selectedEventIDs.count))" : "Supprimer",
+                                systemImage: "trash"
+                            )
                         }
+                    }
+
+                    Menu {
+                        Button("Exporter la vue (\(filteredEvents.count))") {
+                            prepareExport(events: filteredEvents, filenameSuffix: "vue")
+                        }
+                        .disabled(filteredEvents.isEmpty)
+
+                        Button("Exporter la sélection (\(selectedEventsForExport.count))") {
+                            prepareExport(events: selectedEventsForExport, filenameSuffix: "selection")
+                        }
+                        .disabled(selectedEventsForExport.isEmpty)
+                    } label: {
+                        Label("Exporter", systemImage: "square.and.arrow.up")
                     }
 
                     Button {
@@ -71,7 +94,7 @@ struct EventWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredEvents, selection: $appState.selectedEventID) {
+                    Table(filteredEvents, selection: $selectedEventIDs) {
                         TableColumn("Date/Heure") { event in
                             Text(event.happenedAt.formatted(date: .abbreviated, time: .shortened))
                         }
@@ -147,6 +170,7 @@ struct EventWorkspaceView: View {
                         }
                         .width(min: 200, ideal: 320)
                     }
+                    .scrollIndicators(.visible)
                 }
             }
             .frame(minWidth: 760, idealWidth: 900)
@@ -162,6 +186,7 @@ struct EventWorkspaceView: View {
                         },
                         onDelete: {
                             eventPendingDeletion = event
+                            isShowingDeleteConfirmation = true
                         }
                     )
                 } else {
@@ -177,30 +202,48 @@ struct EventWorkspaceView: View {
         .sheet(item: $editorContext) { context in
             EventEditorSheet(event: context.event(in: store))
         }
-        .alert("Supprimer l'événement", isPresented: Binding(
-            get: { eventPendingDeletion != nil },
-            set: { if $0 == false { eventPendingDeletion = nil } }
-        )) {
+        .fileExporter(
+            isPresented: $isShowingFileExporter,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: exportFilename
+        ) { _ in }
+        .alert("Supprimer l'événement", isPresented: $isShowingDeleteConfirmation) {
             Button("Supprimer", role: .destructive) {
-                if let pending = eventPendingDeletion {
-                    if appState.selectedEventID == pending.id {
-                        appState.selectedEventID = nil
+                if selectedEventIDs.isEmpty == false {
+                    for eventID in selectedEventIDs {
+                        store.deleteEvent(eventID: eventID)
                     }
+                    selectedEventIDs.removeAll()
+                    appState.selectedEventID = nil
+                } else if let pending = eventPendingDeletion {
                     store.deleteEvent(eventID: pending.id)
                 }
                 eventPendingDeletion = nil
             }
             Button("Annuler", role: .cancel) {
-                eventPendingDeletion = nil
+                isShowingDeleteConfirmation = false
             }
         } message: {
-            Text("Cet événement sera supprimé du suivi projet.")
+            Text(
+                selectedEventIDs.count > 1
+                ? "Ces événements seront supprimés du suivi projet."
+                : "Cet événement sera supprimé du suivi projet."
+            )
+        }
+        .onChange(of: selectedEventIDs) { _, newSelection in
+            appState.selectedEventID = newSelection.singleSelection
+        }
+        .onChange(of: appState.selectedEventID) { _, newID in
+            guard let newID else { return }
+            if selectedEventIDs != [newID] {
+                selectedEventIDs = [newID]
+            }
         }
         .onChange(of: store.events.map(\.id)) { _, eventIDs in
             let existingIDs = Set(eventIDs)
-            if let selectedEventID = appState.selectedEventID, existingIDs.contains(selectedEventID) == false {
-                appState.selectedEventID = nil
-            }
+            selectedEventIDs = selectedEventIDs.intersection(existingIDs)
+            appState.selectedEventID = selectedEventIDs.singleSelection
         }
     }
 
@@ -249,8 +292,31 @@ struct EventWorkspaceView: View {
     }
 
     private var selectedEvent: ProjectEvent? {
-        guard let selectedEventID = appState.selectedEventID else { return nil }
+        guard let selectedEventID = selectedEventIDs.singleSelection else { return nil }
         return store.event(with: selectedEventID)
+    }
+
+    private var selectedEventsForExport: [ProjectEvent] {
+        filteredEvents.filter { selectedEventIDs.contains($0.id) }
+    }
+
+    private func prepareExport(events: [ProjectEvent], filenameSuffix: String) {
+        guard events.isEmpty == false else { return }
+        let headers = ["DateHeure", "Priorite", "Titre", "Source", "Projet", "Ressources"]
+        let rows = events.map { event in
+            [
+                event.happenedAt.formatted(date: .abbreviated, time: .shortened),
+                event.priority.label,
+                event.displayTitle,
+                event.source,
+                store.projectName(for: event.projectID),
+                store.resourceNames(for: event.resourceIDs).joined(separator: " | ")
+            ]
+        }
+        let csv = EntityCSVBuilder.build(headers: headers, rows: rows)
+        exportDocument = EntityCSVDocument(text: csv)
+        exportFilename = "samourai-evenements-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
+        isShowingFileExporter = true
     }
 }
 
@@ -320,6 +386,7 @@ private struct EventDetailView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.visible)
     }
 
     private func eventDetailCard(title: String, value: String) -> some View {

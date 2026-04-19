@@ -3,10 +3,16 @@ import SwiftUI
 struct ProjectWorkspaceView: View {
     @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
+    @State private var searchText = ""
+    @State private var selectedProjectIDs: Set<UUID> = []
+    @State private var isShowingDeleteConfirmation = false
+    @State private var isShowingFileExporter = false
+    @State private var exportDocument: EntityCSVDocument?
+    @State private var exportFilename = "projects"
 
     var body: some View {
         @Bindable var appState = appState
-        let projects = store.projects
+        let projects = filteredProjects
 
         HSplitView {
             VStack(spacing: 0) {
@@ -14,11 +20,36 @@ struct ProjectWorkspaceView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Portefeuille projets")
                             .font(.title2.weight(.semibold))
-                        Text("\(projects.count) projet(s)")
+                        Text("\(projects.count) / \(store.projects.count) projet(s)")
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
+
+                    Menu {
+                        Button("Exporter la vue (\(projects.count))") {
+                            prepareExport(projects: projects, filenameSuffix: "vue")
+                        }
+                        .disabled(projects.isEmpty)
+
+                        Button("Exporter la sélection (\(selectedProjectsForExport.count))") {
+                            prepareExport(projects: selectedProjectsForExport, filenameSuffix: "selection")
+                        }
+                        .disabled(selectedProjectsForExport.isEmpty)
+                    } label: {
+                        Label("Exporter", systemImage: "square.and.arrow.up")
+                    }
+
+                    if selectedProjectIDs.isEmpty == false {
+                        Button(role: .destructive) {
+                            isShowingDeleteConfirmation = true
+                        } label: {
+                            Label(
+                                selectedProjectIDs.count > 1 ? "Supprimer (\(selectedProjectIDs.count))" : "Supprimer",
+                                systemImage: "trash"
+                            )
+                        }
+                    }
 
                     Button {
                         appState.isShowingProjectEditor = true
@@ -30,7 +61,14 @@ struct ProjectWorkspaceView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 8)
 
-                List(projects, selection: $appState.selectedProjectID) { project in
+                HStack(spacing: 12) {
+                    TextField("Recherche projet (nom, synthèse, sponsor, pilote, phase)", text: $searchText)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+
+                List(projects, selection: $selectedProjectIDs) { project in
                     ProjectListRow(
                         project: project,
                         onNameChange: { updatedName in
@@ -42,10 +80,11 @@ struct ProjectWorkspaceView: View {
                     )
                         .tag(project.id)
                 }
+                .scrollIndicators(.visible)
             }
             .frame(minWidth: 280, idealWidth: 320)
             .overlay {
-                if projects.isEmpty {
+                if store.projects.isEmpty {
                     ContentUnavailableView(
                         "Aucun projet",
                         systemImage: "square.grid.2x2",
@@ -55,7 +94,7 @@ struct ProjectWorkspaceView: View {
             }
 
             Group {
-                if let selectedProjectID = appState.selectedProjectID {
+                if let selectedProjectID = selectedProjectIDs.singleSelection {
                     ProjectDetailView(projectID: selectedProjectID)
                 } else {
                     ContentUnavailableView(
@@ -67,6 +106,92 @@ struct ProjectWorkspaceView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .fileExporter(
+            isPresented: $isShowingFileExporter,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: exportFilename
+        ) { _ in }
+        .alert("Supprimer les projets", isPresented: $isShowingDeleteConfirmation) {
+            Button("Supprimer", role: .destructive) {
+                for projectID in selectedProjectIDs {
+                    store.deleteProject(projectID: projectID)
+                }
+                selectedProjectIDs.removeAll()
+                appState.selectedProjectID = nil
+            }
+            Button("Annuler", role: .cancel) {
+                isShowingDeleteConfirmation = false
+            }
+        } message: {
+            Text(
+                selectedProjectIDs.count > 1
+                ? "Les projets sélectionnés seront supprimés. Les risques sont conservés comme non affectés."
+                : "Le projet sélectionné sera supprimé. Les risques seront conservés comme non affectés."
+            )
+        }
+        .onChange(of: selectedProjectIDs) { _, newSelection in
+            appState.selectedProjectID = newSelection.singleSelection
+        }
+        .onChange(of: appState.selectedProjectID) { _, newID in
+            guard let newID else { return }
+            if selectedProjectIDs != [newID] {
+                selectedProjectIDs = [newID]
+            }
+        }
+        .onChange(of: store.projects.map(\.id)) { _, ids in
+            let existing = Set(ids)
+            selectedProjectIDs = selectedProjectIDs.intersection(existing)
+            appState.selectedProjectID = selectedProjectIDs.singleSelection
+        }
+    }
+
+    private var filteredProjects: [Project] {
+        let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedQuery.isEmpty == false else { return store.projects }
+        let terms = trimmedQuery
+            .split(whereSeparator: \.isWhitespace)
+            .map { $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current) }
+        return store.projects.filter { project in
+            let values = [
+                project.name,
+                project.summary,
+                project.sponsor,
+                project.manager,
+                project.phase.label,
+                project.deliveryMode.label,
+                project.health.label
+            ]
+            let normalized = values.map { $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current) }
+            return terms.allSatisfy { term in
+                normalized.contains(where: { $0.contains(term) })
+            }
+        }
+    }
+
+    private var selectedProjectsForExport: [Project] {
+        filteredProjects.filter { selectedProjectIDs.contains($0.id) }
+    }
+
+    private func prepareExport(projects: [Project], filenameSuffix: String) {
+        guard projects.isEmpty == false else { return }
+        let headers = ["Nom", "Synthese", "Sponsor", "Pilote", "Phase", "Sante", "Livraison", "Cible"]
+        let rows = projects.map { project in
+            [
+                project.name,
+                project.summary,
+                project.sponsor,
+                project.manager,
+                project.phase.label,
+                project.health.label,
+                project.deliveryMode.label,
+                project.targetDate.formatted(date: .abbreviated, time: .omitted)
+            ]
+        }
+        let csv = EntityCSVBuilder.build(headers: headers, rows: rows)
+        exportDocument = EntityCSVDocument(text: csv)
+        exportFilename = "samourai-projets-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
+        isShowingFileExporter = true
     }
 }
 

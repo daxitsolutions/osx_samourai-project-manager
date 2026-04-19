@@ -9,6 +9,12 @@ struct RiskRegisterView: View {
     @State private var isShowingManualRiskEditor = false
     @State private var importFeedbackMessage: String?
     @State private var isImporting = false
+    @State private var searchText = ""
+    @State private var selectedRiskIDs: Set<UUID> = []
+    @State private var isShowingDeleteConfirmation = false
+    @State private var isShowingFileExporter = false
+    @State private var exportDocument: EntityCSVDocument?
+    @State private var exportFilename = "risks"
 
     var body: some View {
         @Bindable var appState = appState
@@ -19,11 +25,36 @@ struct RiskRegisterView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Registre global des risques")
                             .font(.title2.weight(.semibold))
-                        Text("\(scopedRisks.count) risque(s) suivi(s)")
+                        Text("\(filteredRisks.count) / \(scopedRisks.count) risque(s) suivi(s)")
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
+
+                    Menu {
+                        Button("Exporter la vue (\(filteredRisks.count))") {
+                            prepareExport(risks: filteredRisks, filenameSuffix: "vue")
+                        }
+                        .disabled(filteredRisks.isEmpty)
+
+                        Button("Exporter la sélection (\(selectedRisksForExport.count))") {
+                            prepareExport(risks: selectedRisksForExport, filenameSuffix: "selection")
+                        }
+                        .disabled(selectedRisksForExport.isEmpty)
+                    } label: {
+                        Label("Exporter", systemImage: "square.and.arrow.up")
+                    }
+
+                    if selectedRiskIDs.isEmpty == false {
+                        Button(role: .destructive) {
+                            isShowingDeleteConfirmation = true
+                        } label: {
+                            Label(
+                                selectedRiskIDs.count > 1 ? "Supprimer (\(selectedRiskIDs.count))" : "Supprimer",
+                                systemImage: "trash"
+                            )
+                        }
+                    }
 
                     Button {
                         isShowingManualRiskEditor = true
@@ -43,6 +74,13 @@ struct RiskRegisterView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 8)
 
+                HStack(spacing: 12) {
+                    TextField("Recherche (titre, owner, projet, severite, statut)", text: $searchText)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+
                 if scopedRisks.isEmpty {
                     ContentUnavailableView(
                         "Aucun risque",
@@ -51,7 +89,7 @@ struct RiskRegisterView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(scopedRisks, selection: $appState.selectedRiskID) {
+                    Table(filteredRisks, selection: $selectedRiskIDs) {
                         TableColumn("ID") { entry in
                             Text(entry.risk.externalID ?? "-")
                         }
@@ -145,6 +183,7 @@ struct RiskRegisterView: View {
                             Text(scoreLabel(for: entry.risk.score0to10))
                         }
                     }
+                    .scrollIndicators(.visible)
                 }
             }
             .frame(minWidth: 620, idealWidth: 760)
@@ -182,6 +221,26 @@ struct RiskRegisterView: View {
                 suggestedProjectID: appState.resolvedPrimaryProjectID(in: store)
             )
         }
+        .fileExporter(
+            isPresented: $isShowingFileExporter,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: exportFilename
+        ) { _ in }
+        .alert("Supprimer les risques", isPresented: $isShowingDeleteConfirmation) {
+            Button("Supprimer", role: .destructive) {
+                for riskID in selectedRiskIDs {
+                    deleteRisk(riskID)
+                }
+                selectedRiskIDs.removeAll()
+                appState.selectedRiskID = nil
+            }
+            Button("Annuler", role: .cancel) {
+                isShowingDeleteConfirmation = false
+            }
+        } message: {
+            Text(selectedRiskIDs.count > 1 ? "Les risques sélectionnés seront supprimés." : "Le risque sélectionné sera supprimé.")
+        }
         .alert("Import des risques", isPresented: Binding(
             get: { importFeedbackMessage != nil },
             set: { if $0 == false { importFeedbackMessage = nil } }
@@ -189,6 +248,20 @@ struct RiskRegisterView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(importFeedbackMessage ?? "")
+        }
+        .onChange(of: selectedRiskIDs) { _, newSelection in
+            appState.selectedRiskID = newSelection.singleSelection
+        }
+        .onChange(of: appState.selectedRiskID) { _, newID in
+            guard let newID else { return }
+            if selectedRiskIDs != [newID] {
+                selectedRiskIDs = [newID]
+            }
+        }
+        .onChange(of: store.risks.map(\.risk.id)) { _, ids in
+            let existing = Set(ids)
+            selectedRiskIDs = selectedRiskIDs.intersection(existing)
+            appState.selectedRiskID = selectedRiskIDs.singleSelection
         }
         .padding(0)
     }
@@ -235,6 +308,57 @@ struct RiskRegisterView: View {
             return store.risks.filter { $0.projectID == primaryProjectID }
         }
         return store.risks
+    }
+
+    private var filteredRisks: [RiskEntry] {
+        let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedQuery.isEmpty == false else { return scopedRisks }
+        let terms = trimmedQuery
+            .split(whereSeparator: \.isWhitespace)
+            .map { $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current) }
+        return scopedRisks.filter { entry in
+            let values = [
+                entry.risk.displayTitle,
+                entry.risk.displayOwner,
+                entry.risk.displayStatus,
+                entry.risk.severity.label,
+                entry.projectName,
+                entry.risk.projectNames ?? "",
+                entry.risk.externalID ?? ""
+            ]
+            let normalized = values.map { $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current) }
+            return terms.allSatisfy { term in
+                normalized.contains(where: { $0.contains(term) })
+            }
+        }
+    }
+
+    private var selectedRisksForExport: [RiskEntry] {
+        filteredRisks.filter { selectedRiskIDs.contains($0.risk.id) }
+    }
+
+    private func prepareExport(risks: [RiskEntry], filenameSuffix: String) {
+        guard risks.isEmpty == false else { return }
+        let headers = ["ID", "Titre", "Projet", "Owner", "Severite", "Statut", "Score"]
+        let rows = risks.map { entry in
+            [
+                entry.risk.externalID ?? "",
+                entry.risk.displayTitle,
+                entry.risk.projectNames ?? entry.projectName,
+                entry.risk.displayOwner,
+                entry.risk.severity.label,
+                entry.risk.displayStatus,
+                scoreLabel(for: entry.risk.score0to10)
+            ]
+        }
+        let csv = EntityCSVBuilder.build(headers: headers, rows: rows)
+        exportDocument = EntityCSVDocument(text: csv)
+        exportFilename = "samourai-risques-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
+        isShowingFileExporter = true
+    }
+
+    private func deleteRisk(_ riskID: UUID) {
+        store.deleteRisk(riskID: riskID)
     }
 }
 
@@ -388,6 +512,7 @@ private struct RiskDetailView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.visible)
     }
 
     private func detailCard(title: String, value: String) -> some View {

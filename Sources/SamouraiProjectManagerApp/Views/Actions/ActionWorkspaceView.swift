@@ -8,6 +8,11 @@ struct ActionWorkspaceView: View {
     @State private var selectedFlow: ActionFlowFilter = .all
     @State private var editorContext: ActionEditorContext?
     @State private var actionPendingDeletion: ProjectAction?
+    @State private var selectedActionIDs: Set<UUID> = []
+    @State private var isShowingFileExporter = false
+    @State private var exportDocument: EntityCSVDocument?
+    @State private var exportFilename = "actions"
+    @State private var isShowingDeleteConfirmation = false
 
     var body: some View {
         @Bindable var appState = appState
@@ -24,20 +29,38 @@ struct ActionWorkspaceView: View {
 
                     Spacer()
 
-                    if selectedAction != nil {
+                    if selectedActionIDs.isEmpty == false {
                         Button {
-                            if let selectedActionID = appState.selectedActionID {
+                            if let selectedActionID = selectedActionIDs.singleSelection {
                                 editorContext = .edit(selectedActionID)
                             }
                         } label: {
                             Label("Modifier", systemImage: "pencil")
                         }
+                        .disabled(selectedActionIDs.count != 1)
 
                         Button(role: .destructive) {
-                            actionPendingDeletion = selectedAction
+                            isShowingDeleteConfirmation = true
                         } label: {
-                            Label("Supprimer", systemImage: "trash")
+                            Label(
+                                selectedActionIDs.count > 1 ? "Supprimer (\(selectedActionIDs.count))" : "Supprimer",
+                                systemImage: "trash"
+                            )
                         }
+                    }
+
+                    Menu {
+                        Button("Exporter la vue (\(filteredActions.count))") {
+                            prepareExport(actions: filteredActions, filenameSuffix: "vue")
+                        }
+                        .disabled(filteredActions.isEmpty)
+
+                        Button("Exporter la sélection (\(selectedActionsForExport.count))") {
+                            prepareExport(actions: selectedActionsForExport, filenameSuffix: "selection")
+                        }
+                        .disabled(selectedActionsForExport.isEmpty)
+                    } label: {
+                        Label("Exporter", systemImage: "square.and.arrow.up")
                     }
 
                     Button {
@@ -80,7 +103,7 @@ struct ActionWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredActions, selection: $appState.selectedActionID) {
+                    Table(filteredActions, selection: $selectedActionIDs) {
                         TableColumn("") { action in
                             Toggle(
                                 "Terminée",
@@ -188,6 +211,7 @@ struct ActionWorkspaceView: View {
                         }
                         .width(min: 150, ideal: 170)
                     }
+                    .scrollIndicators(.visible)
                 }
             }
             .frame(minWidth: 760, idealWidth: 900)
@@ -199,7 +223,10 @@ struct ActionWorkspaceView: View {
                         projectName: store.projectName(for: action.projectID),
                         activityTitle: activityTitle(for: action.activityID),
                         onEdit: { editorContext = .edit(action.id) },
-                        onDelete: { actionPendingDeletion = action },
+                        onDelete: {
+                            actionPendingDeletion = action
+                            isShowingDeleteConfirmation = true
+                        },
                         onToggleDone: { store.markActionDone(actionID: action.id, isDone: !action.isDone) }
                     )
                 } else {
@@ -215,30 +242,48 @@ struct ActionWorkspaceView: View {
         .sheet(item: $editorContext) { context in
             ActionEditorSheet(action: context.action(in: store))
         }
-        .alert("Supprimer l'action", isPresented: Binding(
-            get: { actionPendingDeletion != nil },
-            set: { if $0 == false { actionPendingDeletion = nil } }
-        )) {
+        .fileExporter(
+            isPresented: $isShowingFileExporter,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: exportFilename
+        ) { _ in }
+        .alert("Supprimer l'action", isPresented: $isShowingDeleteConfirmation) {
             Button("Supprimer", role: .destructive) {
-                if let pending = actionPendingDeletion {
-                    if appState.selectedActionID == pending.id {
-                        appState.selectedActionID = nil
+                if selectedActionIDs.isEmpty == false {
+                    for actionID in selectedActionIDs {
+                        store.deleteAction(actionID: actionID)
                     }
+                    selectedActionIDs.removeAll()
+                    appState.selectedActionID = nil
+                } else if let pending = actionPendingDeletion {
                     store.deleteAction(actionID: pending.id)
                 }
                 actionPendingDeletion = nil
             }
             Button("Annuler", role: .cancel) {
-                actionPendingDeletion = nil
+                isShowingDeleteConfirmation = false
             }
         } message: {
-            Text("Cette action sera retirée de la liste proactive du PM.")
+            Text(
+                selectedActionIDs.count > 1
+                ? "Ces actions seront retirées de la liste proactive du PM."
+                : "Cette action sera retirée de la liste proactive du PM."
+            )
+        }
+        .onChange(of: selectedActionIDs) { _, newSelection in
+            appState.selectedActionID = newSelection.singleSelection
+        }
+        .onChange(of: appState.selectedActionID) { _, newID in
+            guard let newID else { return }
+            if selectedActionIDs != [newID] {
+                selectedActionIDs = [newID]
+            }
         }
         .onChange(of: store.actions.map(\.id)) { _, actionIDs in
             let existingIDs = Set(actionIDs)
-            if let selectedActionID = appState.selectedActionID, existingIDs.contains(selectedActionID) == false {
-                appState.selectedActionID = nil
-            }
+            selectedActionIDs = selectedActionIDs.intersection(existingIDs)
+            appState.selectedActionID = selectedActionIDs.singleSelection
         }
     }
 
@@ -297,13 +342,38 @@ struct ActionWorkspaceView: View {
     }
 
     private var selectedAction: ProjectAction? {
-        guard let selectedActionID = appState.selectedActionID else { return nil }
+        guard let selectedActionID = selectedActionIDs.singleSelection else { return nil }
         return store.action(with: selectedActionID)
     }
 
     private func activityTitle(for activityID: UUID?) -> String {
         guard let activityID, let activity = store.activity(with: activityID) else { return "" }
         return activity.displayTitle
+    }
+
+    private var selectedActionsForExport: [ProjectAction] {
+        filteredActions.filter { selectedActionIDs.contains($0.id) }
+    }
+
+    private func prepareExport(actions: [ProjectAction], filenameSuffix: String) {
+        guard actions.isEmpty == false else { return }
+        let headers = ["Titre", "Priorite", "Flux", "Projet", "Activite", "Echeance", "Statut", "Creee le"]
+        let rows = actions.map { action in
+            [
+                action.displayTitle,
+                action.priority.label,
+                action.flow.label,
+                store.projectName(for: action.projectID),
+                activityTitle(for: action.activityID),
+                action.dueDate.formatted(date: .abbreviated, time: .omitted),
+                action.isDone ? "Terminee" : "Ouverte",
+                action.createdAt.formatted(date: .abbreviated, time: .shortened)
+            ]
+        }
+        let csv = EntityCSVBuilder.build(headers: headers, rows: rows)
+        exportDocument = EntityCSVDocument(text: csv)
+        exportFilename = "samourai-actions-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
+        isShowingFileExporter = true
     }
 }
 
@@ -376,6 +446,7 @@ private struct ActionDetailView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.visible)
     }
 }
 

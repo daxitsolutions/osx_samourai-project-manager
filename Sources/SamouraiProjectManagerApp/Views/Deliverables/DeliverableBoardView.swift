@@ -30,6 +30,7 @@ struct DeliverableBoardView: View {
                     .padding(24)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .scrollIndicators(.visible)
             } else {
                 ContentUnavailableView(
                     "Projet principal requis",

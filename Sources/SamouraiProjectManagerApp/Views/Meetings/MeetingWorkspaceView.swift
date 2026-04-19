@@ -11,6 +11,11 @@ struct MeetingWorkspaceView: View {
     @State private var meetingPendingDeletion: ProjectMeeting?
     @State private var dropFeedbackMessage: String?
     @State private var isDropTargeted = false
+    @State private var selectedMeetingIDs: Set<UUID> = []
+    @State private var isShowingFileExporter = false
+    @State private var exportDocument: EntityCSVDocument?
+    @State private var exportFilename = "meetings"
+    @State private var isShowingDeleteConfirmation = false
 
     var body: some View {
         @Bindable var appState = appState
@@ -27,20 +32,38 @@ struct MeetingWorkspaceView: View {
 
                     Spacer()
 
-                    if selectedMeeting != nil {
+                    if selectedMeetingIDs.isEmpty == false {
                         Button {
-                            if let selectedMeetingID = appState.selectedMeetingID {
+                            if let selectedMeetingID = selectedMeetingIDs.singleSelection {
                                 editorContext = .edit(selectedMeetingID)
                             }
                         } label: {
                             Label("Modifier", systemImage: "pencil")
                         }
+                        .disabled(selectedMeetingIDs.count != 1)
 
                         Button(role: .destructive) {
-                            meetingPendingDeletion = selectedMeeting
+                            isShowingDeleteConfirmation = true
                         } label: {
-                            Label("Supprimer", systemImage: "trash")
+                            Label(
+                                selectedMeetingIDs.count > 1 ? "Supprimer (\(selectedMeetingIDs.count))" : "Supprimer",
+                                systemImage: "trash"
+                            )
                         }
+                    }
+
+                    Menu {
+                        Button("Exporter la vue (\(filteredMeetings.count))") {
+                            prepareExport(meetings: filteredMeetings, filenameSuffix: "vue")
+                        }
+                        .disabled(filteredMeetings.isEmpty)
+
+                        Button("Exporter la sélection (\(selectedMeetingsForExport.count))") {
+                            prepareExport(meetings: selectedMeetingsForExport, filenameSuffix: "selection")
+                        }
+                        .disabled(selectedMeetingsForExport.isEmpty)
+                    } label: {
+                        Label("Exporter", systemImage: "square.and.arrow.up")
                     }
 
                     Button {
@@ -79,7 +102,7 @@ struct MeetingWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredMeetings, selection: $appState.selectedMeetingID) {
+                    Table(filteredMeetings, selection: $selectedMeetingIDs) {
                         TableColumn("Date") { meeting in
                             Text(meeting.meetingAt.formatted(date: .abbreviated, time: .shortened))
                         }
@@ -161,6 +184,7 @@ struct MeetingWorkspaceView: View {
                         }
                         .width(min: 260, ideal: 420)
                     }
+                    .scrollIndicators(.visible)
                 }
             }
             .frame(minWidth: 860, idealWidth: 980)
@@ -171,7 +195,10 @@ struct MeetingWorkspaceView: View {
                         meeting: meeting,
                         projectName: store.projectName(for: meeting.projectID),
                         onEdit: { editorContext = .edit(meeting.id) },
-                        onDelete: { meetingPendingDeletion = meeting }
+                        onDelete: {
+                            meetingPendingDeletion = meeting
+                            isShowingDeleteConfirmation = true
+                        }
                     )
                 } else {
                     ContentUnavailableView(
@@ -186,24 +213,34 @@ struct MeetingWorkspaceView: View {
         .sheet(item: $editorContext) { context in
             MeetingEditorSheet(meeting: context.meeting(in: store), prefill: context.prefill)
         }
-        .alert("Supprimer la réunion", isPresented: Binding(
-            get: { meetingPendingDeletion != nil },
-            set: { if $0 == false { meetingPendingDeletion = nil } }
-        )) {
+        .fileExporter(
+            isPresented: $isShowingFileExporter,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: exportFilename
+        ) { _ in }
+        .alert("Supprimer la réunion", isPresented: $isShowingDeleteConfirmation) {
             Button("Supprimer", role: .destructive) {
-                if let pending = meetingPendingDeletion {
-                    if appState.selectedMeetingID == pending.id {
-                        appState.selectedMeetingID = nil
+                if selectedMeetingIDs.isEmpty == false {
+                    for meetingID in selectedMeetingIDs {
+                        store.deleteMeeting(meetingID: meetingID)
                     }
+                    selectedMeetingIDs.removeAll()
+                    appState.selectedMeetingID = nil
+                } else if let pending = meetingPendingDeletion {
                     store.deleteMeeting(meetingID: pending.id)
                 }
                 meetingPendingDeletion = nil
             }
             Button("Annuler", role: .cancel) {
-                meetingPendingDeletion = nil
+                isShowingDeleteConfirmation = false
             }
         } message: {
-            Text("Cette réunion sera retirée du registre.")
+            Text(
+                selectedMeetingIDs.count > 1
+                ? "Ces réunions seront retirées du registre."
+                : "Cette réunion sera retirée du registre."
+            )
         }
         .alert("Import glisser-déposer", isPresented: Binding(
             get: { dropFeedbackMessage != nil },
@@ -213,11 +250,19 @@ struct MeetingWorkspaceView: View {
         } message: {
             Text(dropFeedbackMessage ?? "")
         }
+        .onChange(of: selectedMeetingIDs) { _, newSelection in
+            appState.selectedMeetingID = newSelection.singleSelection
+        }
+        .onChange(of: appState.selectedMeetingID) { _, newID in
+            guard let newID else { return }
+            if selectedMeetingIDs != [newID] {
+                selectedMeetingIDs = [newID]
+            }
+        }
         .onChange(of: store.meetings.map(\.id)) { _, meetingIDs in
             let existingIDs = Set(meetingIDs)
-            if let selectedMeetingID = appState.selectedMeetingID, existingIDs.contains(selectedMeetingID) == false {
-                appState.selectedMeetingID = nil
-            }
+            selectedMeetingIDs = selectedMeetingIDs.intersection(existingIDs)
+            appState.selectedMeetingID = selectedMeetingIDs.singleSelection
         }
     }
 
@@ -303,8 +348,32 @@ struct MeetingWorkspaceView: View {
     }
 
     private var selectedMeeting: ProjectMeeting? {
-        guard let selectedMeetingID = appState.selectedMeetingID else { return nil }
+        guard let selectedMeetingID = selectedMeetingIDs.singleSelection else { return nil }
         return store.meeting(with: selectedMeetingID)
+    }
+
+    private var selectedMeetingsForExport: [ProjectMeeting] {
+        filteredMeetings.filter { selectedMeetingIDs.contains($0.id) }
+    }
+
+    private func prepareExport(meetings: [ProjectMeeting], filenameSuffix: String) {
+        guard meetings.isEmpty == false else { return }
+        let headers = ["Date", "Reunion", "Projet", "Mode", "DureeMin", "Participants", "Organisateur"]
+        let rows = meetings.map { meeting in
+            [
+                meeting.meetingAt.formatted(date: .abbreviated, time: .shortened),
+                meeting.displayTitle,
+                store.projectName(for: meeting.projectID),
+                meeting.mode.label,
+                String(meeting.durationMinutes),
+                meeting.participants,
+                meeting.organizer
+            ]
+        }
+        let csv = EntityCSVBuilder.build(headers: headers, rows: rows)
+        exportDocument = EntityCSVDocument(text: csv)
+        exportFilename = "samourai-reunions-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
+        isShowingFileExporter = true
     }
 }
 
@@ -370,6 +439,7 @@ private struct MeetingDetailView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.visible)
     }
 
     private func detailCard(title: String, value: String) -> some View {

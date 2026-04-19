@@ -144,6 +144,7 @@ struct ResourceWorkspaceView: View {
                     .padding(.bottom, 4)
 
                     resourceCollectionView(selectedResourceID: $appState.selectedResourceID)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
                 .overlay {
                     if scopedResources.isEmpty {
@@ -161,6 +162,7 @@ struct ResourceWorkspaceView: View {
                     }
                 }
             }
+            .frame(maxHeight: .infinity)
             .frame(minWidth: 420, idealWidth: 560)
 
             Group {
@@ -448,6 +450,7 @@ struct ResourceWorkspaceView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
             }
+            .scrollIndicators(.visible)
         case .table:
             VStack(alignment: .leading, spacing: 6) {
                 if visibleTableColumns.count > activeTableColumns.count {
@@ -681,6 +684,8 @@ struct ResourceWorkspaceView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .scrollIndicators(.visible)
             }
         }
     }
@@ -982,6 +987,7 @@ private struct ResourceProfilingSummaryCard: View {
                 ForEach(report.roleCoverage) { coverage in
                     ResourceRoleCoverageRow(coverage: coverage)
                 }
+                .scrollIndicators(.visible)
             }
         }
         .padding(12)
@@ -1304,6 +1310,7 @@ private struct ResourceColumnConfigurationSheet: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollIndicators(.visible)
             }
             .padding(16)
             .navigationTitle("Colonnes Ressources")
@@ -1403,6 +1410,7 @@ private struct ResourceImportReviewSheet: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollIndicators(.visible)
             }
             .padding(16)
             .navigationTitle("Revue d'import")
@@ -1695,6 +1703,7 @@ private struct ResourceDetailView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.visible)
     }
 
     private func formattedDate(_ date: Date?) -> String {

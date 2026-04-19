@@ -23,6 +23,7 @@ struct AppShellView: View {
             }
             .navigationSplitViewColumnWidth(min: 200, ideal: 220)
             .listStyle(.sidebar)
+            .scrollIndicators(.visible)
         } detail: {
             Group {
                 switch appState.selectedSection ?? .dashboard {
@@ -34,6 +35,8 @@ struct AppShellView: View {
                     ProjectWorkspaceView()
                 case .resources:
                     ResourceWorkspaceView()
+                case .testing:
+                    TestingWorkspaceView()
                 case .risks:
                     RiskRegisterView()
                 case .deliverables:
@@ -55,14 +58,10 @@ struct AppShellView: View {
         }
         .task {
             await store.loadIfNeeded()
-            if appState.resolvedPrimaryProjectID(in: store) == nil, appState.primaryProjectID != nil {
-                appState.setPrimaryProject(nil)
-            }
+            ensureDefaultProjectSelection()
         }
         .onChange(of: store.projects.map(\.id)) { _, _ in
-            if appState.resolvedPrimaryProjectID(in: store) == nil, appState.primaryProjectID != nil {
-                appState.setPrimaryProject(nil)
-            }
+            ensureDefaultProjectSelection()
         }
         .onAppear {
             guard !hasAttemptedInitialFocus else { return }
@@ -75,20 +74,26 @@ struct AppShellView: View {
                     Label("Projet", systemImage: "target")
                         .foregroundStyle(.secondary)
 
-                    Picker(
-                        "Projet principal",
-                        selection: Binding(
-                            get: { appState.resolvedPrimaryProjectID(in: store) },
-                            set: { appState.setPrimaryProject($0) }
-                        )
-                    ) {
-                        Text("Aucun (manuel)").tag(Optional<UUID>.none)
-                        ForEach(store.projects) { project in
-                            Text(project.name).tag(Optional(project.id))
+                    if store.projects.isEmpty {
+                        Text("Aucun projet")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker(
+                            "Projet principal",
+                            selection: Binding(
+                                get: {
+                                    appState.resolvedPrimaryProjectID(in: store) ?? store.projects[0].id
+                                },
+                                set: { appState.setPrimaryProject($0) }
+                            )
+                        ) {
+                            ForEach(store.projects) { project in
+                                Text(project.name).tag(project.id)
+                            }
                         }
+                        .pickerStyle(.menu)
+                        .frame(minWidth: 220)
                     }
-                    .pickerStyle(.menu)
-                    .frame(minWidth: 220)
                 }
             }
 
@@ -191,6 +196,24 @@ struct AppShellView: View {
         NSApplication.shared.activate(ignoringOtherApps: true)
         let window = NSApplication.shared.windows.first { $0.isVisible } ?? NSApplication.shared.windows.first
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func ensureDefaultProjectSelection() {
+        guard let firstProjectID = store.projects.first?.id else {
+            appState.setPrimaryProject(nil)
+            appState.selectedProjectID = nil
+            return
+        }
+
+        if appState.resolvedPrimaryProjectID(in: store) == nil {
+            appState.setPrimaryProject(firstProjectID)
+        }
+
+        if let selectedProjectID = appState.selectedProjectID,
+           store.project(with: selectedProjectID) != nil {
+            return
+        }
+        appState.selectedProjectID = firstProjectID
     }
 }
 

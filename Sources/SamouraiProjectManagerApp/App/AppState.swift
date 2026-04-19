@@ -91,6 +91,7 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
     case reporting
     case projects
     case resources
+    case testing
     case risks
     case deliverables
     case events
@@ -110,6 +111,8 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
             "Reporting"
         case .resources:
             "Ressources"
+        case .testing:
+            "Testing"
         case .risks:
             "Risques"
         case .deliverables:
@@ -135,6 +138,8 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
             "doc.text.magnifyingglass"
         case .resources:
             "person.3"
+        case .testing:
+            "testtube.2"
         case .risks:
             "exclamationmark.shield"
         case .deliverables:

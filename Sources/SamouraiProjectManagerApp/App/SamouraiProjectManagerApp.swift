@@ -4,6 +4,7 @@ import SwiftUI
 struct SamouraiProjectManagerApp: App {
     @State private var appState = AppState()
     @State private var store = SamouraiStore()
+    @State private var typography = SamouraiTypography.shared
 
     var body: some Scene {
         WindowGroup("Samourai Project Manager") {
@@ -11,6 +12,7 @@ struct SamouraiProjectManagerApp: App {
                 .environment(appState)
                 .environment(store)
                 .tint(SamouraiColorTheme.color(.brandPurple))
+                .environment(\.font, typography.appFont)
         }
         .defaultSize(width: 1_480, height: 920)
         .commands {

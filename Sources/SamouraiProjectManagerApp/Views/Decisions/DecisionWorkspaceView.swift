@@ -10,6 +10,11 @@ struct DecisionWorkspaceView: View {
     @State private var newCommentAuthor = ""
     @State private var newCommentBody = ""
     @State private var commentValidationMessage: String?
+    @State private var selectedDecisionIDs: Set<UUID> = []
+    @State private var isShowingFileExporter = false
+    @State private var exportDocument: EntityCSVDocument?
+    @State private var exportFilename = "decisions"
+    @State private var isShowingDeleteConfirmation = false
 
     var body: some View {
         @Bindable var appState = appState
@@ -26,20 +31,38 @@ struct DecisionWorkspaceView: View {
 
                     Spacer()
 
-                    if selectedDecision != nil {
+                    if selectedDecisionIDs.isEmpty == false {
                         Button {
-                            if let selectedDecisionID = appState.selectedDecisionID {
+                            if let selectedDecisionID = selectedDecisionIDs.singleSelection {
                                 editorContext = .edit(selectedDecisionID)
                             }
                         } label: {
                             Label("Modifier", systemImage: "pencil")
                         }
+                        .disabled(selectedDecisionIDs.count != 1)
 
                         Button(role: .destructive) {
-                            decisionPendingDeletion = selectedDecision
+                            isShowingDeleteConfirmation = true
                         } label: {
-                            Label("Supprimer", systemImage: "trash")
+                            Label(
+                                selectedDecisionIDs.count > 1 ? "Supprimer (\(selectedDecisionIDs.count))" : "Supprimer",
+                                systemImage: "trash"
+                            )
                         }
+                    }
+
+                    Menu {
+                        Button("Exporter la vue (\(filteredDecisions.count))") {
+                            prepareExport(decisions: filteredDecisions, filenameSuffix: "vue")
+                        }
+                        .disabled(filteredDecisions.isEmpty)
+
+                        Button("Exporter la sélection (\(selectedDecisionsForExport.count))") {
+                            prepareExport(decisions: selectedDecisionsForExport, filenameSuffix: "selection")
+                        }
+                        .disabled(selectedDecisionsForExport.isEmpty)
+                    } label: {
+                        Label("Exporter", systemImage: "square.and.arrow.up")
                     }
 
                     Button {
@@ -74,7 +97,7 @@ struct DecisionWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredDecisions, selection: $appState.selectedDecisionID) {
+                    Table(filteredDecisions, selection: $selectedDecisionIDs) {
                         TableColumn("Ref") { decision in
                             Text("D-\(decision.sequenceNumber)")
                                 .monospacedDigit()
@@ -160,6 +183,7 @@ struct DecisionWorkspaceView: View {
                         }
                         .width(min: 110, ideal: 130)
                     }
+                    .scrollIndicators(.visible)
                 }
             }
             .frame(minWidth: 900, idealWidth: 1050)
@@ -175,7 +199,10 @@ struct DecisionWorkspaceView: View {
                         commentAuthor: $newCommentAuthor,
                         commentBody: $newCommentBody,
                         onEdit: { editorContext = .edit(decision.id) },
-                        onDelete: { decisionPendingDeletion = decision },
+                        onDelete: {
+                            decisionPendingDeletion = decision
+                            isShowingDeleteConfirmation = true
+                        },
                         onAddComment: {
                             addComment(to: decision.id)
                         }
@@ -193,24 +220,34 @@ struct DecisionWorkspaceView: View {
         .sheet(item: $editorContext) { context in
             DecisionEditorSheet(decision: context.decision(in: store))
         }
-        .alert("Supprimer la décision", isPresented: Binding(
-            get: { decisionPendingDeletion != nil },
-            set: { if $0 == false { decisionPendingDeletion = nil } }
-        )) {
+        .fileExporter(
+            isPresented: $isShowingFileExporter,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: exportFilename
+        ) { _ in }
+        .alert("Supprimer la décision", isPresented: $isShowingDeleteConfirmation) {
             Button("Supprimer", role: .destructive) {
-                if let pending = decisionPendingDeletion {
-                    if appState.selectedDecisionID == pending.id {
-                        appState.selectedDecisionID = nil
+                if selectedDecisionIDs.isEmpty == false {
+                    for decisionID in selectedDecisionIDs {
+                        store.deleteDecision(decisionID: decisionID)
                     }
+                    selectedDecisionIDs.removeAll()
+                    appState.selectedDecisionID = nil
+                } else if let pending = decisionPendingDeletion {
                     store.deleteDecision(decisionID: pending.id)
                 }
                 decisionPendingDeletion = nil
             }
             Button("Annuler", role: .cancel) {
-                decisionPendingDeletion = nil
+                isShowingDeleteConfirmation = false
             }
         } message: {
-            Text("La décision sera retirée du registre de gouvernance.")
+            Text(
+                selectedDecisionIDs.count > 1
+                ? "Ces décisions seront retirées du registre de gouvernance."
+                : "La décision sera retirée du registre de gouvernance."
+            )
         }
         .alert("Commentaire", isPresented: Binding(
             get: { commentValidationMessage != nil },
@@ -220,11 +257,19 @@ struct DecisionWorkspaceView: View {
         } message: {
             Text(commentValidationMessage ?? "")
         }
+        .onChange(of: selectedDecisionIDs) { _, newSelection in
+            appState.selectedDecisionID = newSelection.singleSelection
+        }
+        .onChange(of: appState.selectedDecisionID) { _, newID in
+            guard let newID else { return }
+            if selectedDecisionIDs != [newID] {
+                selectedDecisionIDs = [newID]
+            }
+        }
         .onChange(of: store.decisions.map(\.id)) { _, decisionIDs in
             let existingIDs = Set(decisionIDs)
-            if let selectedDecisionID = appState.selectedDecisionID, existingIDs.contains(selectedDecisionID) == false {
-                appState.selectedDecisionID = nil
-            }
+            selectedDecisionIDs = selectedDecisionIDs.intersection(existingIDs)
+            appState.selectedDecisionID = selectedDecisionIDs.singleSelection
         }
     }
 
@@ -277,8 +322,31 @@ struct DecisionWorkspaceView: View {
     }
 
     private var selectedDecision: ProjectDecision? {
-        guard let selectedDecisionID = appState.selectedDecisionID else { return nil }
+        guard let selectedDecisionID = selectedDecisionIDs.singleSelection else { return nil }
         return store.decision(with: selectedDecisionID)
+    }
+
+    private var selectedDecisionsForExport: [ProjectDecision] {
+        filteredDecisions.filter { selectedDecisionIDs.contains($0.id) }
+    }
+
+    private func prepareExport(decisions: [ProjectDecision], filenameSuffix: String) {
+        guard decisions.isEmpty == false else { return }
+        let headers = ["Reference", "Statut", "Decision", "Projet", "Revisions", "Commentaires"]
+        let rows = decisions.map { decision in
+            [
+                "D-\(decision.sequenceNumber)",
+                decision.status.shortLabel,
+                decision.displayTitle,
+                store.projectName(for: decision.projectID),
+                String(decision.history.count),
+                String(decision.comments.count)
+            ]
+        }
+        let csv = EntityCSVBuilder.build(headers: headers, rows: rows)
+        exportDocument = EntityCSVDocument(text: csv)
+        exportFilename = "samourai-decisions-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
+        isShowingFileExporter = true
     }
 
     private func addComment(to decisionID: UUID) {
@@ -357,6 +425,7 @@ private struct DecisionDetailView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.visible)
     }
 
     private var timelineSection: some View {

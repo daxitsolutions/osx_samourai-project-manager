@@ -23,6 +23,7 @@ struct DashboardView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.visible)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 

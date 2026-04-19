@@ -31,6 +31,7 @@ struct ProjectDetailView: View {
                     .padding(24)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .scrollIndicators(.visible)
             } else {
                 ContentUnavailableView(
                     "Projet introuvable",
@@ -347,6 +348,7 @@ struct ProjectDetailView: View {
                 }
                 .padding(10)
             }
+            .scrollIndicators(.visible)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }

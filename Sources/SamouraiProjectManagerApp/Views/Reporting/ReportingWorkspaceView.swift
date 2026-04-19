@@ -132,6 +132,7 @@ struct ReportingWorkspaceView: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollIndicators(.visible)
             }
         }
         .padding(16)
@@ -250,6 +251,7 @@ struct ReportingWorkspaceView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.visible)
     }
 
     private func sectionCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -394,7 +396,7 @@ struct ReportingWorkspaceView: View {
         let pageRect = NSRect(x: 0, y: 0, width: 595, height: 842) // A4 @72dpi
         let textView = NSTextView(frame: pageRect)
         textView.string = text
-        textView.font = NSFont.systemFont(ofSize: 11)
+        textView.font = SamouraiTypography.shared.nsFont(size: 11)
         textView.isRichText = false
         textView.textContainerInset = NSSize(width: 20, height: 20)
         return textView.dataWithPDF(inside: pageRect)

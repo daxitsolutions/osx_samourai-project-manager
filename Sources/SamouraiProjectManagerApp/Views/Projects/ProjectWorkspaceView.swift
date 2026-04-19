@@ -9,9 +9,39 @@ struct ProjectWorkspaceView: View {
         let projects = store.projects
 
         HSplitView {
-            List(projects, selection: $appState.selectedProjectID) { project in
-                ProjectListRow(project: project)
-                    .tag(project.id)
+            VStack(spacing: 0) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Portefeuille projets")
+                            .font(.title2.weight(.semibold))
+                        Text("\(projects.count) projet(s)")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Button {
+                        appState.isShowingProjectEditor = true
+                    } label: {
+                        Label("Nouveau projet", systemImage: "plus")
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+
+                List(projects, selection: $appState.selectedProjectID) { project in
+                    ProjectListRow(
+                        project: project,
+                        onNameChange: { updatedName in
+                            store.updateProjectQuick(projectID: project.id, name: updatedName, health: project.health)
+                        },
+                        onHealthChange: { updatedHealth in
+                            store.updateProjectQuick(projectID: project.id, name: project.name, health: updatedHealth)
+                        }
+                    )
+                        .tag(project.id)
+                }
             }
             .frame(minWidth: 280, idealWidth: 320)
             .overlay {
@@ -42,16 +72,36 @@ struct ProjectWorkspaceView: View {
 
 private struct ProjectListRow: View {
     let project: Project
+    let onNameChange: (String) -> Void
+    let onHealthChange: (ProjectHealth) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(project.name)
-                    .font(.headline)
+                TextField(
+                    "Nom du projet",
+                    text: Binding(
+                        get: { project.name },
+                        set: { onNameChange($0) }
+                    )
+                )
+                .textFieldStyle(.plain)
+                .font(.headline)
                 Spacer()
-                Circle()
-                    .fill(Color(project.health.tintName))
-                    .frame(width: 10, height: 10)
+                Picker(
+                    "Santé",
+                    selection: Binding(
+                        get: { project.health },
+                        set: { onHealthChange($0) }
+                    )
+                ) {
+                    ForEach(ProjectHealth.allCases) { health in
+                        Text(health.label).tag(health)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 18)
             }
 
             Text(project.summary)

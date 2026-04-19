@@ -6,6 +6,7 @@ struct RiskRegisterView: View {
     @Environment(SamouraiStore.self) private var store
 
     @State private var isShowingFileImporter = false
+    @State private var isShowingManualRiskEditor = false
     @State private var importFeedbackMessage: String?
     @State private var isImporting = false
 
@@ -18,11 +19,18 @@ struct RiskRegisterView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Registre global des risques")
                             .font(.title2.weight(.semibold))
-                        Text("\(store.risks.count) risque(s) suivi(s)")
+                        Text("\(scopedRisks.count) risque(s) suivi(s)")
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
+
+                    Button {
+                        isShowingManualRiskEditor = true
+                    } label: {
+                        Label("Nouveau risque", systemImage: "plus")
+                    }
+                    .disabled(store.projects.isEmpty)
 
                     Button {
                         isShowingFileImporter = true
@@ -35,7 +43,7 @@ struct RiskRegisterView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 8)
 
-                if store.risks.isEmpty {
+                if scopedRisks.isEmpty {
                     ContentUnavailableView(
                         "Aucun risque",
                         systemImage: "checkmark.shield",
@@ -43,13 +51,28 @@ struct RiskRegisterView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(store.risks, selection: $appState.selectedRiskID) {
+                    Table(scopedRisks, selection: $appState.selectedRiskID) {
                         TableColumn("ID") { entry in
                             Text(entry.risk.externalID ?? "-")
                         }
 
                         TableColumn("Titre") { entry in
-                            Text(entry.risk.displayTitle)
+                            TextField(
+                                "Titre",
+                                text: Binding(
+                                    get: { entry.risk.displayTitle },
+                                    set: {
+                                        store.updateRiskQuick(
+                                            riskID: entry.risk.id,
+                                            title: $0,
+                                            owner: entry.risk.displayOwner,
+                                            severity: entry.risk.severity,
+                                            status: entry.risk.riskStatus ?? ""
+                                        )
+                                    }
+                                )
+                            )
+                            .textFieldStyle(.plain)
                         }
 
                         TableColumn("Projet(s)") { entry in
@@ -57,11 +80,65 @@ struct RiskRegisterView: View {
                         }
 
                         TableColumn("Assigné à") { entry in
-                            Text(entry.risk.displayOwner.isEmpty ? "-" : entry.risk.displayOwner)
+                            TextField(
+                                "Owner",
+                                text: Binding(
+                                    get: { entry.risk.displayOwner },
+                                    set: {
+                                        store.updateRiskQuick(
+                                            riskID: entry.risk.id,
+                                            title: entry.risk.displayTitle,
+                                            owner: $0,
+                                            severity: entry.risk.severity,
+                                            status: entry.risk.riskStatus ?? ""
+                                        )
+                                    }
+                                )
+                            )
+                            .textFieldStyle(.plain)
+                        }
+
+                        TableColumn("Sévérité") { entry in
+                            Picker(
+                                "Sévérité",
+                                selection: Binding(
+                                    get: { entry.risk.severity },
+                                    set: {
+                                        store.updateRiskQuick(
+                                            riskID: entry.risk.id,
+                                            title: entry.risk.displayTitle,
+                                            owner: entry.risk.displayOwner,
+                                            severity: $0,
+                                            status: entry.risk.riskStatus ?? ""
+                                        )
+                                    }
+                                )
+                            ) {
+                                ForEach(RiskSeverity.allCases) { severity in
+                                    Text(severity.label).tag(severity)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
                         }
 
                         TableColumn("Statut") { entry in
-                            Text(entry.risk.displayStatus)
+                            TextField(
+                                "Statut",
+                                text: Binding(
+                                    get: { entry.risk.riskStatus ?? "" },
+                                    set: {
+                                        store.updateRiskQuick(
+                                            riskID: entry.risk.id,
+                                            title: entry.risk.displayTitle,
+                                            owner: entry.risk.displayOwner,
+                                            severity: entry.risk.severity,
+                                            status: $0
+                                        )
+                                    }
+                                )
+                            )
+                            .textFieldStyle(.plain)
                         }
 
                         TableColumn("Score") { entry in
@@ -77,7 +154,7 @@ struct RiskRegisterView: View {
                    let risk = store.risk(with: selectedRiskID) {
                     RiskDetailView(
                         risk: risk,
-                        fallbackProjectName: store.risks.first(where: { $0.risk.id == selectedRiskID })?.projectName
+                        fallbackProjectName: scopedRisks.first(where: { $0.risk.id == selectedRiskID })?.projectName
                     )
                 } else {
                     ContentUnavailableView(
@@ -99,6 +176,11 @@ struct RiskRegisterView: View {
             allowsMultipleSelection: false
         ) { result in
             handleImportSelection(result)
+        }
+        .sheet(isPresented: $isShowingManualRiskEditor) {
+            ManualRiskEditorSheet(
+                suggestedProjectID: appState.resolvedPrimaryProjectID(in: store)
+            )
         }
         .alert("Import des risques", isPresented: Binding(
             get: { importFeedbackMessage != nil },
@@ -146,6 +228,93 @@ struct RiskRegisterView: View {
     private func scoreLabel(for score: Double?) -> String {
         guard let score else { return "-" }
         return score.formatted(.number.precision(.fractionLength(0...1)))
+    }
+
+    private var scopedRisks: [RiskEntry] {
+        if let primaryProjectID = appState.resolvedPrimaryProjectID(in: store) {
+            return store.risks.filter { $0.projectID == primaryProjectID }
+        }
+        return store.risks
+    }
+}
+
+private struct ManualRiskEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
+    @Environment(SamouraiStore.self) private var store
+
+    let suggestedProjectID: UUID?
+
+    @State private var projectID: UUID?
+    @State private var title = ""
+    @State private var mitigation = ""
+    @State private var owner = ""
+    @State private var severity: RiskSeverity = .medium
+    @State private var dueDate = Date.now
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("Projet", selection: $projectID) {
+                    Text("Sélectionner").tag(Optional<UUID>.none)
+                    ForEach(store.projects) { project in
+                        Text(project.name).tag(Optional(project.id))
+                    }
+                }
+
+                TextField("Risque", text: $title)
+                TextField("Mitigation", text: $mitigation, axis: .vertical)
+                    .lineLimit(3...5)
+                TextField("Owner", text: $owner)
+
+                Picker("Sévérité", selection: $severity) {
+                    ForEach(RiskSeverity.allCases) { entry in
+                        Text(entry.label).tag(entry)
+                    }
+                }
+
+                DatePicker("Date d'action cible", selection: $dueDate, displayedComponents: .date)
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Nouveau risque")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annuler") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Créer") {
+                        guard let projectID else { return }
+                        store.addRisk(
+                            to: projectID,
+                            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                            mitigation: mitigation.trimmingCharacters(in: .whitespacesAndNewlines),
+                            owner: owner.trimmingCharacters(in: .whitespacesAndNewlines),
+                            severity: severity,
+                            dueDate: dueDate
+                        )
+                        appState.selectedSection = .risks
+                        dismiss()
+                    }
+                    .disabled(formIsInvalid)
+                }
+            }
+        }
+        .frame(minWidth: 500, minHeight: 380)
+        .onAppear {
+            if projectID == nil {
+                projectID = suggestedProjectID ?? store.projects.first?.id
+            }
+        }
+    }
+
+    private var formIsInvalid: Bool {
+        projectID == nil
+            || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || mitigation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

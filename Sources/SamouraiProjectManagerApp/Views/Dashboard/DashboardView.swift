@@ -15,6 +15,7 @@ struct DashboardView: View {
                 }
 
                 dashboardMetrics
+                reportingSection
                 upcomingProjectsSection
                 criticalRisksSection
                 nextDeliverablesSection
@@ -26,12 +27,16 @@ struct DashboardView: View {
     }
 
     private var dashboardMetrics: some View {
-        let projects = store.projects
+        let projects = scopedProjects
         let allRisks = projects.flatMap(\.risks)
         let allDeliverables = projects.flatMap(\.deliverables)
         let completedDeliverables = allDeliverables.filter(\.isDone).count
         let criticalRisks = allRisks.filter { $0.severity == .critical }.count
         let underTensionProjects = projects.filter { $0.health != .green }.count
+        let testingAverage = projects.isEmpty
+            ? 0
+            : Int((Double(projects.reduce(0) { $0 + $1.testingAverageProgressPercent }) / Double(projects.count)).rounded())
+        let blockedTestingPhases = projects.reduce(0) { $0 + $1.blockedTestingPhaseCount }
 
         return Grid(horizontalSpacing: 16, verticalSpacing: 16) {
             GridRow {
@@ -55,12 +60,19 @@ struct DashboardView: View {
                     subtitle: "Exécution pilotée par preuve",
                     systemImage: "checkmark.circle"
                 )
+
+                SummaryCard(
+                    title: "Qualité Tests",
+                    value: "\(testingAverage)%",
+                    subtitle: "\(blockedTestingPhases) phase(s) bloquée(s)",
+                    systemImage: "checklist.checked"
+                )
             }
         }
     }
 
     private var upcomingProjectsSection: some View {
-        let projects = store.projects
+        let projects = scopedProjects
 
         return VStack(alignment: .leading, spacing: 12) {
             Text("Projets sous contrôle")
@@ -85,8 +97,33 @@ struct DashboardView: View {
         }
     }
 
+    private var reportingSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Reporting & Gouvernance")
+                .font(.title2.weight(.semibold))
+
+            HStack(spacing: 12) {
+                Button("Reporting Hebdomadaire") {
+                    appState.openReporting(.weekly)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Reporting Mensuel") {
+                    appState.openReporting(.monthly)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Text("Génération automatique à partir des modules Activités, Livrables, Risques, Tests, Décisions et Actions.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
     private var criticalRisksSection: some View {
-        let criticalRisks = store.risks.filter { $0.risk.severity.sortWeight >= RiskSeverity.high.sortWeight }
+        let criticalRisks = scopedRisks.filter { $0.risk.severity.sortWeight >= RiskSeverity.high.sortWeight }
 
         return VStack(alignment: .leading, spacing: 12) {
             Text("Tensions à arbitrer")
@@ -107,7 +144,7 @@ struct DashboardView: View {
     }
 
     private var nextDeliverablesSection: some View {
-        let nextDeliverables = store.deliverables.filter { $0.deliverable.isDone == false }
+        let nextDeliverables = scopedDeliverables.filter { $0.deliverable.isDone == false }
 
         return VStack(alignment: .leading, spacing: 12) {
             Text("Prochains livrables")
@@ -125,6 +162,27 @@ struct DashboardView: View {
                 }
             }
         }
+    }
+
+    private var scopedProjects: [Project] {
+        if let primaryProjectID = appState.resolvedPrimaryProjectID(in: store) {
+            return store.projects.filter { $0.id == primaryProjectID }
+        }
+        return store.projects
+    }
+
+    private var scopedRisks: [RiskEntry] {
+        if let primaryProjectID = appState.resolvedPrimaryProjectID(in: store) {
+            return store.risks.filter { $0.projectID == primaryProjectID }
+        }
+        return store.risks
+    }
+
+    private var scopedDeliverables: [DeliverableEntry] {
+        if let primaryProjectID = appState.resolvedPrimaryProjectID(in: store) {
+            return store.deliverables.filter { $0.projectID == primaryProjectID }
+        }
+        return store.deliverables
     }
 }
 

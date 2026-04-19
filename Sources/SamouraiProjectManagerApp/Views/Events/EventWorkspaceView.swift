@@ -271,7 +271,7 @@ private struct EventDetailView: View {
 
                         HStack(spacing: 14) {
                             Label(event.priority.label, systemImage: "flag.fill")
-                                .foregroundStyle(Color(event.priority.tintName))
+                                .foregroundStyle(event.priority.tintColor)
                             Label(projectName, systemImage: "folder")
                             Label(event.happenedAt.formatted(date: .abbreviated, time: .shortened), systemImage: "clock")
                         }

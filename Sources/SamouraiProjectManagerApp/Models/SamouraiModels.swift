@@ -270,14 +270,7 @@ enum ProjectTestingRAGStatus: String, Codable, CaseIterable, Identifiable {
     }
 
     var tintName: String {
-        switch self {
-        case .green:
-            "green"
-        case .amber:
-            "orange"
-        case .red:
-            "red"
-        }
+        colorToken.rawValue
     }
 
     var symbol: String {
@@ -1718,14 +1711,7 @@ enum ProjectHealth: String, Codable, CaseIterable, Identifiable {
     }
 
     var tintName: String {
-        switch self {
-        case .green:
-            "green"
-        case .amber:
-            "orange"
-        case .red:
-            "red"
-        }
+        colorToken.rawValue
     }
 }
 
@@ -1789,16 +1775,7 @@ enum ResourceStatus: String, Codable, CaseIterable, Identifiable {
     }
 
     var tintName: String {
-        switch self {
-        case .active:
-            "green"
-        case .partiallyAvailable:
-            "orange"
-        case .onLeave:
-            "yellow"
-        case .offboarded:
-            "gray"
-        }
+        colorToken.rawValue
     }
 }
 
@@ -2088,16 +2065,7 @@ enum EventPriority: String, Codable, CaseIterable, Identifiable {
     }
 
     var tintName: String {
-        switch self {
-        case .trivial:
-            "gray"
-        case .minor:
-            "blue"
-        case .major:
-            "orange"
-        case .critical:
-            "red"
-        }
+        colorToken.rawValue
     }
 }
 
@@ -2208,16 +2176,7 @@ enum ActionPriority: String, Codable, CaseIterable, Identifiable {
     }
 
     var tintName: String {
-        switch self {
-        case .trivial:
-            "gray"
-        case .minor:
-            "blue"
-        case .major:
-            "orange"
-        case .critical:
-            "red"
-        }
+        colorToken.rawValue
     }
 }
 
@@ -2437,13 +2396,6 @@ enum DecisionStatus: String, Codable, CaseIterable, Identifiable {
     }
 
     var tintName: String {
-        switch self {
-        case .proposedUnderReview:
-            "orange"
-        case .validated:
-            "green"
-        case .abandoned:
-            "gray"
-        }
+        colorToken.rawValue
     }
 }

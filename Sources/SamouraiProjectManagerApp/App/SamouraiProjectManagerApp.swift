@@ -10,6 +10,7 @@ struct SamouraiProjectManagerApp: App {
             AppShellView()
                 .environment(appState)
                 .environment(store)
+                .tint(SamouraiColorTheme.color(.brandPurple))
         }
         .defaultSize(width: 1_480, height: 920)
         .commands {

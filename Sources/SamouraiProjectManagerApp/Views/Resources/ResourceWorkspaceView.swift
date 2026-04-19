@@ -1532,7 +1532,7 @@ private struct ResourceGridCard: View {
                 }
                 .buttonStyle(.plain)
                 Circle()
-                    .fill(Color(resource.status.tintName))
+                    .fill(resource.status.tintColor)
                     .frame(width: 10, height: 10)
             }
 

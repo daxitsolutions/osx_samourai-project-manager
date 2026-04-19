@@ -315,7 +315,7 @@ private struct DecisionDetailView: View {
 
                         HStack(spacing: 14) {
                             Label(decision.status.label, systemImage: "flag.fill")
-                                .foregroundStyle(Color(decision.status.tintName))
+                                .foregroundStyle(decision.status.tintColor)
                             Label(projectName, systemImage: "folder")
                             Label("\(decision.history.count) révision(s)", systemImage: "clock.arrow.circlepath")
                             Label("\(decision.comments.count) commentaire(s)", systemImage: "bubble.left.and.bubble.right")
@@ -371,7 +371,7 @@ private struct DecisionDetailView: View {
                 ForEach(decision.history.sorted(by: { $0.recordedAt < $1.recordedAt })) { entry in
                     HStack(alignment: .top, spacing: 10) {
                         Circle()
-                            .fill(Color(decision.status.tintName))
+                            .fill(entry.status.tintColor)
                             .frame(width: 8, height: 8)
                             .padding(.top, 6)
 

@@ -94,7 +94,7 @@ struct ProjectDetailView: View {
                 Text(project.health.label)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color(project.health.tintName).opacity(0.15), in: Capsule())
+                    .background(project.health.tintColor.opacity(0.15), in: Capsule())
             }
 
             HStack(spacing: 18) {
@@ -161,7 +161,7 @@ struct ProjectDetailView: View {
                     } label: {
                         HStack(alignment: .top, spacing: 12) {
                             Circle()
-                                .fill(Color(resource.status.tintName))
+                                .fill(resource.status.tintColor)
                                 .frame(width: 10, height: 10)
                                 .padding(.top, 6)
 
@@ -205,7 +205,7 @@ struct ProjectDetailView: View {
                     .font(.callout.weight(.semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(Color(project.testingRAGStatus.tintName).opacity(0.14), in: Capsule())
+                    .background(project.testingRAGStatus.tintColor.opacity(0.14), in: Capsule())
             }
 
             HStack(spacing: 18) {

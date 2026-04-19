@@ -214,7 +214,7 @@ private struct ProjectOverviewRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             Circle()
-                .fill(Color(project.health.tintName))
+                .fill(project.health.tintColor)
                 .frame(width: 10, height: 10)
                 .padding(.top, 6)
 
@@ -251,7 +251,7 @@ private struct RiskHighlightRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(entry.risk.severity == .critical ? .red : .orange)
+                .foregroundStyle(entry.risk.severity.tintColor)
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 4) {

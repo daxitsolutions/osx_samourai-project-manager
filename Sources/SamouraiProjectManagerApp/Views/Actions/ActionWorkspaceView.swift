@@ -326,7 +326,7 @@ private struct ActionDetailView: View {
                         HStack(spacing: 14) {
                             Label(action.flow.label, systemImage: action.flow.systemImage)
                             Label(action.priority.label, systemImage: "flag.fill")
-                                .foregroundStyle(Color(action.priority.tintName))
+                                .foregroundStyle(action.priority.tintColor)
                             if activityTitle.isEmpty == false {
                                 Label(activityTitle, systemImage: "calendar.badge.clock")
                             }

@@ -6,14 +6,9 @@ struct DeliverableBoardView: View {
 
     @State private var isShowingDeliverableEditor = false
     @State private var deliverableEditorContext = DeliverableEditorContext()
-    @State private var inScopeDraft = ""
-    @State private var outOfScopeDraft = ""
-    @State private var linkedAnnexProjectIDs: Set<UUID> = []
+    @State private var newInScopeItemDraft = ""
+    @State private var newOutOfScopeItemDraft = ""
     @State private var acceptanceDraftByDeliverable: [UUID: String] = [:]
-    @State private var isShowingChangeRequestEditor = false
-    @State private var baselineMilestoneDraft = "Fin de Phase"
-    @State private var baselineValidatedByDraft = "Chef de Projet"
-    @State private var changeControlFeedbackMessage: String?
 
     var body: some View {
         Group {
@@ -21,11 +16,8 @@ struct DeliverableBoardView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: SamouraiLayout.sectionSpacing) {
                         header(primaryProject: primaryProject)
-                        scopeDefinitionSection(primaryProject: primaryProject)
+                        perimeterSection(primaryProject: primaryProject)
                         deliverablesWBSSection(primaryProject: primaryProject)
-                        traceabilitySection(primaryProject: primaryProject)
-                        changeControlSection(primaryProject: primaryProject)
-                        annexIntegrationSection(primaryProject: primaryProject)
                     }
                     .padding(SamouraiLayout.pagePadding)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -40,21 +32,12 @@ struct DeliverableBoardView: View {
             }
         }
         .samouraiCanvasBackground()
-        .sheet(isPresented: Binding(
-            get: { isShowingDeliverableEditor || isShowingChangeRequestEditor },
-            set: { isPresented in
-                if isPresented == false {
-                    isShowingDeliverableEditor = false
-                    isShowingChangeRequestEditor = false
-                }
-            }
-        )) {
-            if isShowingDeliverableEditor {
+        .sheet(isPresented: $isShowingDeliverableEditor) {
+            if let primaryProject {
                 DeliverableScopeEditorSheet(
                     primaryProject: primaryProject,
                     context: deliverableEditorContext,
                     onSave: { payload in
-                        guard let primaryProject else { return }
                         store.addDeliverable(
                             to: primaryProject.id,
                             title: payload.title,
@@ -68,47 +51,13 @@ struct DeliverableBoardView: View {
                         )
                     }
                 )
-            } else if isShowingChangeRequestEditor {
-                ScopeChangeRequestEditorSheet(
-                    project: primaryProject,
-                    onSubmit: { payload in
-                        guard let primaryProject else { return }
-                        changeControlFeedbackMessage = store.submitScopeChangeRequest(
-                            projectID: primaryProject.id,
-                            description: payload.description,
-                            impactPlanning: payload.impactPlanning,
-                            impactResources: payload.impactResources,
-                            impactRisks: payload.impactRisks,
-                            requestedBy: payload.requestedBy
-                        ) ?? "Création impossible."
-                    }
-                )
             }
-        }
-        .alert("Change Control", isPresented: Binding(
-            get: { changeControlFeedbackMessage != nil },
-            set: { if $0 == false { changeControlFeedbackMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(changeControlFeedbackMessage ?? "")
-        }
-        .onAppear {
-            loadScopeDraftFromProject()
-        }
-        .onChange(of: primaryProject?.id) { _, _ in
-            loadScopeDraftFromProject()
         }
     }
 
     private var primaryProject: Project? {
         guard let primaryProjectID = appState.resolvedPrimaryProjectID(in: store) else { return nil }
         return store.project(with: primaryProjectID)
-    }
-
-    private var annexCandidateProjects: [Project] {
-        guard let primaryProject else { return [] }
-        return store.projects.filter { $0.id != primaryProject.id }
     }
 
     @ViewBuilder
@@ -129,69 +78,113 @@ struct DeliverableBoardView: View {
     }
 
     @ViewBuilder
-    private func scopeDefinitionSection(primaryProject: Project) -> some View {
+    private func perimeterSection(primaryProject: Project) -> some View {
+        let inScopeItems = primaryProject.scopeDefinition?.inScopeItems ?? []
+        let outOfScopeItems = primaryProject.scopeDefinition?.outOfScopeItems ?? []
+
         SamouraiSectionCard(
-            title: "Définition du périmètre",
-            subtitle: "Rendre explicite ce qui est inclus, exclu et connecté aux autres projets."
+            title: "Périmètre",
+            subtitle: "Éléments explicitement inclus et exclus du projet."
         ) {
-            HStack(alignment: .top, spacing: 16) {
+            HStack(alignment: .top, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("In scope")
                         .font(.headline)
-                    TextEditor(text: $inScopeDraft)
-                        .samouraiEditorSurface(minHeight: 140)
-                    Text("Une ligne = un élément inclus")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+
+                    if inScopeItems.isEmpty {
+                        Text("Aucun élément in scope")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(inScopeItems, id: \.self) { item in
+                            HStack {
+                                Text(item)
+                                    .font(.callout)
+                                Spacer()
+                                Button(role: .destructive) {
+                                    store.removeInScopeItem(projectID: primaryProject.id, item: item)
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(.red)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+
+                    HStack {
+                        TextField("Ajouter un élément in scope", text: $newInScopeItemDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                let trimmed = newInScopeItemDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard trimmed.isEmpty == false else { return }
+                                store.addInScopeItem(projectID: primaryProject.id, item: trimmed)
+                                newInScopeItemDraft = ""
+                            }
+                        Button {
+                            let trimmed = newInScopeItemDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard trimmed.isEmpty == false else { return }
+                            store.addInScopeItem(projectID: primaryProject.id, item: trimmed)
+                            newInScopeItemDraft = ""
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(newInScopeItemDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Out of scope")
                         .font(.headline)
-                    TextEditor(text: $outOfScopeDraft)
-                        .samouraiEditorSurface(minHeight: 140)
-                    Text("Une ligne = un élément explicitement exclu")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Projets annexes intégrés")
-                    .font(.headline)
-
-                if annexCandidateProjects.isEmpty {
-                    Text("Aucun projet annexe disponible")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(annexCandidateProjects) { project in
-                        Toggle(
-                            project.name,
-                            isOn: Binding(
-                                get: { linkedAnnexProjectIDs.contains(project.id) },
-                                set: { isSelected in
-                                    if isSelected {
-                                        linkedAnnexProjectIDs.insert(project.id)
-                                    } else {
-                                        linkedAnnexProjectIDs.remove(project.id)
-                                    }
+                    if outOfScopeItems.isEmpty {
+                        Text("Aucun élément out of scope")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(outOfScopeItems, id: \.self) { item in
+                            HStack {
+                                Text(item)
+                                    .font(.callout)
+                                Spacer()
+                                Button(role: .destructive) {
+                                    store.removeOutOfScopeItem(projectID: primaryProject.id, item: item)
+                                } label: {
+                                    Image(systemName: "minus.circle")
                                 }
-                            )
-                        )
-                        .toggleStyle(.checkbox)
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(.red)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+
+                    HStack {
+                        TextField("Ajouter un élément out of scope", text: $newOutOfScopeItemDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                let trimmed = newOutOfScopeItemDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                                guard trimmed.isEmpty == false else { return }
+                                store.addOutOfScopeItem(projectID: primaryProject.id, item: trimmed)
+                                newOutOfScopeItemDraft = ""
+                            }
+                        Button {
+                            let trimmed = newOutOfScopeItemDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard trimmed.isEmpty == false else { return }
+                            store.addOutOfScopeItem(projectID: primaryProject.id, item: trimmed)
+                            newOutOfScopeItemDraft = ""
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(newOutOfScopeItemDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            Button("Enregistrer le périmètre") {
-                store.updateProjectScope(
-                    projectID: primaryProject.id,
-                    inScopeItems: parseLines(inScopeDraft),
-                    outOfScopeItems: parseLines(outOfScopeDraft),
-                    linkedAnnexProjectIDs: Array(linkedAnnexProjectIDs)
-                )
-            }
-            .buttonStyle(.bordered)
         }
     }
 
@@ -373,275 +366,6 @@ struct DeliverableBoardView: View {
         }
     }
 
-    @ViewBuilder
-    private func annexIntegrationSection(primaryProject: Project) -> some View {
-        SamouraiSectionCard(
-            title: "Intégration des projets annexes",
-            subtitle: "Les apports externes au scope principal restent visibles et reliés au bon contexte."
-        ) {
-            let integrated = store.annexDeliverablesIntegrated(into: primaryProject.id)
-            if integrated.isEmpty {
-                Text("Aucun livrable annexe intégré pour l'instant.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(integrated) { entry in
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(entry.deliverable.title)
-                                .font(.headline)
-                            Text(entry.projectName)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(entry.deliverable.details)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        SamouraiStatusPill(text: entry.deliverable.phase.label, tint: SamouraiSurface.accent)
-                    }
-                    .padding(10)
-                    .samouraiCardSurface()
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func traceabilitySection(primaryProject: Project) -> some View {
-        let coverage = store.scopeCoverageReport(projectID: primaryProject.id)
-        let baselineProgress = store.scopeBaselineExecutionProgress(projectID: primaryProject.id)
-
-        SamouraiSectionCard(
-            title: "Traçabilité scope → plan → exécution",
-            subtitle: "Montrer au bon niveau de détail où le scope est couvert et où l’exécution manque encore de relais."
-        ) {
-            HStack(spacing: 14) {
-                traceabilityMetric(
-                    title: "Couverture du périmètre",
-                    value: "\(coverage.coveragePercent)%",
-                    detail: "\(coverage.coveredCount)/\(coverage.totalCount) livrables majeurs couverts"
-                )
-                traceabilityMetric(
-                    title: "Avancement baseline",
-                    value: baselineProgress.map { "\($0.progressPercent)%" } ?? "N/A",
-                    detail: baselineProgress.map { "Baseline \($0.baselineLabel): \($0.acceptedCount)/\($0.totalCount) acceptés" } ?? "Aucune baseline disponible"
-                )
-            }
-
-            if coverage.entries.isEmpty {
-                Text("Aucun livrable majeur à tracer.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(coverage.entries) { entry in
-                    HStack {
-                        Text(entry.isCovered ? "✅" : "⚠️")
-                        Text(entry.title)
-                            .font(.subheadline.weight(.semibold))
-                        if entry.isMilestone {
-                            Text("Jalon")
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.secondary.opacity(0.12), in: Capsule())
-                        }
-                        Spacer()
-                        Text(entry.isMilestone ? "Couvert (jalon)" : "\(entry.linkedActivityCount) activité(s) liée(s)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(8)
-                    .samouraiCardSurface()
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func traceabilityMetric(title: String, value: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.title3.weight(.semibold))
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .samouraiCardSurface()
-    }
-
-    @ViewBuilder
-    private func changeControlSection(primaryProject: Project) -> some View {
-        SamouraiSectionCard(
-            title: "Change control et scope baselining",
-            subtitle: "Les baselines et demandes de changement sont regroupées pour garder une gouvernance simple."
-        ) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Baseline de référence")
-                    .font(.headline)
-
-                HStack {
-                    TextField("Jalon (ex: Fin d'Initiation)", text: $baselineMilestoneDraft)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Validé par", text: $baselineValidatedByDraft)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Créer baseline") {
-                        changeControlFeedbackMessage = store.createScopeBaseline(
-                            projectID: primaryProject.id,
-                            milestoneLabel: baselineMilestoneDraft,
-                            validatedBy: baselineValidatedByDraft
-                        ) ?? "Création de baseline impossible."
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
-                if primaryProject.scopeBaselines.isEmpty {
-                    Text("Aucune baseline validée.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(primaryProject.scopeBaselines.sorted { $0.createdAt > $1.createdAt }) { baseline in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("\(baseline.milestoneLabel) • \(baseline.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                                .font(.subheadline.weight(.semibold))
-                            Text("Validé par: \(baseline.validatedBy) • CR associées: \(baseline.associatedChangeRequestIDs.count)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text("In scope: \(baseline.scopeSnapshot.inScopeItems.count) • Out of scope: \(baseline.scopeSnapshot.outOfScopeItems.count) • Livrables snapshot: \(baseline.deliverableSnapshots.count)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(8)
-                        .samouraiCardSurface()
-                    }
-                }
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Demandes de changement")
-                        .font(.headline)
-                    Spacer()
-                    Button("Nouvelle CR") {
-                        isShowingChangeRequestEditor = true
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                if primaryProject.scopeChangeRequests.isEmpty {
-                    Text("Aucune demande de changement.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(primaryProject.scopeChangeRequests.sorted { $0.createdAt > $1.createdAt }) { request in
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(request.description)
-                                        .font(.subheadline.weight(.semibold))
-                                    Text("Statut: \(request.status.label) • Créée: \(request.createdAt.formatted(date: .abbreviated, time: .shortened)) • Par: \(request.requestedBy)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    if let baselineID = request.associatedBaselineID {
-                                        Text("Associée baseline: \(baselineID.uuidString.prefix(8))")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                HStack(spacing: 8) {
-                                    if request.status == .proposed {
-                                        Button("Reviewed") {
-                                            transitionCR(primaryProjectID: primaryProject.id, requestID: request.id, targetStatus: .reviewed)
-                                        }
-                                        .buttonStyle(.bordered)
-                                    } else if request.status == .reviewed {
-                                        Button("Approve") {
-                                            transitionCR(primaryProjectID: primaryProject.id, requestID: request.id, targetStatus: .approved)
-                                        }
-                                        .buttonStyle(.borderedProminent)
-
-                                        Button("Reject") {
-                                            transitionCR(primaryProjectID: primaryProject.id, requestID: request.id, targetStatus: .rejected)
-                                        }
-                                        .buttonStyle(.bordered)
-                                    }
-                                }
-                            }
-
-                            HStack(alignment: .top, spacing: 12) {
-                                impactCard(title: "Planning", value: request.impactPlanning)
-                                impactCard(title: "Ressources", value: request.impactResources)
-                                impactCard(title: "Risques", value: request.impactRisks)
-                            }
-
-                            if request.history.isEmpty == false {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text("Historique")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                    ForEach(request.history.sorted { $0.changedAt > $1.changedAt }) { history in
-                                        Text("\(history.changedAt.formatted(date: .abbreviated, time: .shortened)) • \(history.status.label) • \(history.actor)\(history.note.isEmpty ? "" : " • \(history.note)")")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                        }
-                        .padding(10)
-                        .samouraiCardSurface()
-                    }
-                }
-            }
-        }
-    }
-
-    private func transitionCR(primaryProjectID: UUID, requestID: UUID, targetStatus: ScopeChangeRequestStatus) {
-        changeControlFeedbackMessage = store.transitionScopeChangeRequest(
-            projectID: primaryProjectID,
-            requestID: requestID,
-            targetStatus: targetStatus,
-            actor: baselineValidatedByDraft,
-            note: "Transition validée dans le module Deliverables & Scope."
-        ) ?? "Transition non autorisée."
-    }
-
-    @ViewBuilder
-    private func impactCard(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(value.isEmpty ? "-" : value)
-                .font(.caption)
-        }
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .samouraiCardSurface()
-    }
-
-    private func parseLines(_ raw: String) -> [String] {
-        raw
-            .split(whereSeparator: \.isNewline)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.isEmpty == false }
-    }
-
-    private func loadScopeDraftFromProject() {
-        guard let scope = primaryProject?.scopeDefinition else {
-            inScopeDraft = ""
-            outOfScopeDraft = ""
-            linkedAnnexProjectIDs = []
-            return
-        }
-
-        inScopeDraft = scope.inScopeItems.joined(separator: "\n")
-        outOfScopeDraft = scope.outOfScopeItems.joined(separator: "\n")
-        linkedAnnexProjectIDs = Set(scope.linkedAnnexProjectIDs)
-    }
 }
 
 private struct DeliverableEditorContext {

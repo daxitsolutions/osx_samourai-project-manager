@@ -280,10 +280,10 @@ struct ActionWorkspaceView: View {
         switch selectedFlow {
         case .all:
             flowFilteredActions = scopedActions
-        case .incomingLeMans:
-            flowFilteredActions = scopedActions.filter { $0.flow == .incomingLeMans }
-        case .pushedAutomatic:
-            flowFilteredActions = scopedActions.filter { $0.flow == .pushedAutomatic }
+        case .manuel:
+            flowFilteredActions = scopedActions.filter { $0.flow == .manuel }
+        case .automatique:
+            flowFilteredActions = scopedActions.filter { $0.flow == .automatique }
         }
 
         let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -373,79 +373,6 @@ private extension ProjectAction {
     var projectIDSortKey: String { projectID?.uuidString ?? "" }
 }
 
-private struct ActionDetailView: View {
-    let action: ProjectAction
-    let projectName: String
-    let activityTitle: String
-    let onEdit: () -> Void
-    let onDelete: () -> Void
-    let onToggleDone: () -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(action.displayTitle)
-                            .font(.largeTitle.weight(.semibold))
-
-                        HStack(spacing: 14) {
-                            Label(action.flow.label, systemImage: action.flow.systemImage)
-                            Label(action.priority.label, systemImage: "flag.fill")
-                                .foregroundStyle(action.priority.tintColor)
-                            if activityTitle.isEmpty == false {
-                                Label(activityTitle, systemImage: "calendar.badge.clock")
-                            }
-                            Label(projectName, systemImage: "folder")
-                            Label(action.dueDate.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
-                        }
-                        .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Button(action.isDone ? "Rouvrir" : "Marquer terminée") {
-                        onToggleDone()
-                    }
-
-                    Button {
-                        onEdit()
-                    } label: {
-                        Label("Modifier", systemImage: "pencil")
-                    }
-
-                    Button(role: .destructive) {
-                        onDelete()
-                    } label: {
-                        Label("Supprimer", systemImage: "trash")
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Description détaillée")
-                        .font(.title3.weight(.semibold))
-
-                    Text(action.details)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Créée le \(action.createdAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "calendar.badge.plus")
-                    Label("Modifiée le \(action.updatedAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "calendar.badge.clock")
-                    Label(action.isDone ? "Statut: Terminée" : "Statut: Ouverte", systemImage: action.isDone ? "checkmark.circle.fill" : "clock")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .scrollIndicators(.visible)
-    }
-}
-
 private struct ActionEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
@@ -470,7 +397,7 @@ private struct ActionEditorSheet: View {
         _details = State(initialValue: action?.details ?? "")
         _priority = State(initialValue: action?.priority ?? .minor)
         _dueDate = State(initialValue: action?.dueDate ?? Calendar.current.date(byAdding: .day, value: 3, to: .now) ?? .now)
-        _flow = State(initialValue: action?.flow ?? .incomingLeMans)
+        _flow = State(initialValue: action?.flow ?? .manuel)
         _projectID = State(initialValue: action?.projectID)
     }
 

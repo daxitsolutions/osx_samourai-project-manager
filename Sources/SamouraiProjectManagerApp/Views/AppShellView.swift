@@ -22,12 +22,7 @@ struct AppShellView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .samouraiCanvasBackground()
-        .sheet(isPresented: Binding(
-            get: { appState.isShowingProjectEditor },
-            set: { appState.isShowingProjectEditor = $0 }
-        )) {
-            ProjectEditorSheet()
-        }
+        .environment(\.dynamicTypeSize, appState.dynamicTypeSize)
         .task {
             await store.loadIfNeeded()
             ensureDefaultProjectSelection()
@@ -158,8 +153,6 @@ struct AppShellView: View {
         switch currentSection {
         case .dashboard:
             DashboardView()
-        case .planning:
-            PlanningWorkspaceView()
         case .reporting:
             ReportingWorkspaceView()
         case .projects:
@@ -207,7 +200,6 @@ struct AppShellView: View {
             .events,
             .meetings,
             .deliverables,
-            .planning,
             .resources,
             .risks,
             .decisions,
@@ -339,9 +331,15 @@ private struct AppSidebarSectionRow: View {
 }
 
 private struct ConfigurationWorkspaceView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(SamouraiStore.self) private var store
+
     let primaryProjectName: String?
 
+    @State private var isShowingDeleteConfirmation = false
+
     var body: some View {
+        @Bindable var appState = appState
         ScrollView {
             VStack(alignment: .leading, spacing: SamouraiLayout.sectionSpacing) {
                 SamouraiPageHeader(
@@ -359,20 +357,68 @@ private struct ConfigurationWorkspaceView: View {
                 }
 
                 SamouraiSectionCard(
-                    title: "Principes de navigation",
-                    subtitle: "Le portfolio sert à choisir le projet avant d'entrer dans ses sous-sections."
+                    title: "Typographie",
+                    subtitle: "Ajuste la taille des textes affichés dans l'application."
                 ) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Label("Le portfolio reste l'entrée pour sélectionner et cadrer le projet.", systemImage: "square.grid.2x2")
-                        Label("Les sous-sections projet se concentrent ensuite sur un seul contexte actif.", systemImage: "scope")
-                        Label("Les options locales avancées restent directement dans chaque module.", systemImage: "slider.horizontal.3")
+                        HStack {
+                            Label("Taille du texte", systemImage: "textformat.size")
+                            Spacer()
+                            Text(fontSizeLabel)
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
+                        Slider(value: $appState.fontSizeOffset, in: -2...4, step: 1.0) {
+                            Text("Taille")
+                        } minimumValueLabel: {
+                            Image(systemName: "textformat.size.smaller")
+                                .foregroundStyle(.secondary)
+                        } maximumValueLabel: {
+                            Image(systemName: "textformat.size.larger")
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .foregroundStyle(.secondary)
+                }
+
+                SamouraiSectionCard(
+                    title: "Données",
+                    subtitle: "Suppression irréversible de l'ensemble des données de l'instance."
+                ) {
+                    Button(role: .destructive) {
+                        isShowingDeleteConfirmation = true
+                    } label: {
+                        Label("Supprimer toutes les données de l'application", systemImage: "trash")
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
             .padding(SamouraiLayout.pagePadding)
         }
         .scrollIndicators(.visible)
+        .confirmationDialog(
+            "Supprimer toutes les données ?",
+            isPresented: $isShowingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Supprimer définitivement", role: .destructive) {
+                store.deleteAllData()
+            }
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            Text("Toutes les données de l'application seront perdues. Cette action est irréversible. Effectuez une sauvegarde préalable via le module Sauvegardes si vous souhaitez pouvoir les récupérer.")
+        }
+    }
+
+    private var fontSizeLabel: String {
+        switch Int(appState.fontSizeOffset.rounded()) {
+        case ..<(-1): return "Très petit"
+        case -1: return "Petit"
+        case 0: return "Normal"
+        case 1: return "Grand"
+        case 2: return "Très grand"
+        case 3: return "Énorme"
+        default: return "Maximum"
+        }
     }
 }
 

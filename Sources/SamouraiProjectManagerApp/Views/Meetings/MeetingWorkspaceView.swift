@@ -10,7 +10,9 @@ struct MeetingWorkspaceView: View {
     @State private var editorContext: MeetingEditorContext?
     @State private var meetingPendingDeletion: ProjectMeeting?
     @State private var dropFeedbackMessage: String?
-    @State private var isDropTargeted = false
+    @State private var isDropTargetedByURL = false
+    @State private var isDropTargetedByText = false
+    private var isDropTargeted: Bool { isDropTargetedByURL || isDropTargetedByText }
     @State private var selectedMeetingIDs: Set<UUID> = []
     @State private var isShowingFileExporter = false
     @State private var exportDocument: EntityCSVDocument?
@@ -278,17 +280,13 @@ struct MeetingWorkspaceView: View {
                 dropFeedbackMessage = error.localizedDescription
                 return false
             }
-        } isTargeted: { isTargeted in
-            isDropTargeted = isTargeted
-        }
+        } isTargeted: { isDropTargetedByURL = $0 }
         .dropDestination(for: String.self) { droppedStrings, _ in
             guard let firstString = droppedStrings.first else { return false }
             let prefill = MeetingDropParser.parseTextPayload(firstString)
             editorContext = .create(prefill)
             return true
-        } isTargeted: { isTargeted in
-            isDropTargeted = isTargeted
-        }
+        } isTargeted: { isDropTargetedByText = $0 }
     }
 
     private var filteredMeetings: [ProjectMeeting] {
@@ -373,95 +371,6 @@ private extension ProjectMeeting {
     var modeSortKey: String { mode.rawValue }
 }
 
-private struct MeetingDetailView: View {
-    let meeting: ProjectMeeting
-    let projectName: String
-    let onEdit: () -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(meeting.displayTitle)
-                            .font(.largeTitle.weight(.semibold))
-
-                        HStack(spacing: 14) {
-                            Label(projectName, systemImage: "folder")
-                            Label(meeting.mode.label, systemImage: meeting.mode.systemImage)
-                            Label(meeting.meetingAt.formatted(date: .abbreviated, time: .shortened), systemImage: "calendar")
-                            Label("\(meeting.durationMinutes) min", systemImage: "timer")
-                        }
-                        .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Button {
-                        onEdit()
-                    } label: {
-                        Label("Modifier", systemImage: "pencil")
-                    }
-
-                    Button(role: .destructive) {
-                        onDelete()
-                    } label: {
-                        Label("Supprimer", systemImage: "trash")
-                    }
-                }
-
-                Grid(horizontalSpacing: 16, verticalSpacing: 12) {
-                    GridRow {
-                        detailCard(title: "Organisateur", value: meeting.organizer)
-                        detailCard(title: "Participants", value: meeting.participants)
-                    }
-                    GridRow {
-                        detailCard(title: "Lieu / Lien", value: meeting.locationOrLink)
-                        detailCard(title: "Notes", value: meeting.notes)
-                    }
-                }
-
-                textBlock(title: "Compte Rendu Synthétique (IA)", value: meeting.aiSummary)
-                textBlock(title: "Transcript Brut", value: meeting.transcript)
-
-                HStack(spacing: 20) {
-                    Label("Créée: \(meeting.createdAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "calendar.badge.plus")
-                    Label("Modifiée: \(meeting.updatedAt.formatted(date: .abbreviated, time: .shortened))", systemImage: "calendar.badge.clock")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .scrollIndicators(.visible)
-    }
-
-    private func detailCard(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.headline)
-            Text(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "-" : value)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func textBlock(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.title3.weight(.semibold))
-
-            Text(value)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-    }
-}
-
 private struct MeetingEditorPrefill {
     var title: String = ""
     var meetingAt: Date = .now
@@ -495,6 +404,7 @@ private struct MeetingEditorSheet: View {
     @State private var transcript: String
     @State private var aiSummary: String
     @State private var validationMessage: String?
+    @FocusState private var focusedField: MeetingEditorField?
     @State private var didApplyPrimaryProjectDefault = false
     @State private var initialSnapshot: String?
     @State private var isShowingDismissConfirmation = false
@@ -552,14 +462,20 @@ private struct MeetingEditorSheet: View {
                         .lineLimit(2...4)
                 }
 
-                Section("Compte Rendu Synthétique (IA) *") {
+                Section("Compte Rendu Synthétique (IA)") {
                     TextEditor(text: $aiSummary)
                         .frame(minHeight: 140)
+                        .focused($focusedField, equals: .aiSummary)
+                        .onKeyPress(.tab) {
+                            focusedField = .transcript
+                            return .handled
+                        }
                 }
 
-                Section("Transcript Brut *") {
+                Section("Transcript Brut") {
                     TextEditor(text: $transcript)
                         .frame(minHeight: 180)
+                        .focused($focusedField, equals: .transcript)
                 }
 
                 if appState.resolvedPrimaryProjectID(in: store) == nil {
@@ -621,8 +537,6 @@ private struct MeetingEditorSheet: View {
 
     private var canSave: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            && aiSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            && transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             && Int(durationMinutesText.trimmingCharacters(in: .whitespacesAndNewlines)).map { $0 > 0 } == true
     }
 
@@ -668,16 +582,6 @@ private struct MeetingEditorSheet: View {
 
         guard cleanedTitle.isEmpty == false else {
             validationMessage = "Le titre de réunion est obligatoire."
-            return
-        }
-
-        guard cleanedAISummary.isEmpty == false else {
-            validationMessage = "Le Compte Rendu Synthétique (IA) est obligatoire."
-            return
-        }
-
-        guard cleanedTranscript.isEmpty == false else {
-            validationMessage = "Le Transcript Brut est obligatoire."
             return
         }
 
@@ -902,4 +806,9 @@ private enum MeetingDropParser {
         }
         return .physical
     }
+}
+
+private enum MeetingEditorField: Hashable {
+    case aiSummary
+    case transcript
 }

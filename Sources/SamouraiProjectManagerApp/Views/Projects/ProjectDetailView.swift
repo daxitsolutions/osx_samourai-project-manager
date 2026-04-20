@@ -444,12 +444,6 @@ struct ProjectDetailView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 280)
 
-                Button("Ouvrir module Planning") {
-                    appState.selectedSection = .planning
-                    appState.selectedProjectID = project.id
-                }
-                .buttonStyle(.bordered)
-
                 Button("Nouvelle activité") {
                     activityEditorContext = .create
                 }

@@ -2271,26 +2271,26 @@ extension ProjectAction {
 }
 
 enum ActionFlow: String, Codable, CaseIterable, Identifiable {
-    case incomingLeMans
-    case pushedAutomatic
+    case manuel
+    case automatique
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .incomingLeMans:
-            "Reçue (Le Mans)"
-        case .pushedAutomatic:
-            "Diffusée auto"
+        case .manuel:
+            "Manuel"
+        case .automatique:
+            "Automatique"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .incomingLeMans:
-            "tray.and.arrow.down.fill"
-        case .pushedAutomatic:
-            "arrowshape.turn.up.right.fill"
+        case .manuel:
+            "hand.point.up.left.fill"
+        case .automatique:
+            "bolt.fill"
         }
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 @MainActor
 @Observable
@@ -7,6 +8,7 @@ final class AppState {
     private enum StorageKeys {
         static let selectedSection = "app.selectedSection"
         static let primaryProjectID = "app.primaryProjectID"
+        static let fontSizeOffset = "app.fontSizeOffset"
     }
 
     var selectedSection: AppSection? = .dashboard {
@@ -35,7 +37,23 @@ final class AppState {
             }
         }
     }
-    var isShowingProjectEditor = false
+    var fontSizeOffset: Double = 0.0 {
+        didSet {
+            UserDefaults.standard.set(fontSizeOffset, forKey: StorageKeys.fontSizeOffset)
+        }
+    }
+
+    var dynamicTypeSize: DynamicTypeSize {
+        switch Int(fontSizeOffset.rounded()) {
+        case ..<(-1): return .xSmall
+        case -1: return .small
+        case 0: return .medium
+        case 1: return .large
+        case 2: return .xLarge
+        case 3: return .xxLarge
+        default: return .xxxLarge
+        }
+    }
 
     init() {
         if let rawSection = UserDefaults.standard.string(forKey: StorageKeys.selectedSection),
@@ -50,6 +68,8 @@ final class AppState {
         } else {
             primaryProjectID = nil
         }
+
+        fontSizeOffset = UserDefaults.standard.double(forKey: StorageKeys.fontSizeOffset)
     }
 
     func openProject(_ projectID: UUID) {
@@ -106,7 +126,6 @@ final class AppState {
 
 enum AppSection: String, CaseIterable, Hashable, Identifiable {
     case dashboard
-    case planning
     case reporting
     case projects
     case resources
@@ -127,7 +146,7 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .projects:
             .portfolio
-        case .dashboard, .actions, .events, .meetings, .deliverables, .planning, .resources, .risks, .decisions, .reporting:
+        case .dashboard, .actions, .events, .meetings, .deliverables, .resources, .risks, .decisions, .reporting:
             .project
         case .resourceDirectory:
             .directory
@@ -142,7 +161,7 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
 
     var showsProjectPicker: Bool {
         switch self {
-        case .dashboard, .planning, .reporting, .resources, .risks, .deliverables, .events, .actions, .meetings, .decisions:
+        case .dashboard, .reporting, .resources, .risks, .deliverables, .events, .actions, .meetings, .decisions:
             true
         case .projects, .resourceDirectory, .configuration, .backups, .testing:
             false
@@ -153,8 +172,6 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .dashboard:
             "Pilotage"
-        case .planning:
-            "Planning"
         case .projects:
             "Portfolio des projets"
         case .reporting:
@@ -188,8 +205,6 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .dashboard:
             "Vue synthétique du projet actif, de ses tensions et de ses priorités."
-        case .planning:
-            "Pilotage du macro-planning, des jalons et des activités du projet actif."
         case .reporting:
             "Synthèses de gouvernance du projet actif ou du portefeuille."
         case .projects:
@@ -207,7 +222,7 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
         case .risks:
             "Registre des risques du projet actif et suivi de criticité."
         case .deliverables:
-            "Périmètre, livrables et contrôle des changements du projet actif."
+            "Périmètre, livrables du projet actif."
         case .events:
             "Journal des événements rattachés au projet actif."
         case .actions:
@@ -223,8 +238,6 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .dashboard:
             "gauge.with.dots.needle.50percent"
-        case .planning:
-            "calendar.badge.clock"
         case .projects:
             "square.grid.2x2"
         case .reporting:

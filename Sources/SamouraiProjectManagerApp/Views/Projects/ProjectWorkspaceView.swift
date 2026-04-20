@@ -5,6 +5,7 @@ struct ProjectWorkspaceView: View {
     @Environment(SamouraiStore.self) private var store
     @State private var searchText = ""
     @State private var selectedProjectIDs: Set<UUID> = []
+    @State private var projectEditorContext: ProjectEditorContext?
     @State private var isShowingDeleteConfirmation = false
     @State private var isShowingFileExporter = false
     @State private var exportDocument: EntityCSVDocument?
@@ -41,6 +42,15 @@ struct ProjectWorkspaceView: View {
                     }
 
                     if selectedProjectIDs.isEmpty == false {
+                        if selectedProjectIDs.count == 1,
+                           let selectedID = selectedProjectIDs.first {
+                            Button {
+                                projectEditorContext = .edit(selectedID)
+                            } label: {
+                                Label("Modifier", systemImage: "pencil")
+                            }
+                        }
+
                         Button(role: .destructive) {
                             isShowingDeleteConfirmation = true
                         } label: {
@@ -52,7 +62,7 @@ struct ProjectWorkspaceView: View {
                     }
 
                     Button {
-                        appState.isShowingProjectEditor = true
+                        projectEditorContext = .create
                     } label: {
                         Label("Nouveau projet", systemImage: "plus")
                     }
@@ -78,7 +88,10 @@ struct ProjectWorkspaceView: View {
                             store.updateProjectQuick(projectID: project.id, name: project.name, health: updatedHealth)
                         }
                     )
-                        .tag(project.id)
+                    .tag(project.id)
+                    .onTapGesture(count: 2) {
+                        projectEditorContext = .edit(project.id)
+                    }
                 }
                 .scrollIndicators(.visible)
             }
@@ -95,6 +108,9 @@ struct ProjectWorkspaceView: View {
 
         } detail: {
             EmptyView()
+        }
+        .sheet(item: $projectEditorContext) { context in
+            ProjectEditorSheet(project: context.project(in: store))
         }
         .fileExporter(
             isPresented: $isShowingFileExporter,
@@ -189,6 +205,26 @@ struct ProjectWorkspaceView: View {
         exportDocument = EntityCSVDocument(text: csv)
         exportFilename = "samourai-projets-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
         isShowingFileExporter = true
+    }
+}
+
+private enum ProjectEditorContext: Identifiable {
+    case create
+    case edit(UUID)
+
+    var id: String {
+        switch self {
+        case .create: "create"
+        case .edit(let id): "edit-\(id.uuidString)"
+        }
+    }
+
+    @MainActor
+    func project(in store: SamouraiStore) -> Project? {
+        switch self {
+        case .create: nil
+        case .edit(let id): store.project(with: id)
+        }
     }
 }
 

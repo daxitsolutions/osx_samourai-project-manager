@@ -5,17 +5,32 @@ struct ProjectEditorSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
 
-    @State private var name = ""
-    @State private var summary = ""
-    @State private var sponsor = ""
-    @State private var manager = ""
-    @State private var phase: ProjectPhase = .cadrage
-    @State private var health: ProjectHealth = .green
-    @State private var deliveryMode: DeliveryMode = .hybrid
-    @State private var startDate = Date.now
-    @State private var targetDate = Calendar.current.date(byAdding: .day, value: 30, to: .now) ?? .now
+    let project: Project?
+
+    @State private var name: String
+    @State private var summary: String
+    @State private var sponsor: String
+    @State private var manager: String
+    @State private var phase: ProjectPhase
+    @State private var health: ProjectHealth
+    @State private var deliveryMode: DeliveryMode
+    @State private var startDate: Date
+    @State private var targetDate: Date
     @State private var initialSnapshot: String?
     @State private var isShowingDismissConfirmation = false
+
+    init(project: Project? = nil) {
+        self.project = project
+        _name = State(initialValue: project?.name ?? "")
+        _summary = State(initialValue: project?.summary ?? "")
+        _sponsor = State(initialValue: project?.sponsor ?? "")
+        _manager = State(initialValue: project?.manager ?? "")
+        _phase = State(initialValue: project?.phase ?? .cadrage)
+        _health = State(initialValue: project?.health ?? .green)
+        _deliveryMode = State(initialValue: project?.deliveryMode ?? .hybrid)
+        _startDate = State(initialValue: project?.startDate ?? .now)
+        _targetDate = State(initialValue: project?.targetDate ?? Calendar.current.date(byAdding: .day, value: 30, to: .now) ?? .now)
+    }
 
     var body: some View {
         NavigationStack {
@@ -48,7 +63,7 @@ struct ProjectEditorSheet: View {
                 DatePicker("Date cible", selection: $targetDate, displayedComponents: .date)
             }
             .formStyle(.grouped)
-            .navigationTitle("Nouveau projet")
+            .navigationTitle(project == nil ? "Nouveau projet" : "Modifier le projet")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
@@ -57,20 +72,8 @@ struct ProjectEditorSheet: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Créer") {
-                        let projectID = store.addProject(
-                            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                            summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
-                            sponsor: sponsor.trimmingCharacters(in: .whitespacesAndNewlines),
-                            manager: manager.trimmingCharacters(in: .whitespacesAndNewlines),
-                            phase: phase,
-                            health: health,
-                            deliveryMode: deliveryMode,
-                            startDate: startDate,
-                            targetDate: targetDate
-                        )
-                        appState.selectedProjectID = projectID
-                        dismiss()
+                    Button(project == nil ? "Créer" : "Enregistrer") {
+                        save()
                     }
                     .disabled(formIsInvalid)
                 }
@@ -101,9 +104,6 @@ struct ProjectEditorSheet: View {
 
     private var formIsInvalid: Bool {
         name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || sponsor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || manager.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || targetDate < startDate
     }
 
@@ -141,18 +141,37 @@ struct ProjectEditorSheet: View {
     }
 
     private func save() {
-        let projectID = store.addProject(
-            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
-            sponsor: sponsor.trimmingCharacters(in: .whitespacesAndNewlines),
-            manager: manager.trimmingCharacters(in: .whitespacesAndNewlines),
-            phase: phase,
-            health: health,
-            deliveryMode: deliveryMode,
-            startDate: startDate,
-            targetDate: targetDate
-        )
-        appState.selectedProjectID = projectID
+        let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleanedName.isEmpty == false else { return }
+        if let project {
+            store.updateProject(
+                projectID: project.id,
+                name: cleanedName,
+                summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
+                sponsor: sponsor.trimmingCharacters(in: .whitespacesAndNewlines),
+                manager: manager.trimmingCharacters(in: .whitespacesAndNewlines),
+                phase: phase,
+                health: health,
+                deliveryMode: deliveryMode,
+                startDate: startDate,
+                targetDate: targetDate
+            )
+            appState.openProject(project.id)
+        } else {
+            let projectID = store.addProject(
+                name: cleanedName,
+                summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
+                sponsor: sponsor.trimmingCharacters(in: .whitespacesAndNewlines),
+                manager: manager.trimmingCharacters(in: .whitespacesAndNewlines),
+                phase: phase,
+                health: health,
+                deliveryMode: deliveryMode,
+                startDate: startDate,
+                targetDate: targetDate
+            )
+            appState.selectedProjectID = projectID
+            appState.setPrimaryProject(projectID)
+        }
         dismiss()
     }
 }

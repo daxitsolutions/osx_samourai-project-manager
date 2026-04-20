@@ -241,8 +241,8 @@ struct ResourceImportDecision {
 
 enum ActionFlowFilter: String, CaseIterable, Identifiable {
     case all
-    case incomingLeMans
-    case pushedAutomatic
+    case manuel
+    case automatique
 
     var id: String { rawValue }
 
@@ -250,10 +250,10 @@ enum ActionFlowFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all:
             "Toutes"
-        case .incomingLeMans:
-            "Le Mans"
-        case .pushedAutomatic:
-            "Diffusées auto"
+        case .manuel:
+            "Manuel"
+        case .automatique:
+            "Automatique"
         }
     }
 }
@@ -959,10 +959,10 @@ final class SamouraiStore {
         switch flow {
         case .all:
             baseActions = actions
-        case .incomingLeMans:
-            baseActions = actions.filter { $0.flow == .incomingLeMans }
-        case .pushedAutomatic:
-            baseActions = actions.filter { $0.flow == .pushedAutomatic }
+        case .manuel:
+            baseActions = actions.filter { $0.flow == .manuel }
+        case .automatique:
+            baseActions = actions.filter { $0.flow == .automatique }
         }
 
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1731,6 +1731,48 @@ final class SamouraiStore {
         persist()
     }
 
+    func updateProject(
+        projectID: UUID,
+        name: String,
+        summary: String,
+        sponsor: String,
+        manager: String,
+        phase: ProjectPhase,
+        health: ProjectHealth,
+        deliveryMode: DeliveryMode,
+        startDate: Date,
+        targetDate: Date
+    ) {
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleanedName.isEmpty == false else { return }
+        projects[index].name = cleanedName
+        projects[index].summary = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        projects[index].sponsor = sponsor.trimmingCharacters(in: .whitespacesAndNewlines)
+        projects[index].manager = manager.trimmingCharacters(in: .whitespacesAndNewlines)
+        projects[index].phase = phase
+        projects[index].health = health
+        projects[index].deliveryMode = deliveryMode
+        projects[index].startDate = startDate
+        projects[index].targetDate = targetDate
+        projects[index].updatedAt = .now
+        projects = sortProjects(projects)
+        persist()
+    }
+
+    func deleteAllData() {
+        projects = []
+        resources = []
+        unassignedRisks = []
+        activities = []
+        events = []
+        actions = []
+        meetings = []
+        decisions = []
+        governanceReports = []
+        persist()
+    }
+
     func deleteProject(projectID: UUID) {
         let removedProject = projects.first { $0.id == projectID }
         guard removedProject != nil else { return }
@@ -1861,6 +1903,59 @@ final class SamouraiStore {
         projects[index].risks.append(risk)
         projects[index].updatedAt = .now
         projects = sortProjects(projects)
+        persist()
+    }
+
+    func updateRisk(
+        riskID: UUID,
+        title: String,
+        mitigation: String,
+        owner: String,
+        severity: RiskSeverity,
+        dueDate: Date?
+    ) {
+        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedMitigation = mitigation.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedOwner = owner.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        for projectIndex in projects.indices {
+            guard let riskIndex = projects[projectIndex].risks.firstIndex(where: { $0.id == riskID }) else { continue }
+
+            if cleanedTitle.isEmpty == false {
+                projects[projectIndex].risks[riskIndex].title = cleanedTitle
+                projects[projectIndex].risks[riskIndex].riskTitle = cleanedTitle
+            }
+            projects[projectIndex].risks[riskIndex].mitigation = cleanedMitigation
+            projects[projectIndex].risks[riskIndex].counterMeasure = cleanedMitigation
+            if cleanedOwner.isEmpty == false {
+                projects[projectIndex].risks[riskIndex].owner = cleanedOwner
+                projects[projectIndex].risks[riskIndex].assignedTo = cleanedOwner
+            }
+            projects[projectIndex].risks[riskIndex].severity = severity
+            projects[projectIndex].risks[riskIndex].dueDate = dueDate
+            projects[projectIndex].risks[riskIndex].lastModifiedAt = .now
+            projects[projectIndex].updatedAt = .now
+            projects = sortProjects(projects)
+            persist()
+            return
+        }
+
+        guard let riskIndex = unassignedRisks.firstIndex(where: { $0.id == riskID }) else { return }
+
+        if cleanedTitle.isEmpty == false {
+            unassignedRisks[riskIndex].title = cleanedTitle
+            unassignedRisks[riskIndex].riskTitle = cleanedTitle
+        }
+        unassignedRisks[riskIndex].mitigation = cleanedMitigation
+        unassignedRisks[riskIndex].counterMeasure = cleanedMitigation
+        if cleanedOwner.isEmpty == false {
+            unassignedRisks[riskIndex].owner = cleanedOwner
+            unassignedRisks[riskIndex].assignedTo = cleanedOwner
+        }
+        unassignedRisks[riskIndex].severity = severity
+        unassignedRisks[riskIndex].dueDate = dueDate
+        unassignedRisks[riskIndex].lastModifiedAt = .now
+        unassignedRisks = sortStandaloneRisks(unassignedRisks)
         persist()
     }
 
@@ -2016,6 +2111,52 @@ final class SamouraiStore {
         )
 
         projects[index].deliverables.append(deliverable)
+        projects[index].updatedAt = .now
+        projects = sortProjects(projects)
+        persist()
+    }
+
+    func addInScopeItem(projectID: UUID, item: String) {
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        let cleaned = item.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.isEmpty == false else { return }
+        var scope = projects[index].scopeDefinition ?? ProjectScopeDefinition()
+        guard scope.inScopeItems.contains(cleaned) == false else { return }
+        scope.inScopeItems.append(cleaned)
+        projects[index].scopeDefinition = scope
+        projects[index].updatedAt = .now
+        projects = sortProjects(projects)
+        persist()
+    }
+
+    func removeInScopeItem(projectID: UUID, item: String) {
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        guard var scope = projects[index].scopeDefinition else { return }
+        scope.inScopeItems.removeAll { $0 == item }
+        projects[index].scopeDefinition = scope
+        projects[index].updatedAt = .now
+        projects = sortProjects(projects)
+        persist()
+    }
+
+    func addOutOfScopeItem(projectID: UUID, item: String) {
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        let cleaned = item.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.isEmpty == false else { return }
+        var scope = projects[index].scopeDefinition ?? ProjectScopeDefinition()
+        guard scope.outOfScopeItems.contains(cleaned) == false else { return }
+        scope.outOfScopeItems.append(cleaned)
+        projects[index].scopeDefinition = scope
+        projects[index].updatedAt = .now
+        projects = sortProjects(projects)
+        persist()
+    }
+
+    func removeOutOfScopeItem(projectID: UUID, item: String) {
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        guard var scope = projects[index].scopeDefinition else { return }
+        scope.outOfScopeItems.removeAll { $0 == item }
+        projects[index].scopeDefinition = scope
         projects[index].updatedAt = .now
         projects = sortProjects(projects)
         persist()

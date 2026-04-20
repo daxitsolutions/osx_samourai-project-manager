@@ -139,6 +139,7 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
     case actions
     case meetings
     case decisions
+    case planning
 
     var id: String { rawValue }
 
@@ -146,7 +147,7 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .projects:
             .portfolio
-        case .dashboard, .actions, .events, .meetings, .deliverables, .resources, .risks, .decisions, .reporting:
+        case .dashboard, .actions, .events, .meetings, .deliverables, .resources, .risks, .decisions, .reporting, .planning:
             .project
         case .resourceDirectory:
             .directory
@@ -161,7 +162,7 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
 
     var showsProjectPicker: Bool {
         switch self {
-        case .dashboard, .reporting, .resources, .risks, .deliverables, .events, .actions, .meetings, .decisions:
+        case .dashboard, .reporting, .resources, .risks, .deliverables, .events, .actions, .meetings, .decisions, .planning:
             true
         case .projects, .resourceDirectory, .configuration, .backups, .testing:
             false
@@ -198,6 +199,8 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
             "Réunions"
         case .decisions:
             "Décisions"
+        case .planning:
+            "Planning"
         }
     }
 
@@ -231,6 +234,8 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
             "Réunions, transcripts et préparation des instances du projet actif."
         case .decisions:
             "Décisions formelles du projet actif et historique de révision."
+        case .planning:
+            "Scénarios, jalons et planification temporelle du projet actif."
         }
     }
 
@@ -264,6 +269,8 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
             "person.2.badge.gearshape"
         case .decisions:
             "scale.3d"
+        case .planning:
+            "calendar.badge.checkmark"
         }
     }
 }

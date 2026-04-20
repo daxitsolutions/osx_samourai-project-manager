@@ -183,6 +183,8 @@ struct AppShellView: View {
             MeetingWorkspaceView()
         case .decisions:
             DecisionWorkspaceView()
+        case .planning:
+            PlanningWorkspaceView()
         }
     }
 
@@ -196,6 +198,7 @@ struct AppShellView: View {
     private var projectSections: [AppSection] {
         [
             .dashboard,
+            .planning,
             .actions,
             .events,
             .meetings,

@@ -1452,6 +1452,15 @@ final class SamouraiStore {
         return duplicatedScenario.id
     }
 
+    func deletePlanningScenario(projectID: UUID, scenarioID: UUID) {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return }
+        guard projects[projectIndex].orderedPlanningScenarios.count > 1 else { return }
+        projects[projectIndex].planningScenarios.removeAll { $0.id == scenarioID }
+        activities.removeAll { $0.projectID == projectID && $0.scenarioID == scenarioID }
+        projects[projectIndex].updatedAt = .now
+        persist()
+    }
+
     func meetings(matching query: String) -> [ProjectMeeting] {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedQuery.isEmpty == false else { return meetings }

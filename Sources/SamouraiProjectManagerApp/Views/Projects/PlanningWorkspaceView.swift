@@ -11,6 +11,7 @@ struct PlanningWorkspaceView: View {
     @State private var primaryScenarioID: UUID?
     @State private var editorContext: PlanningEditorContext?
     @State private var activityPendingDeletion: ProjectActivity?
+    @State private var scenarioPendingDeletion: ProjectPlanningScenario?
     @State private var expandedActivityIDs: Set<UUID> = []
     @State private var viewMode: PlanningViewMode = .tree
     @State private var isShowingTableConfiguration = false
@@ -53,6 +54,30 @@ struct PlanningWorkspaceView: View {
             }
         } message: {
             Text("L'activité sera supprimée et les actions associées resteront disponibles sans rattachement.")
+        }
+        .confirmationDialog(
+            "Supprimer le scénario \"\(scenarioPendingDeletion?.name ?? "")\" ?",
+            isPresented: Binding(
+                get: { scenarioPendingDeletion != nil },
+                set: { if $0 == false { scenarioPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Supprimer le scénario et ses activités", role: .destructive) {
+                if let scenario = scenarioPendingDeletion, let project = selectedProject {
+                    if primaryScenarioID == scenario.id {
+                        primaryScenarioID = projectScenarios.first(where: { $0.id != scenario.id })?.id
+                    }
+                    selectedScenarioIDs.remove(scenario.id)
+                    store.deletePlanningScenario(projectID: project.id, scenarioID: scenario.id)
+                }
+                scenarioPendingDeletion = nil
+            }
+            Button("Annuler", role: .cancel) {
+                scenarioPendingDeletion = nil
+            }
+        } message: {
+            Text("Toutes les activités de ce scénario seront définitivement supprimées. Cette action est irréversible.")
         }
         .onAppear {
             ensureProjectSelection()
@@ -228,30 +253,44 @@ struct PlanningWorkspaceView: View {
         ScrollView(.horizontal) {
             HStack(spacing: 12) {
                 ForEach(projectScenarios) { scenario in
+                    let isPrimary = primaryScenarioID == scenario.id
+                    let isVisible = selectedScenarioIDs.contains(scenario.id)
+
                     HStack(spacing: 8) {
                         Button {
                             focusScenario(scenario.id)
                         } label: {
                             Label(
                                 scenario.name,
-                                systemImage: primaryScenarioID == scenario.id ? "scope" : "square.stack.3d.up"
+                                systemImage: isPrimary ? "scope" : "square.stack.3d.up"
                             )
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(primaryScenarioID == scenario.id ? .accentColor : Color.secondary.opacity(0.45))
+                        .tint(isPrimary ? .green : (isVisible ? .accentColor : Color.secondary.opacity(0.45)))
 
                         Button {
                             toggleScenarioVisibility(scenario.id)
                         } label: {
-                            Image(systemName: selectedScenarioIDs.contains(scenario.id) ? "eye.fill" : "eye.slash")
+                            Image(systemName: isVisible ? "eye.fill" : "eye.slash")
                         }
                         .buttonStyle(.bordered)
-                        .help(selectedScenarioIDs.contains(scenario.id) ? "Masquer ce scénario" : "Afficher ce scénario")
+                        .help(isVisible ? "Masquer ce scénario" : "Afficher ce scénario")
+
+                        if projectScenarios.count > 1 {
+                            Button(role: .destructive) {
+                                scenarioPendingDeletion = scenario
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.red.opacity(0.7))
+                            .help("Supprimer ce scénario et toutes ses activités")
+                        }
                     }
                     .padding(10)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(selectedScenarioIDs.contains(scenario.id) ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.06))
+                            .fill(isPrimary ? Color.green.opacity(0.10) : (isVisible ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.06)))
                     )
                 }
             }
@@ -318,7 +357,10 @@ struct PlanningWorkspaceView: View {
                 ProjectPlanningTimelineView(
                     activities: scenarioActivities,
                     varianceReport: varianceReport,
-                    showGanttGrid: viewMode == .ganttLite
+                    showGanttGrid: viewMode == .ganttLite,
+                    onEditActivity: { activity in
+                        editorContext = .edit(project.id, activity.id)
+                    }
                 )
                 .padding(16)
             } else {
@@ -555,10 +597,20 @@ struct PlanningWorkspaceView: View {
             }
 
         case .edit:
-            Button("Ouvrir") {
-                editorContext = .edit(project.id, activity.id)
+            HStack(spacing: 6) {
+                Button("Ouvrir") {
+                    editorContext = .edit(project.id, activity.id)
+                }
+                .buttonStyle(.link)
+
+                Button(role: .destructive) {
+                    activityPendingDeletion = activity
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red.opacity(0.7))
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.link)
         }
     }
 
@@ -941,18 +993,67 @@ private struct ProjectPlanningTimelineView: View {
     let activities: [ProjectActivity]
     let varianceReport: ProjectPlanningVarianceReport?
     let showGanttGrid: Bool
+    var onEditActivity: ((ProjectActivity) -> Void)? = nil
+
+    private var milestones: [ProjectActivity] {
+        activities.filter { $0.isMilestone }.sorted { $0.estimatedEndDate < $1.estimatedEndDate }
+    }
+
+    private var regularActivities: [ProjectActivity] {
+        activities.filter { !$0.isMilestone }.sorted { $0.estimatedStartDate < $1.estimatedStartDate }
+    }
 
     var body: some View {
-        let sortedActivities = activities.sorted { $0.estimatedStartDate < $1.estimatedStartDate }
-        let minDate = sortedActivities.map(\.estimatedStartDate).min() ?? .now
-        let maxDate = sortedActivities.map(\.estimatedEndDate).max() ?? .now
+        let allActivities = activities.sorted { $0.estimatedStartDate < $1.estimatedStartDate }
+        let minDate = allActivities.map(\.estimatedStartDate).min() ?? .now
+        let maxDate = allActivities.map(\.estimatedEndDate).max() ?? .now
         let totalInterval = max(maxDate.timeIntervalSince(minDate), 1)
 
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(showGanttGrid ? "Vue Gantt Lite" : "Vue Timeline")
                 .font(.headline)
 
-            ForEach(sortedActivities) { activity in
+            // Key dates section
+            if !milestones.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Dates clés")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 10) {
+                            ForEach(milestones) { milestone in
+                                HStack(spacing: 6) {
+                                    Image(systemName: "diamond.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.purple)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(milestone.displayTitle)
+                                            .font(.caption.weight(.semibold))
+                                            .lineLimit(1)
+                                        Text(milestone.estimatedEndDate.formatted(date: .abbreviated, time: .omitted))
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .onTapGesture(count: 2) {
+                                    onEditActivity?(milestone)
+                                }
+                            }
+                        }
+                    }
+                    .scrollIndicators(.visible)
+                }
+                .padding(.bottom, 4)
+
+                Divider()
+            }
+
+            // Activities bars
+            ForEach(allActivities) { activity in
                 let startRatio = max(0, min(1, activity.estimatedStartDate.timeIntervalSince(minDate) / totalInterval))
                 let endRatio = max(0, min(1, activity.estimatedEndDate.timeIntervalSince(minDate) / totalInterval))
                 let widthRatio = max(endRatio - startRatio, 0.015)
@@ -967,7 +1068,7 @@ private struct ProjectPlanningTimelineView: View {
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.secondary.opacity(0.14), in: Capsule())
+                                .background(Color.purple.opacity(0.14), in: Capsule())
                         }
                         Spacer()
                         Text("Variance: \(variance == 0 ? "0j" : "\(variance > 0 ? "+" : "")\(variance)j")")
@@ -1004,6 +1105,9 @@ private struct ProjectPlanningTimelineView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.secondary.opacity(0.08))
                 )
+                .onTapGesture(count: 2) {
+                    onEditActivity?(activity)
+                }
             }
         }
     }

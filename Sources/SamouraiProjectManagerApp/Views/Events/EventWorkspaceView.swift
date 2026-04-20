@@ -19,7 +19,7 @@ struct EventWorkspaceView: View {
     var body: some View {
         @Bindable var appState = appState
 
-        SamouraiWorkspaceSplitView(sidebarMinWidth: 760, sidebarIdealWidth: 900) {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 760, sidebarIdealWidth: 900, showsDetail: false) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -179,30 +179,9 @@ struct EventWorkspaceView: View {
             .frame(minWidth: 760, idealWidth: 900)
 
         } detail: {
-            Group {
-                if let event = selectedEvent {
-                    EventDetailView(
-                        event: event,
-                        projectName: store.projectName(for: event.projectID),
-                        resourceNames: store.resourceNames(for: event.resourceIDs),
-                        onEdit: {
-                            editorContext = .edit(event.id)
-                        },
-                        onDelete: {
-                            eventPendingDeletion = event
-                            isShowingDeleteConfirmation = true
-                        }
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "Sélectionne un événement",
-                        systemImage: "sidebar.left",
-                        description: Text("La fiche détail affiche la source, la priorité, les ressources impliquées et l'horodatage.")
-                    )
-                }
-            }
+            EmptyView()
         }
-        .inspector(isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { editorContext != nil },
             set: { if $0 == false { editorContext = nil } }
         )) {
@@ -210,11 +189,6 @@ struct EventWorkspaceView: View {
                 EventEditorSheet(event: context.event(in: store))
             }
         }
-        .inspectorColumnWidth(min: 460, ideal: 620, max: 760)
-        .dynamicWindowSizingForInspector(
-            isPresented: editorContext != nil,
-            preferredInspectorWidth: 620
-        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -439,6 +413,8 @@ private struct EventEditorSheet: View {
     @State private var resourceSearchText = ""
     @State private var validationMessage: String?
     @State private var didApplyPrimaryProjectDefault = false
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     init(event: ProjectEvent?) {
         self.event = event
@@ -524,7 +500,7 @@ private struct EventEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
@@ -544,8 +520,62 @@ private struct EventEditorSheet: View {
             }
         }
         .frame(minWidth: 700, minHeight: 620)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if canSave {
+                Button("Enregistrer") {
+                    save()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
+            captureInitialSnapshotIfNeeded()
+        }
+    }
+
+    private var canSave: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    private var snapshot: String {
+        [
+            title,
+            details,
+            source,
+            priority.rawValue,
+            String(happenedAt.timeIntervalSinceReferenceDate),
+            projectID?.uuidString ?? "",
+            selectedResourceIDs.map(\.uuidString).sorted().joined(separator: ","),
+            resourceSearchText
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
         }
     }
 

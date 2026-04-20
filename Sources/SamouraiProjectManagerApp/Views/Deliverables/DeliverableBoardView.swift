@@ -40,7 +40,7 @@ struct DeliverableBoardView: View {
             }
         }
         .samouraiCanvasBackground()
-        .inspector(isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { isShowingDeliverableEditor || isShowingChangeRequestEditor },
             set: { isPresented in
                 if isPresented == false {
@@ -85,11 +85,6 @@ struct DeliverableBoardView: View {
                 )
             }
         }
-        .inspectorColumnWidth(min: 500, ideal: 680, max: 860)
-        .dynamicWindowSizingForInspector(
-            isPresented: isShowingDeliverableEditor || isShowingChangeRequestEditor,
-            preferredInspectorWidth: 680
-        )
         .alert("Change Control", isPresented: Binding(
             get: { changeControlFeedbackMessage != nil },
             set: { if $0 == false { changeControlFeedbackMessage = nil } }
@@ -687,6 +682,8 @@ private struct DeliverableScopeEditorSheet: View {
     @State private var phase: DeliverablePhase = .delivery
     @State private var isMilestone = false
     @State private var acceptanceCriteriaRaw = ""
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -722,7 +719,7 @@ private struct DeliverableScopeEditorSheet: View {
             .navigationTitle(context.parentDeliverableID == nil ? "Nouveau livrable" : "Nouveau sous-livrable")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { dismiss() }
+                    Button("Annuler") { requestDismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Créer") {
@@ -745,8 +742,26 @@ private struct DeliverableScopeEditorSheet: View {
             }
         }
         .frame(minWidth: 560, minHeight: 430)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if formIsInvalid == false {
+                Button("Enregistrer") {
+                    submit()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
         .onAppear {
             phase = context.suggestedPhase
+            captureInitialSnapshotIfNeeded()
         }
     }
 
@@ -762,6 +777,53 @@ private struct DeliverableScopeEditorSheet: View {
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { $0.isEmpty == false }
     }
+
+    private var snapshot: String {
+        [
+            title,
+            details,
+            owner,
+            String(dueDate.timeIntervalSinceReferenceDate),
+            phase.rawValue,
+            isMilestone ? "1" : "0",
+            acceptanceCriteriaRaw
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func submit() {
+        onSave(
+            DeliverableScopeEditorPayload(
+                title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                details: details.trimmingCharacters(in: .whitespacesAndNewlines),
+                owner: owner.trimmingCharacters(in: .whitespacesAndNewlines),
+                dueDate: dueDate,
+                phase: phase,
+                parentDeliverableID: context.parentDeliverableID,
+                isMilestone: isMilestone,
+                acceptanceCriteria: parseLines(acceptanceCriteriaRaw)
+            )
+        )
+        dismiss()
+    }
 }
 
 private struct ScopeChangeRequestEditorSheet: View {
@@ -775,6 +837,8 @@ private struct ScopeChangeRequestEditorSheet: View {
     @State private var impactResources = ""
     @State private var impactRisks = ""
     @State private var requestedBy = "Chef de Projet"
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -806,7 +870,7 @@ private struct ScopeChangeRequestEditorSheet: View {
             .navigationTitle("Nouvelle Change Request")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { dismiss() }
+                    Button("Annuler") { requestDismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Soumettre") {
@@ -826,5 +890,67 @@ private struct ScopeChangeRequestEditorSheet: View {
             }
         }
         .frame(minWidth: 620, minHeight: 520)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                Button("Enregistrer") {
+                    submit()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
+        .onAppear {
+            captureInitialSnapshotIfNeeded()
+        }
+    }
+
+    private var snapshot: String {
+        [
+            descriptionText,
+            impactPlanning,
+            impactResources,
+            impactRisks,
+            requestedBy
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func submit() {
+        onSubmit(
+            ScopeChangeRequestPayload(
+                description: descriptionText.trimmingCharacters(in: .whitespacesAndNewlines),
+                impactPlanning: impactPlanning.trimmingCharacters(in: .whitespacesAndNewlines),
+                impactResources: impactResources.trimmingCharacters(in: .whitespacesAndNewlines),
+                impactRisks: impactRisks.trimmingCharacters(in: .whitespacesAndNewlines),
+                requestedBy: requestedBy.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        )
+        dismiss()
     }
 }

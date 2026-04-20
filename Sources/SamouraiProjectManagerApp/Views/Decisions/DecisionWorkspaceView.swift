@@ -22,7 +22,7 @@ struct DecisionWorkspaceView: View {
     var body: some View {
         @Bindable var appState = appState
 
-        SamouraiWorkspaceSplitView(sidebarMinWidth: 900, sidebarIdealWidth: 1050) {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 900, sidebarIdealWidth: 1050, showsDetail: false) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -192,35 +192,9 @@ struct DecisionWorkspaceView: View {
             .frame(minWidth: 900, idealWidth: 1050)
 
         } detail: {
-            Group {
-                if let decision = selectedDecision {
-                    DecisionDetailView(
-                        decision: decision,
-                        projectName: store.projectName(for: decision.projectID),
-                        meetingTitles: decision.meetingIDs.compactMap { store.meeting(with: $0)?.displayTitle },
-                        eventTitles: decision.eventIDs.compactMap { store.event(with: $0)?.displayTitle },
-                        impactedResourceNames: decision.impactedResourceIDs.compactMap { store.resource(with: $0)?.displayName },
-                        commentAuthor: $newCommentAuthor,
-                        commentBody: $newCommentBody,
-                        onEdit: { editorContext = .edit(decision.id) },
-                        onDelete: {
-                            decisionPendingDeletion = decision
-                            isShowingDeleteConfirmation = true
-                        },
-                        onAddComment: {
-                            addComment(to: decision.id)
-                        }
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "Sélectionne une décision",
-                        systemImage: "sidebar.left",
-                        description: Text("La vue détail conserve la chaîne complète de révisions et commentaires chronologiques.")
-                    )
-                }
-            }
+            EmptyView()
         }
-        .inspector(isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { editorContext != nil },
             set: { if $0 == false { editorContext = nil } }
         )) {
@@ -228,11 +202,6 @@ struct DecisionWorkspaceView: View {
                 DecisionEditorSheet(decision: context.decision(in: store))
             }
         }
-        .inspectorColumnWidth(min: 520, ideal: 700, max: 860)
-        .dynamicWindowSizingForInspector(
-            isPresented: editorContext != nil,
-            preferredInspectorWidth: 700
-        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -560,6 +529,8 @@ private struct DecisionEditorSheet: View {
     @State private var changeSummary: String
     @State private var validationMessage: String?
     @State private var didApplyPrimaryProjectDefault = false
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     init(decision: ProjectDecision?) {
         self.decision = decision
@@ -629,7 +600,7 @@ private struct DecisionEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
@@ -649,8 +620,63 @@ private struct DecisionEditorSheet: View {
             }
         }
         .frame(minWidth: 760, minHeight: 780)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if canSave {
+                Button("Enregistrer") {
+                    save()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
+            captureInitialSnapshotIfNeeded()
+        }
+    }
+
+    private var canSave: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            && details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    private var snapshot: String {
+        [
+            title,
+            details,
+            status.rawValue,
+            projectID?.uuidString ?? "",
+            selectedMeetingIDs.map(\.uuidString).sorted().joined(separator: ","),
+            selectedEventIDs.map(\.uuidString).sorted().joined(separator: ","),
+            selectedResourceIDs.map(\.uuidString).sorted().joined(separator: ","),
+            changeSummary
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
         }
     }
 

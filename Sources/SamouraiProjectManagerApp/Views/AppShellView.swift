@@ -22,17 +22,12 @@ struct AppShellView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .samouraiCanvasBackground()
-        .inspector(isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { appState.isShowingProjectEditor },
             set: { appState.isShowingProjectEditor = $0 }
         )) {
             ProjectEditorSheet()
         }
-        .inspectorColumnWidth(min: 420, ideal: 560, max: 760)
-        .dynamicWindowSizingForInspector(
-            isPresented: appState.isShowingProjectEditor,
-            preferredInspectorWidth: 560
-        )
         .task {
             await store.loadIfNeeded()
             ensureDefaultProjectSelection()
@@ -41,37 +36,20 @@ struct AppShellView: View {
             ensureDefaultProjectSelection()
         }
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                projectScopePicker
+            if currentSection.showsProjectPicker {
+                ToolbarItem(placement: .navigation) {
+                    projectScopePicker
+                }
             }
 
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 2) {
                     Text(currentSection.title)
                         .font(.headline)
-                    Text(currentSection.summary)
+                    Text(toolbarSubtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                }
-            }
-
-            ToolbarItem(placement: .automatic) {
-                Menu("Sauvegardes") {
-                    Button("Sauvegarder l'état complet") {
-                        do {
-                            let data = try store.exportBackupData()
-                            backupDocument = SamouraiBackupDocument(data: data)
-                            backupFilename = "samourai-backup-\(Date.now.formatted(.dateTime.year().month().day()))"
-                            isShowingBackupExporter = true
-                        } catch {
-                            backupFeedbackMessage = error.localizedDescription
-                        }
-                    }
-
-                    Button("Restaurer depuis un backup") {
-                        isShowingBackupImporter = true
-                    }
                 }
             }
         }
@@ -115,25 +93,38 @@ struct AppShellView: View {
 
     private var sidebarView: some View {
         List {
-            Section {
-                AppSidebarProjectScopeCard(
-                    primaryProjectName: primaryProjectName,
-                    projectCount: store.projects.count,
-                    onCreateProject: {
-                        appState.selectedSection = .projects
-                        appState.isShowingProjectEditor = true
-                    }
-                )
-                .listRowInsets(.init(top: 10, leading: 12, bottom: 12, trailing: 12))
-                .listRowBackground(Color.clear)
+            Section(AppSectionGroup.portfolio.title) {
+                sidebarButton(for: .projects)
             }
 
-            ForEach(AppSectionGroup.allCases) { group in
-                Section(group.title) {
-                    ForEach(group.sections) { section in
-                        sidebarButton(for: section)
-                    }
+            Section(AppSectionGroup.project.title) {
+                if let primaryProjectName {
+                    Text(primaryProjectName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.none)
+                } else {
+                    Text("Choisir un projet en haut de page")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textCase(.none)
                 }
+
+                ForEach(projectSections) { section in
+                    sidebarButton(for: section)
+                }
+            }
+
+            Section(AppSectionGroup.directory.title) {
+                sidebarButton(for: .resourceDirectory)
+            }
+
+            Section(AppSectionGroup.configuration.title) {
+                sidebarButton(for: .configuration)
+            }
+
+            Section(AppSectionGroup.backups.title) {
+                sidebarButton(for: .backups)
             }
         }
         .navigationTitle("Samourai")
@@ -175,6 +166,16 @@ struct AppShellView: View {
             ProjectWorkspaceView()
         case .resources:
             ResourceWorkspaceView()
+        case .resourceDirectory:
+            ResourceWorkspaceView(scopeMode: .globalDirectory)
+        case .configuration:
+            ConfigurationWorkspaceView(primaryProjectName: primaryProjectName)
+        case .backups:
+            BackupWorkspaceView(
+                primaryProjectName: primaryProjectName,
+                onExportBackup: exportBackup,
+                onImportBackup: { isShowingBackupImporter = true }
+            )
         case .testing:
             TestingWorkspaceView()
         case .risks:
@@ -190,6 +191,28 @@ struct AppShellView: View {
         case .decisions:
             DecisionWorkspaceView()
         }
+    }
+
+    private var toolbarSubtitle: String {
+        if currentSection.showsProjectPicker, let primaryProjectName {
+            return primaryProjectName
+        }
+        return currentSection.summary
+    }
+
+    private var projectSections: [AppSection] {
+        [
+            .dashboard,
+            .actions,
+            .events,
+            .meetings,
+            .deliverables,
+            .planning,
+            .resources,
+            .risks,
+            .decisions,
+            .reporting
+        ]
     }
 
     private var primaryProjectName: String? {
@@ -226,6 +249,17 @@ struct AppShellView: View {
                 .pickerStyle(.menu)
                 .frame(minWidth: 220)
             }
+        }
+    }
+
+    private func exportBackup() {
+        do {
+            let data = try store.exportBackupData()
+            backupDocument = SamouraiBackupDocument(data: data)
+            backupFilename = "samourai-backup-\(Date.now.formatted(.dateTime.year().month().day()))"
+            isShowingBackupExporter = true
+        } catch {
+            backupFeedbackMessage = error.localizedDescription
         }
     }
 
@@ -275,62 +309,20 @@ struct AppShellView: View {
     }
 }
 
-private struct AppSidebarProjectScopeCard: View {
-    let primaryProjectName: String?
-    let projectCount: Int
-    let onCreateProject: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Contexte actif", systemImage: "scope")
-                    .font(.headline)
-                Spacer()
-                SamouraiStatusPill(
-                    text: projectCount == 0 ? "Setup" : "Actif",
-                    tint: projectCount == 0 ? SamouraiColorTheme.color(.warnYellow) : SamouraiSurface.accent
-                )
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(primaryProjectName ?? "Projet principal non défini")
-                    .font(.subheadline.weight(.semibold))
-                Text(projectCount == 0 ? "Aucun projet disponible" : "\(projectCount) projet(s) chargé(s)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Button(action: onCreateProject) {
-                Label("Créer un projet", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .samouraiCardSurface()
-    }
-}
-
 private struct AppSidebarSectionRow: View {
     let section: AppSection
     let isSelected: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(spacing: 12) {
             Image(systemName: section.systemImage)
                 .frame(width: 18)
                 .foregroundStyle(SamouraiSurface.accent)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(section.title)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(isSelected ? Color.primary : Color.primary)
-                Text(section.summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
+            Text(section.title)
+                .font(.body.weight(.medium))
+
+            Spacer(minLength: 8)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -343,6 +335,89 @@ private struct AppSidebarSectionRow: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(isSelected ? SamouraiSurface.accent.opacity(0.18) : Color.clear, lineWidth: 1)
         )
+    }
+}
+
+private struct ConfigurationWorkspaceView: View {
+    let primaryProjectName: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SamouraiLayout.sectionSpacing) {
+                SamouraiPageHeader(
+                    eyebrow: "Configuration",
+                    title: "Espace de travail",
+                    subtitle: "Une configuration courte et lisible, pour garder l'écran centré sur l'action."
+                )
+
+                SamouraiSectionCard(
+                    title: "Projet actif",
+                    subtitle: "Les sous-sections projet utilisent le projet sélectionné dans la liste déroulante du haut."
+                ) {
+                    Text(primaryProjectName ?? "Aucun projet principal défini pour le moment.")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                SamouraiSectionCard(
+                    title: "Principes de navigation",
+                    subtitle: "Le portfolio sert à choisir le projet avant d'entrer dans ses sous-sections."
+                ) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Le portfolio reste l'entrée pour sélectionner et cadrer le projet.", systemImage: "square.grid.2x2")
+                        Label("Les sous-sections projet se concentrent ensuite sur un seul contexte actif.", systemImage: "scope")
+                        Label("Les options locales avancées restent directement dans chaque module.", systemImage: "slider.horizontal.3")
+                    }
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding(SamouraiLayout.pagePadding)
+        }
+        .scrollIndicators(.visible)
+    }
+}
+
+private struct BackupWorkspaceView: View {
+    let primaryProjectName: String?
+    let onExportBackup: () -> Void
+    let onImportBackup: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SamouraiLayout.sectionSpacing) {
+                SamouraiPageHeader(
+                    eyebrow: "Sauvegardes",
+                    title: "Sauvegardes et restaurations",
+                    subtitle: "Les opérations de sauvegarde ont leur propre page pour éviter de les cacher dans un menu secondaire."
+                )
+
+                SamouraiSectionCard(
+                    title: "État courant",
+                    subtitle: "La sauvegarde capture l'état complet de l'application au moment de l'export."
+                ) {
+                    Text(primaryProjectName.map { "Projet actif actuel: \($0)" } ?? "Aucun projet actif sélectionné.")
+                        .foregroundStyle(.secondary)
+                }
+
+                SamouraiSectionCard(
+                    title: "Actions",
+                    subtitle: "Exporter avant une restauration ou avant une évolution importante reste la pratique la plus sûre."
+                ) {
+                    HStack(spacing: 12) {
+                        Button(action: onExportBackup) {
+                            Label("Sauvegarder l'état complet", systemImage: "square.and.arrow.up")
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button(action: onImportBackup) {
+                            Label("Restaurer depuis un backup", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+            .padding(SamouraiLayout.pagePadding)
+        }
+        .scrollIndicators(.visible)
     }
 }
 

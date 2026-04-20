@@ -14,7 +14,7 @@ struct ProjectWorkspaceView: View {
         @Bindable var appState = appState
         let projects = filteredProjects
 
-        SamouraiWorkspaceSplitView(sidebarMinWidth: 280, sidebarIdealWidth: 320) {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 280, sidebarIdealWidth: 320, showsDetail: false) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -94,17 +94,7 @@ struct ProjectWorkspaceView: View {
             }
 
         } detail: {
-            Group {
-                if let selectedProjectID = selectedProjectIDs.singleSelection {
-                    ProjectDetailView(projectID: selectedProjectID)
-                } else {
-                    ContentUnavailableView(
-                        "Sélectionne un projet",
-                        systemImage: "sidebar.left",
-                        description: Text("La vue détail t'aidera à tenir les risques, livrables et jalons sous contrôle.")
-                    )
-                }
-            }
+            EmptyView()
         }
         .fileExporter(
             isPresented: $isShowingFileExporter,
@@ -131,12 +121,19 @@ struct ProjectWorkspaceView: View {
             )
         }
         .onChange(of: selectedProjectIDs) { _, newSelection in
-            appState.selectedProjectID = newSelection.singleSelection
+            let singleSelection = newSelection.singleSelection
+            appState.selectedProjectID = singleSelection
+            if appState.primaryProjectID != singleSelection {
+                appState.setPrimaryProject(singleSelection)
+            }
         }
         .onChange(of: appState.selectedProjectID) { _, newID in
             guard let newID else { return }
             if selectedProjectIDs != [newID] {
                 selectedProjectIDs = [newID]
+            }
+            if appState.primaryProjectID != newID {
+                appState.setPrimaryProject(newID)
             }
         }
         .onChange(of: store.projects.map(\.id)) { _, ids in

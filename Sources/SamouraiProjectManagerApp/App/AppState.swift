@@ -53,6 +53,7 @@ final class AppState {
     }
 
     func openProject(_ projectID: UUID) {
+        primaryProjectID = projectID
         selectedSection = .projects
         selectedProjectID = projectID
     }
@@ -94,6 +95,7 @@ final class AppState {
 
     func setPrimaryProject(_ projectID: UUID?) {
         primaryProjectID = projectID
+        selectedProjectID = projectID
     }
 
     func resolvedPrimaryProjectID(in store: SamouraiStore) -> UUID? {
@@ -108,6 +110,9 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
     case reporting
     case projects
     case resources
+    case resourceDirectory
+    case configuration
+    case backups
     case testing
     case risks
     case deliverables
@@ -120,14 +125,27 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
 
     var group: AppSectionGroup {
         switch self {
-        case .dashboard, .reporting:
-            .pilotage
-        case .projects, .planning, .deliverables, .risks, .actions:
-            .execution
-        case .resources, .testing:
-            .delivery
-        case .events, .meetings, .decisions:
-            .governance
+        case .projects:
+            .portfolio
+        case .dashboard, .actions, .events, .meetings, .deliverables, .planning, .resources, .risks, .decisions, .reporting:
+            .project
+        case .resourceDirectory:
+            .directory
+        case .configuration:
+            .configuration
+        case .backups:
+            .backups
+        case .testing:
+            .hidden
+        }
+    }
+
+    var showsProjectPicker: Bool {
+        switch self {
+        case .dashboard, .planning, .reporting, .resources, .risks, .deliverables, .events, .actions, .meetings, .decisions:
+            true
+        case .projects, .resourceDirectory, .configuration, .backups, .testing:
+            false
         }
     }
 
@@ -138,17 +156,23 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
         case .planning:
             "Planning"
         case .projects:
-            "Projets"
+            "Portfolio des projets"
         case .reporting:
             "Reporting"
         case .resources:
             "Ressources"
+        case .resourceDirectory:
+            "Annuaire des ressources général"
+        case .configuration:
+            "Configuration"
+        case .backups:
+            "Sauvegardes / restaurations"
         case .testing:
             "Testing"
         case .risks:
             "Risques"
         case .deliverables:
-            "Livrables"
+            "Livrables & Périmètre"
         case .events:
             "Événements"
         case .actions:
@@ -163,29 +187,35 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
     var summary: String {
         switch self {
         case .dashboard:
-            "Vue cockpit du portefeuille, des tensions et des priorités."
+            "Vue synthétique du projet actif, de ses tensions et de ses priorités."
         case .planning:
-            "Pilotage du macro-planning, des jalons et des activités projet."
+            "Pilotage du macro-planning, des jalons et des activités du projet actif."
         case .reporting:
-            "Synthèses de gouvernance et fenêtres d’analyse décisionnelle."
+            "Synthèses de gouvernance du projet actif ou du portefeuille."
         case .projects:
-            "Portefeuille projet, santé, détail et structure d’exécution."
+            "Sélection et gestion du portefeuille avant navigation dans les sous-sections."
         case .resources:
-            "Capacité, affectations, performance et disponibilité des ressources."
+            "Ressources rattachées au projet actif, capacité et affectations."
+        case .resourceDirectory:
+            "Référentiel global des ressources, indépendant du projet en cours."
+        case .configuration:
+            "Réglages fonctionnels et rappels de structure de l'espace de travail."
+        case .backups:
+            "Sauvegarde manuelle et restauration de l'état complet de l'application."
         case .testing:
             "Suivi qualité, couverture et progression des campagnes de tests."
         case .risks:
-            "Registre transverse des risques, niveaux de criticité et suivi."
+            "Registre des risques du projet actif et suivi de criticité."
         case .deliverables:
-            "Périmètre, livrables, scope et contrôle des changements."
+            "Périmètre, livrables et contrôle des changements du projet actif."
         case .events:
-            "Journal des événements projet et signaux de contexte."
+            "Journal des événements rattachés au projet actif."
         case .actions:
-            "Backlog opérationnel du chef de projet et flux d’exécution."
+            "Backlog opérationnel du chef de projet pour le projet actif."
         case .meetings:
-            "Réunions, transcripts, résumés IA et décisions préparatoires."
+            "Réunions, transcripts et préparation des instances du projet actif."
         case .decisions:
-            "Décisions formelles, historique de révision et traçabilité."
+            "Décisions formelles du projet actif et historique de révision."
         }
     }
 
@@ -201,6 +231,12 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
             "doc.text.magnifyingglass"
         case .resources:
             "person.3"
+        case .resourceDirectory:
+            "person.crop.rectangle.stack"
+        case .configuration:
+            "slider.horizontal.3"
+        case .backups:
+            "externaldrive.badge.timemachine"
         case .testing:
             "testtube.2"
         case .risks:
@@ -220,23 +256,29 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
 }
 
 enum AppSectionGroup: String, CaseIterable, Identifiable {
-    case pilotage
-    case execution
-    case delivery
-    case governance
+    case portfolio
+    case project
+    case directory
+    case configuration
+    case backups
+    case hidden
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .pilotage:
-            "Pilotage"
-        case .execution:
-            "Exécution"
-        case .delivery:
-            "Capacité & Qualité"
-        case .governance:
-            "Gouvernance"
+        case .portfolio:
+            "A. Portfolio des projets"
+        case .project:
+            "B. Projets"
+        case .directory:
+            "C. Annuaire des ressources général"
+        case .configuration:
+            "D. Configuration"
+        case .backups:
+            "E. Sauvegardes restaurations"
+        case .hidden:
+            "Masqué"
         }
     }
 

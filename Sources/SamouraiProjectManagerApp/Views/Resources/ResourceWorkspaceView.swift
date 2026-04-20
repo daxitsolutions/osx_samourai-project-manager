@@ -2,9 +2,16 @@ import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum ResourceWorkspaceScopeMode {
+    case contextualProject
+    case globalDirectory
+}
+
 struct ResourceWorkspaceView: View {
     @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
+
+    let scopeMode: ResourceWorkspaceScopeMode
 
     @AppStorage("resources.displayMode") private var displayModeRawValue = ResourceDisplayMode.grid.rawValue
     @AppStorage("resources.visibleColumns") private var visibleColumnsRawValue = ResourceTableColumn.defaultVisibleRawValue
@@ -33,10 +40,14 @@ struct ResourceWorkspaceView: View {
     ]
     @FocusState private var focusedInlineCell: ResourceInlineCellKey?
 
+    init(scopeMode: ResourceWorkspaceScopeMode = .contextualProject) {
+        self.scopeMode = scopeMode
+    }
+
     var body: some View {
         @Bindable var appState = appState
 
-        SamouraiWorkspaceSplitView(sidebarMinWidth: 420, sidebarIdealWidth: 560) {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 420, sidebarIdealWidth: 560, showsDetail: false) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -206,46 +217,9 @@ struct ResourceWorkspaceView: View {
             .frame(minWidth: 420, idealWidth: 560)
 
         } detail: {
-            Group {
-                if let selectedResourceID = appState.selectedResourceID,
-                   let resource = store.resource(with: selectedResourceID) {
-                    ResourceDetailView(
-                        resource: resource,
-                        assignedProjectNames: projectNames(for: resource.assignedProjectIDs),
-                        scopedProjectName: scopedProjectName,
-                        isAssignedToScopedProject: scopedProjectID.flatMap { resource.assignedProjectIDs.contains($0) } ?? false,
-                        isFavoriteInScopedProject: scopedProjectID.flatMap { resource.isFavorite(in: $0) } ?? false,
-                        performanceSnapshot: store.performanceSnapshot(for: resource.id, scopedProjectID: scopedProjectID),
-                        scopedEvaluations: scopedEvaluations(for: resource),
-                        onEdit: {
-                            editorContext = .edit(resource.id)
-                        },
-                        onAssignToScopedProject: canAssignResource(resource) ? {
-                            assignResourceToScopedProject(resource.id)
-                        } : nil,
-                        onRemoveFromScopedProject: canRemoveResource(resource) ? {
-                            removeResourceFromScopedProject(resource.id)
-                        } : nil,
-                        onToggleFavoriteInScopedProject: canToggleFavorite(resource) ? {
-                            toggleFavoriteForScopedProject(resource.id)
-                        } : nil,
-                        onEvaluate: {
-                            evaluationContext = .init(resourceID: resource.id)
-                        },
-                        onDelete: {
-                            resourcePendingDeletion = resource
-                        }
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "Sélectionne une ressource",
-                        systemImage: "person.crop.circle",
-                        description: Text("La fiche détail te permettra de suivre capacité, statut et affectation projet.")
-                    )
-                }
-            }
+            EmptyView()
         }
-        .inspector(isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { editorContext != nil || evaluationContext != nil },
             set: { isPresented in
                 if isPresented == false {
@@ -280,11 +254,6 @@ struct ResourceWorkspaceView: View {
                 }
             }
         }
-        .inspectorColumnWidth(min: 520, ideal: 680, max: 860)
-        .dynamicWindowSizingForInspector(
-            isPresented: editorContext != nil || evaluationContext != nil,
-            preferredInspectorWidth: 680
-        )
         .fileImporter(
             isPresented: $isShowingFileImporter,
             allowedContentTypes: SamouraiImportContentTypes.allowedTypes,
@@ -396,7 +365,12 @@ struct ResourceWorkspaceView: View {
     }
 
     private var scopedProjectID: UUID? {
-        appState.resolvedPrimaryProjectID(in: store)
+        switch scopeMode {
+        case .contextualProject:
+            appState.resolvedPrimaryProjectID(in: store)
+        case .globalDirectory:
+            nil
+        }
     }
 
     private var scopedProjectName: String? {
@@ -2002,6 +1976,8 @@ private struct ResourceEvaluationSheet: View {
     let onSave: (ResourceEvaluationPayload) -> Void
 
     @State private var draft = ResourceEvaluationDraft()
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -2043,20 +2019,73 @@ private struct ResourceEvaluationSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Enregistrer") {
-                        onSave(payload())
-                        dismiss()
+                        submit()
                     }
                     .disabled(draft.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
         .frame(minWidth: 620, minHeight: 620)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if draft.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                Button("Enregistrer") {
+                    submit()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
+        .onAppear {
+            captureInitialSnapshotIfNeeded()
+        }
+    }
+
+    private var snapshot: String {
+        [
+            String(draft.evaluatedAt.timeIntervalSinceReferenceDate),
+            draft.milestone,
+            draft.evaluator,
+            draft.comment,
+            ResourceEvaluationCriterion.allCases.map { "\($0.rawValue):\(draft.scores[$0]?.rawValue ?? 0)" }.joined(separator: ",")
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func submit() {
+        onSave(payload())
+        dismiss()
     }
 
     private func scoreBinding(for criterion: ResourceEvaluationCriterion) -> Binding<ResourceEvaluationScale> {
@@ -2109,6 +2138,8 @@ struct ResourceEditorSheet: View {
     @State private var assignedProjectIDs: Set<UUID>
     @State private var notes: String
     @State private var didApplyPrimaryProjectDefault = false
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     init(resource: Resource?) {
         self.resource = resource
@@ -2212,7 +2243,7 @@ struct ResourceEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
@@ -2225,13 +2256,73 @@ struct ResourceEditorSheet: View {
             }
         }
         .frame(minWidth: 560, minHeight: 520)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if formIsInvalid == false {
+                Button("Enregistrer") {
+                    save()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
+            captureInitialSnapshotIfNeeded()
         }
     }
 
     private var formIsInvalid: Bool {
         nom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var snapshot: String {
+        [
+            nom,
+            parentDescription,
+            primaryResourceRole,
+            resourceRoles,
+            organizationalResource,
+            competence1,
+            resourceCalendar,
+            resourceStartDate.map { String($0.timeIntervalSinceReferenceDate) } ?? "",
+            resourceFinishDate.map { String($0.timeIntervalSinceReferenceDate) } ?? "",
+            responsableOperationnel,
+            responsableInterne,
+            localisation,
+            typeDeRessource,
+            journeesTempsPartiel,
+            email,
+            phone,
+            assignedProjectIDs.map(\.uuidString).sorted().joined(separator: ","),
+            notes
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
     }
 
     private func save() {

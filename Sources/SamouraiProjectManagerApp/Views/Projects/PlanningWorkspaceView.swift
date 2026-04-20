@@ -7,7 +7,6 @@ struct PlanningWorkspaceView: View {
     @AppStorage("planning.table.visibleColumns") private var visibleColumnsRawValue = PlanningTableColumn.defaultVisibleRawValue
     @AppStorage("planning.table.columnOrder") private var columnOrderRawValue = PlanningTableColumn.defaultOrderRawValue
 
-    @State private var selectedProjectIDs: Set<UUID> = []
     @State private var selectedScenarioIDs: Set<UUID> = []
     @State private var primaryScenarioID: UUID?
     @State private var editorContext: PlanningEditorContext?
@@ -17,41 +16,8 @@ struct PlanningWorkspaceView: View {
     @State private var isShowingTableConfiguration = false
 
     var body: some View {
-        @Bindable var appState = appState
-
-        SamouraiWorkspaceSplitView(sidebarMinWidth: 280, sidebarIdealWidth: 320) {
-            VStack(spacing: 0) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Planning")
-                            .font(.title2.weight(.semibold))
-                        Text("\(store.projects.count) projet(s)")
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 8)
-
-                List(store.projects, selection: $selectedProjectIDs) { project in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(project.name)
-                            .font(.headline)
-                        Text("Cible: \(project.targetDate.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .tag(project.id)
-                }
-                .scrollIndicators(.visible)
-            }
-            .frame(minWidth: 280, idealWidth: 320)
-
-        } detail: {
-            detailPane
-        }
-        .inspector(isPresented: Binding(
+        detailPane
+        .sheet(isPresented: Binding(
             get: { editorContext != nil },
             set: { if $0 == false { editorContext = nil } }
         )) {
@@ -65,11 +31,6 @@ struct PlanningWorkspaceView: View {
                 )
             }
         }
-        .inspectorColumnWidth(min: 520, ideal: 700, max: 860)
-        .dynamicWindowSizingForInspector(
-            isPresented: editorContext != nil,
-            preferredInspectorWidth: 700
-        )
         .sheet(isPresented: $isShowingTableConfiguration) {
             PlanningTableConfigurationSheet(
                 visibleColumns: visibleColumnsBinding,
@@ -94,32 +55,18 @@ struct PlanningWorkspaceView: View {
             Text("L'activité sera supprimée et les actions associées resteront disponibles sans rattachement.")
         }
         .onAppear {
-            if let selectedProjectID = appState.selectedProjectID {
-                selectedProjectIDs = [selectedProjectID]
-            } else if let firstProjectID = store.projects.first?.id {
-                selectedProjectIDs = [firstProjectID]
-                appState.selectedProjectID = firstProjectID
-            }
+            ensureProjectSelection()
             syncScenarioSelection()
         }
-        .onChange(of: selectedProjectIDs) { _, newSelection in
-            appState.selectedProjectID = newSelection.singleSelection
-            syncScenarioSelection()
-        }
-        .onChange(of: appState.selectedProjectID) { _, newID in
-            guard let newID else { return }
-            if selectedProjectIDs != [newID] {
-                selectedProjectIDs = [newID]
-            }
+        .onChange(of: appState.primaryProjectID) { _, _ in
             syncScenarioSelection()
         }
         .onChange(of: store.projects.map(\.id)) { _, ids in
-            let existing = Set(ids)
-            selectedProjectIDs = selectedProjectIDs.intersection(existing)
-            if selectedProjectIDs.isEmpty, let firstProjectID = ids.first {
-                selectedProjectIDs = [firstProjectID]
+            if ids.isEmpty {
+                appState.setPrimaryProject(nil)
+            } else {
+                ensureProjectSelection()
             }
-            appState.selectedProjectID = selectedProjectIDs.singleSelection
             syncScenarioSelection()
         }
         .onChange(of: selectedProject?.orderedPlanningScenarios.map(\.id) ?? []) { _, _ in
@@ -128,7 +75,7 @@ struct PlanningWorkspaceView: View {
     }
 
     private var selectedProject: Project? {
-        guard let selectedProjectID = selectedProjectIDs.singleSelection else { return nil }
+        guard let selectedProjectID = appState.resolvedPrimaryProjectID(in: store) ?? store.projects.first?.id else { return nil }
         return store.project(with: selectedProjectID)
     }
 
@@ -211,9 +158,9 @@ struct PlanningWorkspaceView: View {
             }
         } else {
             ContentUnavailableView(
-                "Sélectionne un projet",
-                systemImage: "sidebar.left",
-                description: Text("Le module Planning centralise la gestion des activités, des scénarios et de leur comparaison.")
+                "Choisissez un projet",
+                systemImage: "target",
+                description: Text("Le projet doit être sélectionné dans la liste déroulante en haut avant de consulter le planning.")
             )
         }
     }
@@ -224,7 +171,9 @@ struct PlanningWorkspaceView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Planning · \(project.name)")
                         .font(.title2.weight(.semibold))
-                    Text("\(visibleScenarios.count) scénario(s) affiché(s) · \(projectScenarios.count) au total")
+                    Text(
+                        "\(visibleScenarios.count) scénario(s) affiché(s) · cible \(project.targetDate.formatted(date: .abbreviated, time: .omitted))"
+                    )
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -237,12 +186,14 @@ struct PlanningWorkspaceView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 430)
 
-                Button {
-                    isShowingTableConfiguration = true
-                } label: {
-                    Label("Configurer la grille", systemImage: "gearshape")
+                if viewMode == .table {
+                    Button {
+                        isShowingTableConfiguration = true
+                    } label: {
+                        Label("Configurer la grille", systemImage: "gearshape")
+                    }
+                    .help("Afficher/masquer et réordonner les colonnes de la table")
                 }
-                .help("Afficher/masquer et réordonner les colonnes de la table")
 
                 Button {
                     createScenario(for: project)
@@ -748,6 +699,16 @@ struct PlanningWorkspaceView: View {
         activities
             .filter { $0.parentActivityID == nil || $0.isMilestone }
             .sorted { $0.estimatedStartDate < $1.estimatedStartDate }
+    }
+
+    private func ensureProjectSelection() {
+        guard let firstProjectID = store.projects.first?.id else { return }
+        let resolvedProjectID = appState.resolvedPrimaryProjectID(in: store) ?? firstProjectID
+        if appState.primaryProjectID != resolvedProjectID {
+            appState.setPrimaryProject(resolvedProjectID)
+        } else if appState.selectedProjectID != resolvedProjectID {
+            appState.selectedProjectID = resolvedProjectID
+        }
     }
 
     private func syncScenarioSelection() {

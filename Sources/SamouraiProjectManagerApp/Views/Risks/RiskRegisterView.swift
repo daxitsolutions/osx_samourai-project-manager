@@ -22,7 +22,7 @@ struct RiskRegisterView: View {
     var body: some View {
         @Bindable var appState = appState
 
-        SamouraiWorkspaceSplitView(sidebarMinWidth: 620, sidebarIdealWidth: 760) {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 620, sidebarIdealWidth: 760, showsDetail: false) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -192,21 +192,7 @@ struct RiskRegisterView: View {
             .frame(minWidth: 620, idealWidth: 760)
 
         } detail: {
-            Group {
-                if let selectedRiskID = appState.selectedRiskID,
-                   let risk = store.risk(with: selectedRiskID) {
-                    RiskDetailView(
-                        risk: risk,
-                        fallbackProjectName: scopedRisks.first(where: { $0.risk.id == selectedRiskID })?.projectName
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "Sélectionne un risque",
-                        systemImage: "exclamationmark.triangle",
-                        description: Text("La fiche détail affiche tous les attributs importés du registre de risques.")
-                    )
-                }
-            }
+            EmptyView()
         }
         .fileImporter(
             isPresented: $isShowingFileImporter,
@@ -219,16 +205,11 @@ struct RiskRegisterView: View {
         ) { result in
             handleImportSelection(result)
         }
-        .inspector(isPresented: $isShowingManualRiskEditor) {
+        .sheet(isPresented: $isShowingManualRiskEditor) {
             ManualRiskEditorSheet(
                 suggestedProjectID: appState.resolvedPrimaryProjectID(in: store)
             )
         }
-        .inspectorColumnWidth(min: 460, ideal: 580, max: 760)
-        .dynamicWindowSizingForInspector(
-            isPresented: isShowingManualRiskEditor,
-            preferredInspectorWidth: 580
-        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -394,6 +375,8 @@ private struct ManualRiskEditorSheet: View {
     @State private var owner = ""
     @State private var severity: RiskSeverity = .medium
     @State private var dueDate = Date.now
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -423,7 +406,7 @@ private struct ManualRiskEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
@@ -446,10 +429,28 @@ private struct ManualRiskEditorSheet: View {
             }
         }
         .frame(minWidth: 500, minHeight: 380)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if formIsInvalid == false {
+                Button("Enregistrer") {
+                    save()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
         .onAppear {
             if projectID == nil {
                 projectID = suggestedProjectID ?? store.projects.first?.id
             }
+            captureInitialSnapshotIfNeeded()
         }
     }
 
@@ -458,6 +459,50 @@ private struct ManualRiskEditorSheet: View {
             || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || mitigation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var snapshot: String {
+        [
+            projectID?.uuidString ?? "",
+            title,
+            mitigation,
+            owner,
+            severity.rawValue,
+            String(dueDate.timeIntervalSinceReferenceDate)
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func save() {
+        guard let projectID else { return }
+        store.addRisk(
+            to: projectID,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            mitigation: mitigation.trimmingCharacters(in: .whitespacesAndNewlines),
+            owner: owner.trimmingCharacters(in: .whitespacesAndNewlines),
+            severity: severity,
+            dueDate: dueDate
+        )
+        appState.selectedSection = .risks
+        dismiss()
     }
 }
 

@@ -20,7 +20,7 @@ struct ActionWorkspaceView: View {
     var body: some View {
         @Bindable var appState = appState
 
-        SamouraiWorkspaceSplitView(sidebarMinWidth: 760, sidebarIdealWidth: 900) {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 760, sidebarIdealWidth: 900, showsDetail: false) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -220,29 +220,9 @@ struct ActionWorkspaceView: View {
             .frame(minWidth: 760, idealWidth: 900)
 
         } detail: {
-            Group {
-                if let action = selectedAction {
-                    ActionDetailView(
-                        action: action,
-                        projectName: store.projectName(for: action.projectID),
-                        activityTitle: activityTitle(for: action.activityID),
-                        onEdit: { editorContext = .edit(action.id) },
-                        onDelete: {
-                            actionPendingDeletion = action
-                            isShowingDeleteConfirmation = true
-                        },
-                        onToggleDone: { store.markActionDone(actionID: action.id, isDone: !action.isDone) }
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "Sélectionne une action",
-                        systemImage: "sidebar.left",
-                        description: Text("La fiche détail permet un suivi clair, rapide et centré sur le flux du Chef de Projet.")
-                    )
-                }
-            }
+            EmptyView()
         }
-        .inspector(isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { editorContext != nil },
             set: { if $0 == false { editorContext = nil } }
         )) {
@@ -250,11 +230,6 @@ struct ActionWorkspaceView: View {
                 ActionEditorSheet(action: context.action(in: store))
             }
         }
-        .inspectorColumnWidth(min: 460, ideal: 620, max: 760)
-        .dynamicWindowSizingForInspector(
-            isPresented: editorContext != nil,
-            preferredInspectorWidth: 620
-        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -486,6 +461,8 @@ private struct ActionEditorSheet: View {
     @State private var projectID: UUID?
     @State private var validationMessage: String?
     @State private var didApplyPrimaryProjectDefault = false
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     init(action: ProjectAction?) {
         self.action = action
@@ -545,7 +522,7 @@ private struct ActionEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
@@ -565,8 +542,61 @@ private struct ActionEditorSheet: View {
             }
         }
         .frame(minWidth: 660, minHeight: 520)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if canSave {
+                Button("Enregistrer") {
+                    save()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
+            captureInitialSnapshotIfNeeded()
+        }
+    }
+
+    private var canSave: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            && details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    private var snapshot: String {
+        [
+            title,
+            details,
+            priority.rawValue,
+            String(dueDate.timeIntervalSinceReferenceDate),
+            flow.rawValue,
+            projectID?.uuidString ?? ""
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
         }
     }
 

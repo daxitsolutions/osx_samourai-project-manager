@@ -42,7 +42,7 @@ struct ProjectDetailView: View {
                 )
             }
         }
-        .inspector(isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { isShowingRiskEditor || isShowingDeliverableEditor || activityEditorContext != nil },
             set: { isPresented in
                 if isPresented == false {
@@ -65,11 +65,6 @@ struct ProjectDetailView: View {
                 )
             }
         }
-        .inspectorColumnWidth(min: 500, ideal: 680, max: 860)
-        .dynamicWindowSizingForInspector(
-            isPresented: isShowingRiskEditor || isShowingDeliverableEditor || activityEditorContext != nil,
-            preferredInspectorWidth: 680
-        )
         .alert("Supprimer l'activité", isPresented: Binding(
             get: { activityPendingDeletion != nil },
             set: { if $0 == false { activityPendingDeletion = nil } }
@@ -1005,6 +1000,8 @@ struct ProjectActivityEditorSheet: View {
     @State private var actionSelectionQuery = ""
     @State private var predecessorSelectionQuery = ""
     @State private var parentSelectionQuery = ""
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     init(
         projectID: UUID,
@@ -1157,7 +1154,7 @@ struct ProjectActivityEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
@@ -1170,11 +1167,69 @@ struct ProjectActivityEditorSheet: View {
             }
         }
         .frame(minWidth: 600, minHeight: 520)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if formIsInvalid == false {
+                Button("Enregistrer") {
+                    submit()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
+        .onAppear {
+            captureInitialSnapshotIfNeeded()
+        }
     }
 
     private var formIsInvalid: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || (isMilestone == false && estimatedEndDate < estimatedStartDate)
+    }
+
+    private var snapshot: String {
+        [
+            title,
+            String(estimatedStartDate.timeIntervalSinceReferenceDate),
+            String(estimatedEndDate.timeIntervalSinceReferenceDate),
+            includeActualEndDate ? "1" : "0",
+            String(actualEndDate.timeIntervalSinceReferenceDate),
+            selectedActionIDs.map(\.uuidString).sorted().joined(separator: ","),
+            selectedDeliverableIDs.map(\.uuidString).sorted().joined(separator: ","),
+            selectedPredecessorIDs.map(\.uuidString).sorted().joined(separator: ","),
+            parentActivityID?.uuidString ?? "",
+            hierarchyLevel.rawValue,
+            isMilestone ? "1" : "0",
+            actionSelectionQuery,
+            predecessorSelectionQuery,
+            parentSelectionQuery
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
     }
 
     private func submit() {

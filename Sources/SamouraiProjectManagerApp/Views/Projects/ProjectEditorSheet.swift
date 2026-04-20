@@ -14,6 +14,8 @@ struct ProjectEditorSheet: View {
     @State private var deliveryMode: DeliveryMode = .hybrid
     @State private var startDate = Date.now
     @State private var targetDate = Calendar.current.date(byAdding: .day, value: 30, to: .now) ?? .now
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -50,7 +52,7 @@ struct ProjectEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
@@ -75,6 +77,26 @@ struct ProjectEditorSheet: View {
             }
         }
         .frame(minWidth: 520, minHeight: 430)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if formIsInvalid == false {
+                Button("Enregistrer") {
+                    save()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
+        .onAppear {
+            captureInitialSnapshotIfNeeded()
+        }
     }
 
     private var formIsInvalid: Bool {
@@ -83,6 +105,55 @@ struct ProjectEditorSheet: View {
             || sponsor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || manager.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || targetDate < startDate
+    }
+
+    private var snapshot: String {
+        [
+            name,
+            summary,
+            sponsor,
+            manager,
+            phase.rawValue,
+            health.rawValue,
+            deliveryMode.rawValue,
+            String(startDate.timeIntervalSinceReferenceDate),
+            String(targetDate.timeIntervalSinceReferenceDate)
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func save() {
+        let projectID = store.addProject(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            summary: summary.trimmingCharacters(in: .whitespacesAndNewlines),
+            sponsor: sponsor.trimmingCharacters(in: .whitespacesAndNewlines),
+            manager: manager.trimmingCharacters(in: .whitespacesAndNewlines),
+            phase: phase,
+            health: health,
+            deliveryMode: deliveryMode,
+            startDate: startDate,
+            targetDate: targetDate
+        )
+        appState.selectedProjectID = projectID
+        dismiss()
     }
 }
 
@@ -97,6 +168,8 @@ struct RiskEditorSheet: View {
     @State private var owner = ""
     @State private var severity: RiskSeverity = .medium
     @State private var dueDate = Date.now
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -119,7 +192,7 @@ struct RiskEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
@@ -140,12 +213,73 @@ struct RiskEditorSheet: View {
             }
         }
         .frame(minWidth: 500, minHeight: 360)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if formIsInvalid == false {
+                Button("Enregistrer") {
+                    save()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
+        .onAppear {
+            captureInitialSnapshotIfNeeded()
+        }
     }
 
     private var formIsInvalid: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || mitigation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var snapshot: String {
+        [
+            title,
+            mitigation,
+            owner,
+            severity.rawValue,
+            String(dueDate.timeIntervalSinceReferenceDate)
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func save() {
+        store.addRisk(
+            to: projectID,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            mitigation: mitigation.trimmingCharacters(in: .whitespacesAndNewlines),
+            owner: owner.trimmingCharacters(in: .whitespacesAndNewlines),
+            severity: severity,
+            dueDate: dueDate
+        )
+        dismiss()
     }
 }
 
@@ -159,6 +293,8 @@ struct DeliverableEditorSheet: View {
     @State private var details = ""
     @State private var owner = ""
     @State private var dueDate = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -174,7 +310,7 @@ struct DeliverableEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
@@ -194,11 +330,70 @@ struct DeliverableEditorSheet: View {
             }
         }
         .frame(minWidth: 500, minHeight: 340)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if formIsInvalid == false {
+                Button("Enregistrer") {
+                    save()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
+        .onAppear {
+            captureInitialSnapshotIfNeeded()
+        }
     }
 
     private var formIsInvalid: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var snapshot: String {
+        [
+            title,
+            details,
+            owner,
+            String(dueDate.timeIntervalSinceReferenceDate)
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func save() {
+        store.addDeliverable(
+            to: projectID,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+            details: details.trimmingCharacters(in: .whitespacesAndNewlines),
+            owner: owner.trimmingCharacters(in: .whitespacesAndNewlines),
+            dueDate: dueDate
+        )
+        dismiss()
     }
 }

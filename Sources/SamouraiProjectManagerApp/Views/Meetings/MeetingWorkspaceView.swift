@@ -23,7 +23,7 @@ struct MeetingWorkspaceView: View {
     var body: some View {
         @Bindable var appState = appState
 
-        SamouraiWorkspaceSplitView(sidebarMinWidth: 860, sidebarIdealWidth: 980) {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 860, sidebarIdealWidth: 980, showsDetail: false) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -193,27 +193,9 @@ struct MeetingWorkspaceView: View {
             .frame(minWidth: 860, idealWidth: 980)
 
         } detail: {
-            Group {
-                if let meeting = selectedMeeting {
-                    MeetingDetailView(
-                        meeting: meeting,
-                        projectName: store.projectName(for: meeting.projectID),
-                        onEdit: { editorContext = .edit(meeting.id) },
-                        onDelete: {
-                            meetingPendingDeletion = meeting
-                            isShowingDeleteConfirmation = true
-                        }
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "Sélectionne une réunion",
-                        systemImage: "sidebar.left",
-                        description: Text("Chaque réunion conserve le transcript brut et le compte rendu synthétique IA.")
-                    )
-                }
-            }
+            EmptyView()
         }
-        .inspector(isPresented: Binding(
+        .sheet(isPresented: Binding(
             get: { editorContext != nil },
             set: { if $0 == false { editorContext = nil } }
         )) {
@@ -221,11 +203,6 @@ struct MeetingWorkspaceView: View {
                 MeetingEditorSheet(meeting: context.meeting(in: store), prefill: context.prefill)
             }
         }
-        .inspectorColumnWidth(min: 500, ideal: 680, max: 820)
-        .dynamicWindowSizingForInspector(
-            isPresented: editorContext != nil,
-            preferredInspectorWidth: 680
-        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -519,6 +496,8 @@ private struct MeetingEditorSheet: View {
     @State private var aiSummary: String
     @State private var validationMessage: String?
     @State private var didApplyPrimaryProjectDefault = false
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     init(meeting: ProjectMeeting?, prefill: MeetingEditorPrefill?) {
         self.meeting = meeting
@@ -597,7 +576,7 @@ private struct MeetingEditorSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
-                        dismiss()
+                        requestDismiss()
                     }
                 }
 
@@ -617,8 +596,68 @@ private struct MeetingEditorSheet: View {
             }
         }
         .frame(minWidth: 760, minHeight: 760)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if canSave {
+                Button("Enregistrer") {
+                    save()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
+            captureInitialSnapshotIfNeeded()
+        }
+    }
+
+    private var canSave: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            && aiSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            && transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            && Int(durationMinutesText.trimmingCharacters(in: .whitespacesAndNewlines)).map { $0 > 0 } == true
+    }
+
+    private var snapshot: String {
+        [
+            title,
+            projectID?.uuidString ?? "",
+            String(meetingAt.timeIntervalSinceReferenceDate),
+            durationMinutesText,
+            mode.rawValue,
+            organizer,
+            participants,
+            locationOrLink,
+            notes,
+            transcript,
+            aiSummary
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
         }
     }
 

@@ -19,7 +19,7 @@ struct TestingWorkspaceView: View {
     @State private var exportFilename = "testing"
 
     var body: some View {
-        SamouraiWorkspaceSplitView(sidebarMinWidth: 760, sidebarIdealWidth: 900) {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 760, sidebarIdealWidth: 900, showsDetail: false) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -193,28 +193,9 @@ struct TestingWorkspaceView: View {
             .frame(minWidth: 760, idealWidth: 900)
 
         } detail: {
-            Group {
-                if let selectedRow = selectedRow {
-                    TestingRowDetailView(
-                        row: selectedRow,
-                        onUpdate: { updated in
-                            store.replaceProjectTestingPhase(projectID: selectedRow.projectID, phase: updated)
-                        },
-                        onDelete: {
-                            selectedRows = [selectedRow.id]
-                            isShowingDeleteConfirmation = true
-                        }
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "Sélectionne une phase",
-                        systemImage: "sidebar.left",
-                        description: Text("Le panneau détail centralise notes, dates et URL de suivi QA.")
-                    )
-                }
-            }
+            EmptyView()
         }
-        .inspector(isPresented: $isShowingAddSheet) {
+        .sheet(isPresented: $isShowingAddSheet) {
             TestingPhaseEditorSheet(
                 projects: store.projects,
                 initialProjectID: appState.resolvedPrimaryProjectID(in: store)
@@ -230,11 +211,6 @@ struct TestingWorkspaceView: View {
                 store.replaceProjectTestingPhase(projectID: payload.projectID, phase: phase)
             }
         }
-        .inspectorColumnWidth(min: 460, ideal: 620, max: 760)
-        .dynamicWindowSizingForInspector(
-            isPresented: isShowingAddSheet,
-            preferredInspectorWidth: 620
-        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -525,6 +501,8 @@ private struct TestingPhaseEditorSheet: View {
     @State private var externalURL = ""
     @State private var estimatedEndDate: Date?
     @State private var actualEndDate: Date?
+    @State private var initialSnapshot: String?
+    @State private var isShowingDismissConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -561,7 +539,7 @@ private struct TestingPhaseEditorSheet: View {
             .navigationTitle("Nouvelle entrée Testing")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { dismiss() }
+                    Button("Annuler") { requestDismiss() }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -587,11 +565,80 @@ private struct TestingPhaseEditorSheet: View {
             }
         }
         .frame(minWidth: 540, minHeight: 520)
+        .interactiveDismissDisabled(hasUnsavedChanges)
+        .onExitCommand {
+            requestDismiss()
+        }
+        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+            if selectedProjectID != nil {
+                Button("Enregistrer") {
+                    submit()
+                }
+            }
+            Button("Ignorer les modifications", role: .destructive) {
+                dismiss()
+            }
+            Button("Continuer l'édition", role: .cancel) {}
+        } message: {
+            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+        }
         .onAppear {
             if selectedProjectID == nil {
                 selectedProjectID = initialProjectID ?? projects.first?.id
             }
+            captureInitialSnapshotIfNeeded()
         }
+    }
+
+    private var snapshot: String {
+        [
+            selectedProjectID?.uuidString ?? "",
+            selectedKind.rawValue,
+            selectedStatus.rawValue,
+            String(progressPercent),
+            owner,
+            notes,
+            externalURL,
+            estimatedEndDate.map { String($0.timeIntervalSinceReferenceDate) } ?? "",
+            actualEndDate.map { String($0.timeIntervalSinceReferenceDate) } ?? ""
+        ].joined(separator: "|")
+    }
+
+    private var hasUnsavedChanges: Bool {
+        guard let initialSnapshot else { return false }
+        return snapshot != initialSnapshot
+    }
+
+    private func requestDismiss() {
+        if hasUnsavedChanges {
+            isShowingDismissConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    private func captureInitialSnapshotIfNeeded() {
+        if initialSnapshot == nil {
+            initialSnapshot = snapshot
+        }
+    }
+
+    private func submit() {
+        guard let projectID = selectedProjectID else { return }
+        onSave(
+            Payload(
+                projectID: projectID,
+                kind: selectedKind,
+                status: selectedStatus,
+                progressPercent: progressPercent,
+                owner: owner,
+                notes: notes,
+                externalURL: externalURL,
+                estimatedEndDate: estimatedEndDate,
+                actualEndDate: actualEndDate
+            )
+        )
+        dismiss()
     }
 
     @ViewBuilder

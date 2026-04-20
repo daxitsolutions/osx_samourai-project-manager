@@ -73,43 +73,43 @@ enum SamouraiColorTheme {
     static func hexCode(for token: SamouraiColorToken) -> String {
         switch token {
         case .brandGreen:
-            "#00AF5F"
+            "#248A5A"
         case .brandPurple:
-            "#8A5CF5"
+            "#5E5CE6"
         case .brandBlue:
-            "#2C7BE5"
+            "#0A84FF"
         case .warnYellow:
-            "#F5A623"
+            "#FF9F0A"
         case .dangerRed:
-            "#E84141"
+            "#FF453A"
         case .textMuted:
-            "#888888"
+            "#6E6E73"
         case .healthGreen:
-            "#00AF5F"
+            "#30D158"
         case .healthGreenLight:
-            "#4CAF50"
+            "#5AC8A8"
         case .healthAmber:
-            "#F5A623"
+            "#FFD60A"
         case .healthOrange:
-            "#FF7F00"
+            "#FF9F0A"
         case .healthRed:
-            "#E84141"
+            "#FF453A"
         case .rarityPoor:
-            "#9D9D9D"
+            "#8E8E93"
         case .rarityCommon:
-            "#FFFFFF"
+            "#F2F2F7"
         case .rarityUncommon:
-            "#1EFF00"
+            "#34C759"
         case .rarityRare:
-            "#0070DD"
+            "#0A84FF"
         case .rarityEpic:
-            "#A335EE"
+            "#BF5AF2"
         case .rarityLegendary:
-            "#FF8000"
+            "#FF9F0A"
         case .rarityArtifact:
-            "#E6CC80"
+            "#FFD60A"
         case .rarityHeirloom:
-            "#00CCFF"
+            "#64D2FF"
         }
     }
 
@@ -257,6 +257,29 @@ extension DecisionStatus {
 
     var tintColor: Color {
         SamouraiColorTheme.color(colorToken)
+    }
+}
+
+extension ActivityHierarchyLevel {
+    var tintColor: Color {
+        switch self {
+        case .governancePortfolio:
+            return Color(red: 0 / 255, green: 204 / 255, blue: 255 / 255)
+        case .program:
+            return Color(red: 230 / 255, green: 204 / 255, blue: 128 / 255)
+        case .strategicProject:
+            return Color(red: 255 / 255, green: 128 / 255, blue: 0 / 255)
+        case .criticalPhaseMilestone:
+            return Color(red: 163 / 255, green: 53 / 255, blue: 238 / 255)
+        case .mainDeliverable:
+            return Color(red: 0 / 255, green: 112 / 255, blue: 221 / 255)
+        case .activityTask:
+            return Color(red: 30 / 255, green: 255 / 255, blue: 0 / 255)
+        case .subtaskAction:
+            return Color.white
+        case .archiveNote:
+            return Color(red: 157 / 255, green: 157 / 255, blue: 157 / 255)
+        }
     }
 }
 

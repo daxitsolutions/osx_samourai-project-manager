@@ -1,61 +1,38 @@
 import SwiftUI
 import UniformTypeIdentifiers
-import AppKit
 
 struct AppShellView: View {
     @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
 
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isShowingBackupExporter = false
     @State private var isShowingBackupImporter = false
     @State private var backupDocument: SamouraiBackupDocument?
     @State private var backupFilename = "samourai-backup"
     @State private var backupFeedbackMessage: String?
-    @State private var hasAttemptedInitialFocus = false
 
     var body: some View {
-        @Bindable var appState = appState
-
-        NavigationSplitView {
-            List(AppSection.allCases, selection: $appState.selectedSection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section)
-            }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 220)
-            .listStyle(.sidebar)
-            .scrollIndicators(.visible)
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            sidebarView
         } detail: {
-            Group {
-                switch appState.selectedSection ?? .dashboard {
-                case .dashboard:
-                    DashboardView()
-                case .reporting:
-                    ReportingWorkspaceView()
-                case .projects:
-                    ProjectWorkspaceView()
-                case .resources:
-                    ResourceWorkspaceView()
-                case .testing:
-                    TestingWorkspaceView()
-                case .risks:
-                    RiskRegisterView()
-                case .deliverables:
-                    DeliverableBoardView()
-                case .events:
-                    EventWorkspaceView()
-                case .actions:
-                    ActionWorkspaceView()
-                case .meetings:
-                    MeetingWorkspaceView()
-                case .decisions:
-                    DecisionWorkspaceView()
-                }
-            }
+            selectedSectionView
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .samouraiCanvasBackground()
         }
-        .sheet(isPresented: $appState.isShowingProjectEditor) {
+        .navigationSplitViewStyle(.balanced)
+        .samouraiCanvasBackground()
+        .inspector(isPresented: Binding(
+            get: { appState.isShowingProjectEditor },
+            set: { appState.isShowingProjectEditor = $0 }
+        )) {
             ProjectEditorSheet()
         }
+        .inspectorColumnWidth(min: 420, ideal: 560, max: 760)
+        .dynamicWindowSizingForInspector(
+            isPresented: appState.isShowingProjectEditor,
+            preferredInspectorWidth: 560
+        )
         .task {
             await store.loadIfNeeded()
             ensureDefaultProjectSelection()
@@ -63,37 +40,19 @@ struct AppShellView: View {
         .onChange(of: store.projects.map(\.id)) { _, _ in
             ensureDefaultProjectSelection()
         }
-        .onAppear {
-            guard !hasAttemptedInitialFocus else { return }
-            hasAttemptedInitialFocus = true
-            requestWindowFocus()
-        }
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                HStack(spacing: 8) {
-                    Label("Projet", systemImage: "target")
-                        .foregroundStyle(.secondary)
+                projectScopePicker
+            }
 
-                    if store.projects.isEmpty {
-                        Text("Aucun projet")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Picker(
-                            "Projet principal",
-                            selection: Binding(
-                                get: {
-                                    appState.resolvedPrimaryProjectID(in: store) ?? store.projects[0].id
-                                },
-                                set: { appState.setPrimaryProject($0) }
-                            )
-                        ) {
-                            ForEach(store.projects) { project in
-                                Text(project.name).tag(project.id)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 220)
-                    }
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 2) {
+                    Text(currentSection.title)
+                        .font(.headline)
+                    Text(currentSection.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
 
@@ -154,6 +113,122 @@ struct AppShellView: View {
         }
     }
 
+    private var sidebarView: some View {
+        List {
+            Section {
+                AppSidebarProjectScopeCard(
+                    primaryProjectName: primaryProjectName,
+                    projectCount: store.projects.count,
+                    onCreateProject: {
+                        appState.selectedSection = .projects
+                        appState.isShowingProjectEditor = true
+                    }
+                )
+                .listRowInsets(.init(top: 10, leading: 12, bottom: 12, trailing: 12))
+                .listRowBackground(Color.clear)
+            }
+
+            ForEach(AppSectionGroup.allCases) { group in
+                Section(group.title) {
+                    ForEach(group.sections) { section in
+                        sidebarButton(for: section)
+                    }
+                }
+            }
+        }
+        .navigationTitle("Samourai")
+        .navigationSplitViewColumnWidth(min: 248, ideal: 284, max: 320)
+        .listStyle(.sidebar)
+        .scrollIndicators(.visible)
+        .scrollContentBackground(.hidden)
+        .background(SamouraiSurface.sidebar)
+    }
+
+    private func sidebarButton(for section: AppSection) -> some View {
+        Button {
+            appState.selectedSection = section
+        } label: {
+            AppSidebarSectionRow(
+                section: section,
+                isSelected: currentSection == section
+            )
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .listRowBackground(Color.clear)
+    }
+
+    private var currentSection: AppSection {
+        appState.selectedSection ?? .dashboard
+    }
+
+    @ViewBuilder
+    private var selectedSectionView: some View {
+        switch currentSection {
+        case .dashboard:
+            DashboardView()
+        case .planning:
+            PlanningWorkspaceView()
+        case .reporting:
+            ReportingWorkspaceView()
+        case .projects:
+            ProjectWorkspaceView()
+        case .resources:
+            ResourceWorkspaceView()
+        case .testing:
+            TestingWorkspaceView()
+        case .risks:
+            RiskRegisterView()
+        case .deliverables:
+            DeliverableBoardView()
+        case .events:
+            EventWorkspaceView()
+        case .actions:
+            ActionWorkspaceView()
+        case .meetings:
+            MeetingWorkspaceView()
+        case .decisions:
+            DecisionWorkspaceView()
+        }
+    }
+
+    private var primaryProjectName: String? {
+        guard let primaryProjectID = appState.resolvedPrimaryProjectID(in: store),
+              let project = store.project(with: primaryProjectID) else {
+            return nil
+        }
+        return project.name
+    }
+
+    @ViewBuilder
+    private var projectScopePicker: some View {
+        HStack(spacing: 8) {
+            Label("Projet", systemImage: "target")
+                .foregroundStyle(.secondary)
+
+            if store.projects.isEmpty {
+                Text("Aucun projet")
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker(
+                    "Projet principal",
+                    selection: Binding(
+                        get: {
+                            appState.resolvedPrimaryProjectID(in: store) ?? store.projects[0].id
+                        },
+                        set: { appState.setPrimaryProject($0) }
+                    )
+                ) {
+                    ForEach(store.projects) { project in
+                        Text(project.name).tag(project.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(minWidth: 220)
+            }
+        }
+    }
+
     private func handleBackupImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let fileURL = urls.first else {
             if case .failure(let error) = result {
@@ -181,23 +256,6 @@ struct AppShellView: View {
         }
     }
 
-    private func requestWindowFocus() {
-        // Retry a few times because the first window may not be fully key-able on first callback.
-        bringMainWindowToFront()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            bringMainWindowToFront()
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            bringMainWindowToFront()
-        }
-    }
-
-    private func bringMainWindowToFront() {
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        let window = NSApplication.shared.windows.first { $0.isVisible } ?? NSApplication.shared.windows.first
-        window?.makeKeyAndOrderFront(nil)
-    }
-
     private func ensureDefaultProjectSelection() {
         guard let firstProjectID = store.projects.first?.id else {
             appState.setPrimaryProject(nil)
@@ -214,6 +272,77 @@ struct AppShellView: View {
             return
         }
         appState.selectedProjectID = firstProjectID
+    }
+}
+
+private struct AppSidebarProjectScopeCard: View {
+    let primaryProjectName: String?
+    let projectCount: Int
+    let onCreateProject: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Contexte actif", systemImage: "scope")
+                    .font(.headline)
+                Spacer()
+                SamouraiStatusPill(
+                    text: projectCount == 0 ? "Setup" : "Actif",
+                    tint: projectCount == 0 ? SamouraiColorTheme.color(.warnYellow) : SamouraiSurface.accent
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(primaryProjectName ?? "Projet principal non défini")
+                    .font(.subheadline.weight(.semibold))
+                Text(projectCount == 0 ? "Aucun projet disponible" : "\(projectCount) projet(s) chargé(s)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button(action: onCreateProject) {
+                Label("Créer un projet", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .samouraiCardSurface()
+    }
+}
+
+private struct AppSidebarSectionRow: View {
+    let section: AppSection
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: section.systemImage)
+                .frame(width: 18)
+                .foregroundStyle(SamouraiSurface.accent)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(section.title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(isSelected ? Color.primary : Color.primary)
+                Text(section.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isSelected ? SamouraiSurface.accent.opacity(0.12) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(isSelected ? SamouraiSurface.accent.opacity(0.18) : Color.clear, lineWidth: 1)
+        )
     }
 }
 

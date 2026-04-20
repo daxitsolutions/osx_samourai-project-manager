@@ -14,6 +14,8 @@ struct ProjectDetailView: View {
     @State private var planningBaselineLabel = "Fin de Phase"
     @State private var planningValidatedBy = "Chef de Projet"
     @State private var planningFeedbackMessage: String?
+    @State private var expandedActivityIDs: Set<UUID> = []
+    @State private var resourceFavoriteFilter: ProjectResourceFavoriteFilter = .all
 
     var body: some View {
         Group {
@@ -40,20 +42,34 @@ struct ProjectDetailView: View {
                 )
             }
         }
-        .sheet(isPresented: $isShowingRiskEditor) {
-            RiskEditorSheet(projectID: projectID)
+        .inspector(isPresented: Binding(
+            get: { isShowingRiskEditor || isShowingDeliverableEditor || activityEditorContext != nil },
+            set: { isPresented in
+                if isPresented == false {
+                    isShowingRiskEditor = false
+                    isShowingDeliverableEditor = false
+                    activityEditorContext = nil
+                }
+            }
+        )) {
+            if isShowingRiskEditor {
+                RiskEditorSheet(projectID: projectID)
+            } else if isShowingDeliverableEditor {
+                DeliverableEditorSheet(projectID: projectID)
+            } else if let context = activityEditorContext {
+                ProjectActivityEditorSheet(
+                    projectID: projectID,
+                    activity: context.activity(in: store),
+                    linkedActionIDs: context.linkedActionIDs(in: store),
+                    linkedDeliverableIDs: context.linkedDeliverableIDs(in: store)
+                )
+            }
         }
-        .sheet(isPresented: $isShowingDeliverableEditor) {
-            DeliverableEditorSheet(projectID: projectID)
-        }
-        .sheet(item: $activityEditorContext) { context in
-            ProjectActivityEditorSheet(
-                projectID: projectID,
-                activity: context.activity(in: store),
-                linkedActionIDs: context.linkedActionIDs(in: store),
-                linkedDeliverableIDs: context.linkedDeliverableIDs(in: store)
-            )
-        }
+        .inspectorColumnWidth(min: 500, ideal: 680, max: 860)
+        .dynamicWindowSizingForInspector(
+            isPresented: isShowingRiskEditor || isShowingDeliverableEditor || activityEditorContext != nil,
+            preferredInspectorWidth: 680
+        )
         .alert("Supprimer l'activité", isPresented: Binding(
             get: { activityPendingDeletion != nil },
             set: { if $0 == false { activityPendingDeletion = nil } }
@@ -138,12 +154,27 @@ struct ProjectDetailView: View {
 
     private func resourcesSection(project: Project) -> some View {
         let assignedResources = store.resources(for: project.id)
+        let displayedResources = assignedResources.filter { resource in
+            switch resourceFavoriteFilter {
+            case .all:
+                return true
+            case .favoritesOnly:
+                return resource.isFavorite(in: project.id)
+            }
+        }
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Ressources affectées")
                     .font(.title2.weight(.semibold))
                 Spacer()
+                Picker("Favoris", selection: $resourceFavoriteFilter) {
+                    ForEach(ProjectResourceFavoriteFilter.allCases) { filter in
+                        Text(filter.label).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 220)
                 Button("Gérer les ressources") {
                     appState.selectedSection = .resources
                 }
@@ -155,42 +186,62 @@ struct ProjectDetailView: View {
                     systemImage: "person.crop.circle.badge.questionmark",
                     description: Text("Assigne des ressources à ce projet pour matérialiser la capacité réellement disponible.")
                 )
+            } else if displayedResources.isEmpty {
+                ContentUnavailableView(
+                    "Aucune ressource favorite",
+                    systemImage: "star.slash",
+                    description: Text("Active l'étoile jaune sur les ressources clés pour les retrouver plus vite.")
+                )
             } else {
-                ForEach(assignedResources) { resource in
-                    Button {
-                        appState.openResource(resource.id)
-                    } label: {
-                        HStack(alignment: .top, spacing: 12) {
-                            Circle()
-                                .fill(resource.status.tintColor)
-                                .frame(width: 10, height: 10)
-                                .padding(.top, 6)
+                ForEach(displayedResources) { resource in
+                    HStack(alignment: .top, spacing: 12) {
+                        Button {
+                            appState.openResource(resource.id)
+                        } label: {
+                            HStack(alignment: .top, spacing: 12) {
+                                Circle()
+                                    .fill(resource.status.tintColor)
+                                    .frame(width: 10, height: 10)
+                                    .padding(.top, 6)
 
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text(resource.displayName)
-                                        .font(.headline)
-                                    Spacer()
-                                    Text(resource.allocationLabel)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Text(resource.displayName)
+                                            .font(.headline)
+                                        Image(systemName: resource.isFavorite(in: project.id) ? "star.fill" : "star")
+                                            .foregroundStyle(resource.isFavorite(in: project.id) ? .yellow : .secondary)
+                                        Spacer()
+                                        Text(resource.allocationLabel)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Text(resource.displayPrimaryRole.isEmpty ? "Rôle non renseigné" : resource.displayPrimaryRole)
                                         .foregroundStyle(.secondary)
-                                }
 
-                                Text(resource.displayPrimaryRole.isEmpty ? "Rôle non renseigné" : resource.displayPrimaryRole)
+                                    HStack(spacing: 16) {
+                                        Text(resource.engagement.label)
+                                        Text(resource.status.label)
+                                    }
+                                    .font(.callout)
                                     .foregroundStyle(.secondary)
-
-                                HStack(spacing: 16) {
-                                    Text(resource.engagement.label)
-                                    Text(resource.status.label)
                                 }
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .buttonStyle(.plain)
+
+                        Button {
+                            store.toggleFavoriteResource(resourceID: resource.id, in: project.id)
+                        } label: {
+                            Image(systemName: resource.isFavorite(in: project.id) ? "star.fill" : "star")
+                                .foregroundStyle(resource.isFavorite(in: project.id) ? .yellow : .secondary)
+                                .padding(.top, 2)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
         }
@@ -398,6 +449,12 @@ struct ProjectDetailView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 280)
 
+                Button("Ouvrir module Planning") {
+                    appState.selectedSection = .planning
+                    appState.selectedProjectID = project.id
+                }
+                .buttonStyle(.bordered)
+
                 Button("Nouvelle activité") {
                     activityEditorContext = .create
                 }
@@ -441,168 +498,244 @@ struct ProjectDetailView: View {
                     showGanttGrid: planningViewMode == .ganttLite
                 )
             } else {
-                ForEach(projectActivities) { activity in
-                    let linkedActions = projectActions.filter { $0.activityID == activity.id }
-                    let linkedDeliverables = store.linkedDeliverables(for: activity.id)
-                    let doneCount = linkedActions.filter(\.isDone).count
-                    let progress = store.activityProgress(activityID: activity.id)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .top) {
-                            TextField(
-                                "Titre de l'activité",
-                                text: Binding(
-                                    get: { activity.title },
-                                    set: {
-                                        store.updateActivityQuick(
-                                            activityID: activity.id,
-                                            title: $0,
-                                            estimatedStartDate: activity.estimatedStartDate,
-                                            estimatedEndDate: activity.estimatedEndDate,
-                                            actualEndDate: activity.actualEndDate
-                                        )
-                                    }
-                                )
-                            )
-                            .textFieldStyle(.roundedBorder)
-                            .font(.headline)
-                            if activity.isMilestone {
-                                Text("Jalon")
-                                    .font(.caption2)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 3)
-                                    .background(Color.secondary.opacity(0.14), in: Capsule())
-                            }
-
-                            Button("Associer actions/livrables") {
-                                activityEditorContext = .edit(activity.id)
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button(role: .destructive) {
-                                activityPendingDeletion = activity
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
-                        }
-
-                        HStack(spacing: 16) {
-                            DatePicker(
-                                "Début estimé",
-                                selection: Binding(
-                                    get: { activity.estimatedStartDate },
-                                    set: {
-                                        store.updateActivityQuick(
-                                            activityID: activity.id,
-                                            title: activity.title,
-                                            estimatedStartDate: $0,
-                                            estimatedEndDate: activity.estimatedEndDate,
-                                            actualEndDate: activity.actualEndDate
-                                        )
-                                    }
-                                ),
-                                displayedComponents: .date
-                            )
-
-                            DatePicker(
-                                "Fin estimée (jalon)",
-                                selection: Binding(
-                                    get: { activity.estimatedEndDate },
-                                    set: {
-                                        store.updateActivityQuick(
-                                            activityID: activity.id,
-                                            title: activity.title,
-                                            estimatedStartDate: activity.estimatedStartDate,
-                                            estimatedEndDate: $0,
-                                            actualEndDate: activity.actualEndDate
-                                        )
-                                    }
-                                ),
-                                displayedComponents: .date
-                            )
-                        }
-
-                        HStack(spacing: 16) {
-                            Toggle(
-                                "Clôturée",
-                                isOn: Binding(
-                                    get: { activity.actualEndDate != nil },
-                                    set: { isClosed in
-                                        store.updateActivityQuick(
-                                            activityID: activity.id,
-                                            title: activity.title,
-                                            estimatedStartDate: activity.estimatedStartDate,
-                                            estimatedEndDate: activity.estimatedEndDate,
-                                            actualEndDate: isClosed ? (activity.actualEndDate ?? .now) : nil
-                                        )
-                                    }
-                                )
-                            )
-                            .toggleStyle(.switch)
-
-                            if activity.actualEndDate != nil {
-                                DatePicker(
-                                    "Fin réelle",
-                                    selection: Binding(
-                                        get: { activity.actualEndDate ?? .now },
-                                        set: {
-                                            store.updateActivityQuick(
-                                                activityID: activity.id,
-                                                title: activity.title,
-                                                estimatedStartDate: activity.estimatedStartDate,
-                                                estimatedEndDate: activity.estimatedEndDate,
-                                                actualEndDate: $0
-                                            )
-                                        }
-                                    ),
-                                    displayedComponents: .date
-                                )
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("Avancement macro")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Text("\(doneCount)/\(linkedActions.count) actions · \(progress.formatted(.percent.precision(.fractionLength(0))))")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            ProgressView(value: progress)
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Justification périmètre")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            if linkedDeliverables.isEmpty {
-                                Text("⚠️ Aucune liaison livrable: activité non justifiée par le scope")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                            } else {
-                                Text(linkedDeliverables.map(\.title).joined(separator: ", "))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        if activity.predecessorActivityIDs.isEmpty == false {
-                            let predecessors = projectActivities
-                                .filter { activity.predecessorActivityIDs.contains($0.id) }
-                                .map(\.displayTitle)
-                            Text("Dépend de: \(predecessors.joined(separator: ", "))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(14)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                let rootActivities = projectActivities.filter { $0.parentActivityID == nil || $0.isMilestone }
+                ForEach(rootActivities) { activity in
+                    activityRow(
+                        activity: activity,
+                        allActivities: projectActivities,
+                        projectActions: projectActions,
+                        depth: 0
+                    )
                 }
             }
         }
+    }
+
+    private func activityRow(
+        activity: ProjectActivity,
+        allActivities: [ProjectActivity],
+        projectActions: [ProjectAction],
+        depth: Int
+    ) -> AnyView {
+        let linkedActions = projectActions.filter { $0.activityID == activity.id }
+        let linkedDeliverables = store.linkedDeliverables(for: activity.id)
+        let doneCount = linkedActions.filter(\.isDone).count
+        let progress = store.activityProgress(activityID: activity.id)
+        let childActivities = allActivities.filter { $0.parentActivityID == activity.id && $0.isMilestone == false }
+        let isExpanded = expandedActivityIDs.contains(activity.id)
+        let levelTitle = activity.hierarchyLevel.label
+        let levelColor = activity.hierarchyLevel.tintColor
+        let predecessorTitles = allActivities
+            .filter { activity.predecessorActivityIDs.contains($0.id) }
+            .map(\.displayTitle)
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                TextField(
+                    "Titre de l'activité",
+                    text: Binding(
+                        get: { activity.title },
+                        set: {
+                            store.updateActivityQuick(
+                                activityID: activity.id,
+                                title: $0,
+                                estimatedStartDate: activity.estimatedStartDate,
+                                estimatedEndDate: activity.estimatedEndDate,
+                                actualEndDate: activity.actualEndDate
+                            )
+                        }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.headline)
+
+                Text(levelTitle)
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(levelColor.opacity(depth == 0 ? 0.25 : 0.15), in: Capsule())
+
+                if activity.isMilestone {
+                    Text("Jalon")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color(red: 163 / 255, green: 53 / 255, blue: 238 / 255).opacity(0.2), in: Capsule())
+                }
+
+                Button("Associer actions/livrables") {
+                    activityEditorContext = .edit(activity.id)
+                }
+                .buttonStyle(.bordered)
+
+                Button(role: .destructive) {
+                    activityPendingDeletion = activity
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+            }
+
+            HStack(spacing: 16) {
+                if activity.isMilestone == false {
+                    DatePicker(
+                        "Début estimé",
+                        selection: Binding(
+                            get: { activity.estimatedStartDate },
+                            set: {
+                                store.updateActivityQuick(
+                                    activityID: activity.id,
+                                    title: activity.title,
+                                    estimatedStartDate: $0,
+                                    estimatedEndDate: activity.estimatedEndDate,
+                                    actualEndDate: activity.actualEndDate
+                                )
+                            }
+                        ),
+                        displayedComponents: .date
+                    )
+                }
+
+                DatePicker(
+                    activity.isMilestone ? "Date jalon (fin)" : "Fin estimée",
+                    selection: Binding(
+                        get: { activity.estimatedEndDate },
+                        set: {
+                            store.updateActivityQuick(
+                                activityID: activity.id,
+                                title: activity.title,
+                                estimatedStartDate: activity.estimatedStartDate,
+                                estimatedEndDate: $0,
+                                actualEndDate: activity.actualEndDate
+                            )
+                        }
+                    ),
+                    displayedComponents: .date
+                )
+            }
+
+            HStack(spacing: 16) {
+                Toggle(
+                    "Clôturée",
+                    isOn: Binding(
+                        get: { activity.actualEndDate != nil },
+                        set: { isClosed in
+                            store.updateActivityQuick(
+                                activityID: activity.id,
+                                title: activity.title,
+                                estimatedStartDate: activity.estimatedStartDate,
+                                estimatedEndDate: activity.estimatedEndDate,
+                                actualEndDate: isClosed ? (activity.actualEndDate ?? .now) : nil
+                            )
+                        }
+                    )
+                )
+                .toggleStyle(.switch)
+
+                if activity.actualEndDate != nil {
+                    DatePicker(
+                        "Fin réelle",
+                        selection: Binding(
+                            get: { activity.actualEndDate ?? .now },
+                            set: {
+                                store.updateActivityQuick(
+                                    activityID: activity.id,
+                                    title: activity.title,
+                                    estimatedStartDate: activity.estimatedStartDate,
+                                    estimatedEndDate: activity.estimatedEndDate,
+                                    actualEndDate: $0
+                                )
+                            }
+                        ),
+                        displayedComponents: .date
+                    )
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Avancement macro")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(
+                        linkedActions.isEmpty
+                        ? progress.formatted(.percent.precision(.fractionLength(0)))
+                        : "\(doneCount)/\(linkedActions.count) actions · \(progress.formatted(.percent.precision(.fractionLength(0))))"
+                    )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                ProgressView(value: progress)
+            }
+
+            if linkedActions.isEmpty == false {
+                Text("Activités rattachées: \(linkedActions.count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Justification périmètre")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if linkedDeliverables.isEmpty {
+                    Text("⚠️ Aucune liaison livrable: activité non justifiée par le scope")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else {
+                    Text(linkedDeliverables.map(\.title).joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if predecessorTitles.isEmpty == false {
+                Text("Dépendances: \(predecessorTitles.joined(separator: ", "))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if childActivities.isEmpty == false {
+                Button(isExpanded ? "- masquer les activités enfants" : "+ voir les activités enfants") {
+                    if isExpanded {
+                        expandedActivityIDs.remove(activity.id)
+                    } else {
+                        expandedActivityIDs.insert(activity.id)
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            }
+
+            if isExpanded {
+                VStack(spacing: 10) {
+                    ForEach(childActivities) { child in
+                        activityRow(
+                            activity: child,
+                            allActivities: allActivities,
+                            projectActions: projectActions,
+                            depth: depth + 1
+                        )
+                    }
+                }
+                .padding(.leading, 14)
+            }
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(levelColor.opacity(depth == 0 ? 0.12 : 0.08))
+            )
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(levelColor.opacity(depth == 0 ? 0.95 : 0.75))
+                    .frame(width: 4)
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            }
+        )
     }
 
     private func risksSection(project: Project) -> some View {
@@ -699,6 +832,22 @@ struct ProjectDetailView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
+        }
+    }
+}
+
+private enum ProjectResourceFavoriteFilter: String, CaseIterable, Identifiable {
+    case all
+    case favoritesOnly
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all:
+            "Toutes"
+        case .favoritesOnly:
+            "Favoris"
         }
     }
 }
@@ -832,12 +981,13 @@ private enum ProjectActivityEditorContext: Identifiable {
     }
 }
 
-private struct ProjectActivityEditorSheet: View {
+struct ProjectActivityEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SamouraiStore.self) private var store
 
     let projectID: UUID
     let activity: ProjectActivity?
+    let preferredScenarioID: UUID?
     let linkedActionIDs: [UUID]
     let linkedDeliverableIDs: [UUID]
 
@@ -849,11 +999,23 @@ private struct ProjectActivityEditorSheet: View {
     @State private var selectedActionIDs: Set<UUID>
     @State private var selectedDeliverableIDs: Set<UUID>
     @State private var selectedPredecessorIDs: Set<UUID>
+    @State private var parentActivityID: UUID?
+    @State private var hierarchyLevel: ActivityHierarchyLevel
     @State private var isMilestone: Bool
+    @State private var actionSelectionQuery = ""
+    @State private var predecessorSelectionQuery = ""
+    @State private var parentSelectionQuery = ""
 
-    init(projectID: UUID, activity: ProjectActivity?, linkedActionIDs: [UUID], linkedDeliverableIDs: [UUID]) {
+    init(
+        projectID: UUID,
+        activity: ProjectActivity?,
+        preferredScenarioID: UUID? = nil,
+        linkedActionIDs: [UUID],
+        linkedDeliverableIDs: [UUID]
+    ) {
         self.projectID = projectID
         self.activity = activity
+        self.preferredScenarioID = preferredScenarioID
         self.linkedActionIDs = linkedActionIDs
         self.linkedDeliverableIDs = linkedDeliverableIDs
         _title = State(initialValue: activity?.title ?? "")
@@ -864,17 +1026,56 @@ private struct ProjectActivityEditorSheet: View {
         _selectedActionIDs = State(initialValue: Set(linkedActionIDs))
         _selectedDeliverableIDs = State(initialValue: Set(linkedDeliverableIDs))
         _selectedPredecessorIDs = State(initialValue: Set(activity?.predecessorActivityIDs ?? []))
+        _parentActivityID = State(initialValue: activity?.parentActivityID)
+        _hierarchyLevel = State(initialValue: activity?.hierarchyLevel ?? .activityTask)
         _isMilestone = State(initialValue: activity?.isMilestone ?? false)
     }
 
+    private var resolvedScenarioID: UUID? {
+        activity?.scenarioID ?? preferredScenarioID ?? store.defaultPlanningScenarioID(for: projectID)
+    }
+
     var body: some View {
+        let projectActions = store.actions.filter { $0.projectID == projectID }
+        let resolvedScenario = store
+            .planningScenarios(for: projectID)
+            .first { $0.id == resolvedScenarioID }
+        let projectActivities = store.allActivities(for: projectID).filter {
+            $0.scenarioID == resolvedScenarioID && $0.id != activity?.id
+        }
+        let parentCandidates = projectActivities.filter { $0.hierarchyLevel.sortRank < hierarchyLevel.sortRank }
+        let actionLinkingIsAvailable = resolvedScenarioID == store.defaultPlanningScenarioID(for: projectID)
+
         NavigationStack {
             Form {
                 Section("Métadonnées activité") {
                     TextField("Titre de l'activité", text: $title)
-                    DatePicker("Date de début estimée", selection: $estimatedStartDate, displayedComponents: .date)
-                    DatePicker("Date de fin estimée", selection: $estimatedEndDate, displayedComponents: .date)
+                    if let resolvedScenario {
+                        LabeledContent("Scénario") {
+                            Text(resolvedScenario.name)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Picker("Type hiérarchique", selection: $hierarchyLevel) {
+                        ForEach(ActivityHierarchyLevel.allCases) { level in
+                            Text(level.label).tag(level)
+                        }
+                    }
+                    SearchableSingleSelectDropdown(
+                        title: "Activité parente",
+                        placeholder: "Rechercher une activité parente",
+                        items: parentCandidates,
+                        selectedID: $parentActivityID,
+                        query: $parentSelectionQuery,
+                        itemLabel: { $0.displayTitle }
+                    )
                     Toggle("Marquer comme jalon", isOn: $isMilestone)
+                    if isMilestone {
+                        DatePicker("Date de fin (jalon)", selection: $estimatedEndDate, displayedComponents: .date)
+                    } else {
+                        DatePicker("Date de début estimée", selection: $estimatedStartDate, displayedComponents: .date)
+                        DatePicker("Date de fin estimée", selection: $estimatedEndDate, displayedComponents: .date)
+                    }
                     Toggle("Fin réelle renseignée", isOn: $includeActualEndDate)
                     if includeActualEndDate {
                         DatePicker("Date de fin réelle", selection: $actualEndDate, displayedComponents: .date)
@@ -882,26 +1083,21 @@ private struct ProjectActivityEditorSheet: View {
                 }
 
                 Section("Actions rattachées") {
-                    let projectActions = store.actions.filter { $0.projectID == projectID }
-                    if projectActions.isEmpty {
+                    if actionLinkingIsAvailable == false {
+                        Text("Les rattachements d'actions restent pilotés sur le scénario principal pour éviter les croisements entre scénarios.")
+                            .foregroundStyle(.secondary)
+                    } else if projectActions.isEmpty {
                         Text("Aucune action disponible pour ce projet.")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(projectActions) { action in
-                            Toggle(
-                                action.displayTitle,
-                                isOn: Binding(
-                                    get: { selectedActionIDs.contains(action.id) },
-                                    set: { isSelected in
-                                        if isSelected {
-                                            selectedActionIDs.insert(action.id)
-                                        } else {
-                                            selectedActionIDs.remove(action.id)
-                                        }
-                                    }
-                                )
-                            )
-                        }
+                        SearchableMultiSelectDropdown(
+                            title: "Sélectionner les actions",
+                            placeholder: "Rechercher une action",
+                            items: projectActions,
+                            selectedIDs: $selectedActionIDs,
+                            query: $actionSelectionQuery,
+                            itemLabel: { $0.displayTitle }
+                        )
                     }
                 }
 
@@ -931,30 +1127,33 @@ private struct ProjectActivityEditorSheet: View {
                 }
 
                 Section("Dépendances (A terminé avant B)") {
-                    let projectActivities = store.activities(for: projectID).filter { $0.id != activity?.id }
                     if projectActivities.isEmpty {
                         Text("Aucune autre activité disponible.")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(projectActivities) { predecessor in
-                            Toggle(
-                                predecessor.displayTitle,
-                                isOn: Binding(
-                                    get: { selectedPredecessorIDs.contains(predecessor.id) },
-                                    set: { isSelected in
-                                        if isSelected {
-                                            selectedPredecessorIDs.insert(predecessor.id)
-                                        } else {
-                                            selectedPredecessorIDs.remove(predecessor.id)
-                                        }
-                                    }
-                                )
-                            )
-                        }
+                        SearchableMultiSelectDropdown(
+                            title: "Sélectionner les dépendances",
+                            placeholder: "Rechercher une activité",
+                            items: projectActivities,
+                            selectedIDs: $selectedPredecessorIDs,
+                            query: $predecessorSelectionQuery,
+                            itemLabel: { $0.displayTitle }
+                        )
                     }
                 }
             }
             .navigationTitle(activity == nil ? "Nouvelle activité" : "Modifier activité")
+            .onChange(of: isMilestone) { _, isNowMilestone in
+                if isNowMilestone {
+                    estimatedStartDate = estimatedEndDate
+                }
+            }
+            .onChange(of: hierarchyLevel) { _, _ in
+                if let parentActivityID,
+                   parentCandidates.contains(where: { $0.id == parentActivityID }) == false {
+                    self.parentActivityID = nil
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
@@ -975,29 +1174,34 @@ private struct ProjectActivityEditorSheet: View {
 
     private var formIsInvalid: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || estimatedEndDate < estimatedStartDate
-            || selectedDeliverableIDs.isEmpty
+            || (isMilestone == false && estimatedEndDate < estimatedStartDate)
     }
 
     private func submit() {
+        let finalEstimatedStartDate = isMilestone ? estimatedEndDate : estimatedStartDate
         let finalActualEndDate = includeActualEndDate ? actualEndDate : nil
         if let activity {
             store.updateActivity(
                 activityID: activity.id,
                 title: title,
-                estimatedStartDate: estimatedStartDate,
+                estimatedStartDate: finalEstimatedStartDate,
                 estimatedEndDate: estimatedEndDate,
                 actualEndDate: finalActualEndDate,
                 linkedActionIDs: Array(selectedActionIDs),
                 predecessorActivityIDs: Array(selectedPredecessorIDs),
                 isMilestone: isMilestone,
+                hierarchyLevel: hierarchyLevel,
+                parentActivityID: parentActivityID,
                 linkedDeliverableIDs: Array(selectedDeliverableIDs)
             )
         } else {
             _ = store.addActivity(
                 projectID: projectID,
+                scenarioID: resolvedScenarioID,
+                parentActivityID: parentActivityID,
+                hierarchyLevel: hierarchyLevel,
                 title: title,
-                estimatedStartDate: estimatedStartDate,
+                estimatedStartDate: finalEstimatedStartDate,
                 estimatedEndDate: estimatedEndDate,
                 actualEndDate: finalActualEndDate,
                 linkedActionIDs: Array(selectedActionIDs),
@@ -1007,5 +1211,190 @@ private struct ProjectActivityEditorSheet: View {
             )
         }
         dismiss()
+    }
+}
+
+private struct SearchableSingleSelectDropdown<Item: Identifiable>: View where Item.ID: Hashable {
+    let title: String
+    let placeholder: String
+    let items: [Item]
+    @Binding var selectedID: Item.ID?
+    @Binding var query: String
+    let itemLabel: (Item) -> String
+
+    @State private var isExpanded = false
+
+    private var filteredItems: [Item] {
+        let normalizedQuery = query
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard normalizedQuery.isEmpty == false else { return items }
+        return items.filter { item in
+            itemLabel(item)
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .contains(normalizedQuery)
+        }
+    }
+
+    private var summary: String {
+        guard let selectedID, let selected = items.first(where: { $0.id == selectedID }) else {
+            return "Aucune"
+        }
+        return itemLabel(selected)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .foregroundStyle(.primary)
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(10)
+                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                TextField(placeholder, text: $query)
+                    .textFieldStyle(.roundedBorder)
+
+                Button("Aucune activité parente") {
+                    selectedID = nil
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                if filteredItems.isEmpty {
+                    Text("Aucun résultat")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 4)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 6) {
+                            ForEach(filteredItems) { item in
+                                Button {
+                                    selectedID = item.id
+                                } label: {
+                                    HStack {
+                                        Text(itemLabel(item))
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                        if selectedID == item.id {
+                                            Image(systemName: "checkmark")
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 160)
+                }
+            }
+        }
+    }
+}
+
+private struct SearchableMultiSelectDropdown<Item: Identifiable>: View where Item.ID: Hashable {
+    let title: String
+    let placeholder: String
+    let items: [Item]
+    @Binding var selectedIDs: Set<Item.ID>
+    @Binding var query: String
+    let itemLabel: (Item) -> String
+
+    @State private var isExpanded = false
+
+    private var filteredItems: [Item] {
+        let normalizedQuery = query
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard normalizedQuery.isEmpty == false else { return items }
+        return items.filter { item in
+            itemLabel(item)
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                .contains(normalizedQuery)
+        }
+    }
+
+    private var summary: String {
+        let count = selectedIDs.count
+        if count == 0 { return "Aucune sélection" }
+        if count == 1 { return "1 sélection" }
+        return "\(count) sélections"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                isExpanded.toggle()
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .foregroundStyle(.primary)
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(10)
+                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                TextField(placeholder, text: $query)
+                    .textFieldStyle(.roundedBorder)
+
+                if filteredItems.isEmpty {
+                    Text("Aucun résultat")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 4)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 6) {
+                            ForEach(filteredItems) { item in
+                                Toggle(
+                                    itemLabel(item),
+                                    isOn: Binding(
+                                        get: { selectedIDs.contains(item.id) },
+                                        set: { isSelected in
+                                            if isSelected {
+                                                selectedIDs.insert(item.id)
+                                            } else {
+                                                selectedIDs.remove(item.id)
+                                            }
+                                        }
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 180)
+                }
+            }
+        }
     }
 }

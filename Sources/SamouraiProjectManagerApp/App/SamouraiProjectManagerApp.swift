@@ -11,7 +11,7 @@ struct SamouraiProjectManagerApp: App {
             AppShellView()
                 .environment(appState)
                 .environment(store)
-                .tint(SamouraiColorTheme.color(.brandPurple))
+                .tint(SamouraiColorTheme.color(.brandBlue))
                 .environment(\.font, typography.appFont)
         }
         .defaultSize(width: 1_480, height: 920)

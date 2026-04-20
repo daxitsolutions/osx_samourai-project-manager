@@ -135,6 +135,8 @@ struct SamouraiRestoreResult {
 
 struct ResourceImportDraft {
     let nom: String?
+    let prenom: String?
+    let nomDeFamille: String?
     let parentDescription: String?
     let primaryResourceRole: String?
     let resourceRoles: String?
@@ -148,6 +150,8 @@ struct ResourceImportDraft {
     let localisation: String?
     let typeDeRessource: String?
     let journeesTempsPartiel: String?
+    let email: String?
+    let phone: String?
     let engagement: ResourceEngagement
     let status: ResourceStatus
     let allocationPercent: Int
@@ -541,8 +545,25 @@ final class SamouraiStore {
         activities.first { $0.id == id }
     }
 
-    func activities(for projectID: UUID) -> [ProjectActivity] {
+    func planningScenarios(for projectID: UUID) -> [ProjectPlanningScenario] {
+        project(with: projectID)?.orderedPlanningScenarios ?? []
+    }
+
+    func defaultPlanningScenarioID(for projectID: UUID) -> UUID? {
+        project(with: projectID)?.orderedPlanningScenarios.first?.id
+    }
+
+    func allActivities(for projectID: UUID) -> [ProjectActivity] {
         activities.filter { $0.projectID == projectID }
+    }
+
+    func activities(for projectID: UUID) -> [ProjectActivity] {
+        guard let scenarioID = defaultPlanningScenarioID(for: projectID) else { return [] }
+        return activities(for: projectID, scenarioID: scenarioID)
+    }
+
+    func activities(for projectID: UUID, scenarioID: UUID) -> [ProjectActivity] {
+        activities.filter { $0.projectID == projectID && $0.scenarioID == scenarioID }
     }
 
     func activityProgress(activityID: UUID) -> Double {
@@ -634,7 +655,14 @@ final class SamouraiStore {
     func resources(for projectID: UUID) -> [Resource] {
         resources
             .filter { $0.assignedProjectIDs.contains(projectID) }
-            .sorted { $0.fullName.localizedStandardCompare($1.fullName) == .orderedAscending }
+            .sorted { lhs, rhs in
+                let lhsFavorite = lhs.isFavorite(in: projectID)
+                let rhsFavorite = rhs.isFavorite(in: projectID)
+                if lhsFavorite != rhsFavorite {
+                    return lhsFavorite && rhsFavorite == false
+                }
+                return lhs.fullName.localizedStandardCompare(rhs.fullName) == .orderedAscending
+            }
     }
 
     func resourceProfiling(for projectID: UUID?) -> ResourceProfilingReport {
@@ -1030,6 +1058,9 @@ final class SamouraiStore {
 
     func addActivity(
         projectID: UUID,
+        scenarioID: UUID? = nil,
+        parentActivityID: UUID? = nil,
+        hierarchyLevel: ActivityHierarchyLevel = .activityTask,
         title: String,
         estimatedStartDate: Date,
         estimatedEndDate: Date,
@@ -1040,15 +1071,38 @@ final class SamouraiStore {
         linkedDeliverableIDs: [UUID] = []
     ) -> UUID? {
         guard projects.contains(where: { $0.id == projectID }) else { return nil }
+        guard let resolvedScenarioID = sanitizedPlanningScenarioID(projectID: projectID, scenarioID: scenarioID)
+            ?? defaultPlanningScenarioID(for: projectID)
+        else { return nil }
 
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDates = normalizedActivityDates(
+            estimatedStartDate: estimatedStartDate,
+            estimatedEndDate: estimatedEndDate,
+            isMilestone: isMilestone
+        )
+        let sanitizedParentActivityID = sanitizedParentActivityID(
+            projectID: projectID,
+            scenarioID: resolvedScenarioID,
+            parentActivityID: parentActivityID,
+            childHierarchyLevel: hierarchyLevel,
+            currentActivityID: nil
+        )
         let sanitizedDeliverableIDs = sanitizedDeliverableIDs(projectID: projectID, deliverableIDs: linkedDeliverableIDs)
-        let sanitizedPredecessorIDs = sanitizedPredecessorActivityIDs(projectID: projectID, predecessorIDs: predecessorActivityIDs, currentActivityID: nil)
+        let sanitizedPredecessorIDs = sanitizedPredecessorActivityIDs(
+            projectID: projectID,
+            scenarioID: resolvedScenarioID,
+            predecessorIDs: predecessorActivityIDs,
+            currentActivityID: nil
+        )
         let activity = ProjectActivity(
             projectID: projectID,
+            scenarioID: resolvedScenarioID,
+            parentActivityID: sanitizedParentActivityID,
+            hierarchyLevel: hierarchyLevel,
             title: cleanedTitle.isEmpty ? "Activité" : cleanedTitle,
-            estimatedStartDate: estimatedStartDate,
-            estimatedEndDate: max(estimatedEndDate, estimatedStartDate),
+            estimatedStartDate: normalizedDates.startDate,
+            estimatedEndDate: normalizedDates.endDate,
             actualEndDate: actualEndDate,
             predecessorActivityIDs: sanitizedPredecessorIDs,
             isMilestone: isMilestone,
@@ -1057,7 +1111,9 @@ final class SamouraiStore {
 
         activities.append(activity)
         activities = sortActivities(activities)
-        applyActivityLinks(projectID: projectID, activityID: activity.id, linkedActionIDs: linkedActionIDs)
+        if resolvedScenarioID == defaultPlanningScenarioID(for: projectID) {
+            applyActivityLinks(projectID: projectID, activityID: activity.id, linkedActionIDs: linkedActionIDs)
+        }
         persist()
         return activity.id
     }
@@ -1071,18 +1127,34 @@ final class SamouraiStore {
         linkedActionIDs: [UUID],
         predecessorActivityIDs: [UUID],
         isMilestone: Bool,
+        hierarchyLevel: ActivityHierarchyLevel,
+        parentActivityID: UUID?,
         linkedDeliverableIDs: [UUID]
     ) {
         guard let index = activities.firstIndex(where: { $0.id == activityID }) else { return }
 
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDates = normalizedActivityDates(
+            estimatedStartDate: estimatedStartDate,
+            estimatedEndDate: estimatedEndDate,
+            isMilestone: isMilestone
+        )
         activities[index].title = cleanedTitle.isEmpty ? activities[index].title : cleanedTitle
-        activities[index].estimatedStartDate = estimatedStartDate
-        activities[index].estimatedEndDate = max(estimatedEndDate, estimatedStartDate)
+        activities[index].estimatedStartDate = normalizedDates.startDate
+        activities[index].estimatedEndDate = normalizedDates.endDate
         activities[index].actualEndDate = actualEndDate
         activities[index].predecessorActivityIDs = sanitizedPredecessorActivityIDs(
             projectID: activities[index].projectID,
+            scenarioID: activities[index].scenarioID,
             predecessorIDs: predecessorActivityIDs,
+            currentActivityID: activityID
+        )
+        activities[index].hierarchyLevel = hierarchyLevel
+        activities[index].parentActivityID = sanitizedParentActivityID(
+            projectID: activities[index].projectID,
+            scenarioID: activities[index].scenarioID,
+            parentActivityID: parentActivityID,
+            childHierarchyLevel: hierarchyLevel,
             currentActivityID: activityID
         )
         activities[index].isMilestone = isMilestone
@@ -1093,11 +1165,13 @@ final class SamouraiStore {
         activities[index].updatedAt = .now
         activities = sortActivities(activities)
 
-        applyActivityLinks(
-            projectID: activities[index].projectID,
-            activityID: activityID,
-            linkedActionIDs: linkedActionIDs
-        )
+        if activities[index].scenarioID == defaultPlanningScenarioID(for: activities[index].projectID) {
+            applyActivityLinks(
+                projectID: activities[index].projectID,
+                activityID: activityID,
+                linkedActionIDs: linkedActionIDs
+            )
+        }
         actions = sortActions(actions)
         persist()
     }
@@ -1110,24 +1184,42 @@ final class SamouraiStore {
         actualEndDate: Date?,
         predecessorActivityIDs: [UUID]? = nil,
         isMilestone: Bool? = nil,
+        hierarchyLevel: ActivityHierarchyLevel? = nil,
         linkedDeliverableIDs: [UUID]? = nil
     ) {
         guard let index = activities.firstIndex(where: { $0.id == activityID }) else { return }
 
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let targetMilestoneState = isMilestone ?? activities[index].isMilestone
+        let normalizedDates = normalizedActivityDates(
+            estimatedStartDate: estimatedStartDate,
+            estimatedEndDate: estimatedEndDate,
+            isMilestone: targetMilestoneState
+        )
         activities[index].title = cleanedTitle.isEmpty ? activities[index].title : cleanedTitle
-        activities[index].estimatedStartDate = estimatedStartDate
-        activities[index].estimatedEndDate = max(estimatedEndDate, estimatedStartDate)
+        activities[index].estimatedStartDate = normalizedDates.startDate
+        activities[index].estimatedEndDate = normalizedDates.endDate
         activities[index].actualEndDate = actualEndDate
         if let predecessorActivityIDs {
             activities[index].predecessorActivityIDs = sanitizedPredecessorActivityIDs(
                 projectID: activities[index].projectID,
+                scenarioID: activities[index].scenarioID,
                 predecessorIDs: predecessorActivityIDs,
                 currentActivityID: activityID
             )
         }
         if let isMilestone {
             activities[index].isMilestone = isMilestone
+        }
+        if let hierarchyLevel {
+            activities[index].hierarchyLevel = hierarchyLevel
+            activities[index].parentActivityID = sanitizedParentActivityID(
+                projectID: activities[index].projectID,
+                scenarioID: activities[index].scenarioID,
+                parentActivityID: activities[index].parentActivityID,
+                childHierarchyLevel: hierarchyLevel,
+                currentActivityID: activityID
+            )
         }
         if let linkedDeliverableIDs {
             activities[index].linkedDeliverableIDs = sanitizedDeliverableIDs(
@@ -1201,9 +1293,11 @@ final class SamouraiStore {
         )
     }
 
-    func createPlanningBaseline(projectID: UUID, label: String, validatedBy: String) -> String? {
+    func createPlanningBaseline(projectID: UUID, label: String, validatedBy: String, scenarioID: UUID? = nil) -> String? {
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return nil }
-        let projectActivities = activities(for: projectID)
+        let resolvedScenarioID = sanitizedPlanningScenarioID(projectID: projectID, scenarioID: scenarioID)
+            ?? projects[projectIndex].defaultPlanningScenarioID
+        let projectActivities = activities(for: projectID, scenarioID: resolvedScenarioID)
         guard projectActivities.isEmpty == false else { return nil }
 
         let cleanedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1212,6 +1306,7 @@ final class SamouraiStore {
         let baseline = PlanningBaseline(
             label: cleanedLabel.isEmpty ? "Planning Baseline" : cleanedLabel,
             validatedBy: cleanedValidatedBy.isEmpty ? "Chef de Projet" : cleanedValidatedBy,
+            scenarioID: resolvedScenarioID,
             activitySnapshots: projectActivities.map(PlanningBaselineActivitySnapshot.init(from:))
         )
 
@@ -1223,14 +1318,22 @@ final class SamouraiStore {
         return "Baseline planning \"\(baseline.label)\" enregistrée."
     }
 
-    func planningVarianceReport(projectID: UUID) -> ProjectPlanningVarianceReport? {
+    func planningVarianceReport(projectID: UUID, scenarioID: UUID? = nil) -> ProjectPlanningVarianceReport? {
         guard let project = project(with: projectID),
-              let baseline = project.planningBaselines.last
+              let resolvedScenarioID = sanitizedPlanningScenarioID(projectID: projectID, scenarioID: scenarioID)
+                ?? project.orderedPlanningScenarios.first?.id
         else {
             return nil
         }
 
-        let currentActivities = Dictionary(uniqueKeysWithValues: activities(for: projectID).map { ($0.id, $0) })
+        let baseline = project.planningBaselines.last {
+            ($0.scenarioID ?? project.defaultPlanningScenarioID) == resolvedScenarioID
+        }
+        guard let baseline else { return nil }
+
+        let currentActivities = Dictionary(
+            uniqueKeysWithValues: activities(for: projectID, scenarioID: resolvedScenarioID).map { ($0.id, $0) }
+        )
         let variances = baseline.activitySnapshots.compactMap { snapshot -> PlanningActivityVariance? in
             guard let current = currentActivities[snapshot.id] else { return nil }
             let plannedEndDate = snapshot.estimatedEndDate
@@ -1255,6 +1358,15 @@ final class SamouraiStore {
 
     func deleteActivity(activityID: UUID) {
         activities.removeAll { $0.id == activityID }
+        activities = activities.map { activity in
+            var updated = activity
+            if updated.parentActivityID == activityID {
+                updated.parentActivityID = nil
+                updated.updatedAt = .now
+            }
+            updated.predecessorActivityIDs.removeAll { $0 == activityID }
+            return updated
+        }
         actions = actions.map { action in
             var updated = action
             if updated.activityID == activityID {
@@ -1265,6 +1377,79 @@ final class SamouraiStore {
         }
         actions = sortActions(actions)
         persist()
+    }
+
+    @discardableResult
+    func addPlanningScenario(projectID: UUID, name: String) -> UUID? {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return nil }
+
+        let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let scenario = ProjectPlanningScenario(name: cleanedName.isEmpty ? defaultScenarioName(for: projects[projectIndex]) : cleanedName)
+        projects[projectIndex].planningScenarios.append(scenario)
+        projects[projectIndex].planningScenarios = ProjectPlanningScenario.normalizedScenarios(
+            projects[projectIndex].planningScenarios,
+            fallbackDate: projects[projectIndex].createdAt
+        )
+        projects[projectIndex].updatedAt = .now
+        projects = sortProjects(projects)
+        persist()
+        return scenario.id
+    }
+
+    @discardableResult
+    func duplicatePlanningScenario(projectID: UUID, sourceScenarioID: UUID, name: String) -> UUID? {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return nil }
+        guard let sourceScenario = projects[projectIndex].orderedPlanningScenarios.first(where: { $0.id == sourceScenarioID }) else {
+            return nil
+        }
+
+        let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let duplicatedScenario = ProjectPlanningScenario(
+            name: cleanedName.isEmpty ? "Copie de \(sourceScenario.name)" : cleanedName
+        )
+        let sourceActivities = activities(for: projectID, scenarioID: sourceScenarioID)
+        var activityIDMap: [UUID: UUID] = [:]
+        let duplicatedActivities = sourceActivities.map { activity -> ProjectActivity in
+            let duplicatedID = UUID()
+            activityIDMap[activity.id] = duplicatedID
+            return ProjectActivity(
+                id: duplicatedID,
+                projectID: activity.projectID,
+                scenarioID: duplicatedScenario.id,
+                parentActivityID: nil,
+                hierarchyLevel: activity.hierarchyLevel,
+                title: activity.title,
+                estimatedStartDate: activity.estimatedStartDate,
+                estimatedEndDate: activity.estimatedEndDate,
+                actualEndDate: activity.actualEndDate,
+                predecessorActivityIDs: [],
+                isMilestone: activity.isMilestone,
+                linkedDeliverableIDs: activity.linkedDeliverableIDs,
+                createdAt: .now,
+                updatedAt: .now
+            )
+        }
+        let normalizedDuplicatedActivities = duplicatedActivities.map { activity -> ProjectActivity in
+            guard let sourceActivity = sourceActivities.first(where: { activityIDMap[$0.id] == activity.id }) else {
+                return activity
+            }
+            var duplicated = activity
+            duplicated.parentActivityID = sourceActivity.parentActivityID.flatMap { activityIDMap[$0] }
+            duplicated.predecessorActivityIDs = sourceActivity.predecessorActivityIDs.compactMap { activityIDMap[$0] }
+            return duplicated
+        }
+
+        projects[projectIndex].planningScenarios.append(duplicatedScenario)
+        projects[projectIndex].planningScenarios = ProjectPlanningScenario.normalizedScenarios(
+            projects[projectIndex].planningScenarios,
+            fallbackDate: projects[projectIndex].createdAt
+        )
+        projects[projectIndex].updatedAt = .now
+        activities.append(contentsOf: normalizedDuplicatedActivities)
+        activities = sortActivities(activities)
+        projects = sortProjects(projects)
+        persist()
+        return duplicatedScenario.id
     }
 
     func meetings(matching query: String) -> [ProjectMeeting] {
@@ -2218,6 +2403,7 @@ final class SamouraiStore {
         resources[index].status = normalized.status
         resources[index].allocationPercent = normalized.allocationPercent
         resources[index].assignedProjectIDs = assignedProjectIDs
+        resources[index].favoriteProjectIDs = resources[index].favoriteProjectIDs.filter { assignedProjectIDs.contains($0) }
         resources[index].notes = notes
         resources[index].updatedAt = .now
         resources = sortResources(resources)
@@ -2265,6 +2451,45 @@ final class SamouraiStore {
         persist()
     }
 
+    func assignResource(resourceID: UUID, to projectID: UUID) {
+        guard projects.contains(where: { $0.id == projectID }) else { return }
+        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return }
+        guard resources[index].assignedProjectIDs.contains(projectID) == false else { return }
+
+        resources[index].assignedProjectIDs.append(projectID)
+        resources[index].updatedAt = .now
+        resources = sortResources(resources)
+        persist()
+    }
+
+    func toggleFavoriteResource(resourceID: UUID, in projectID: UUID) {
+        guard projects.contains(where: { $0.id == projectID }) else { return }
+        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return }
+        guard resources[index].assignedProjectIDs.contains(projectID) else { return }
+
+        if resources[index].favoriteProjectIDs.contains(projectID) {
+            resources[index].favoriteProjectIDs.removeAll { $0 == projectID }
+        } else {
+            resources[index].favoriteProjectIDs.append(projectID)
+        }
+
+        resources[index].updatedAt = .now
+        resources = sortResources(resources)
+        persist()
+    }
+
+    func unassignResource(resourceID: UUID, from projectID: UUID) {
+        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return }
+        let previousAssignments = resources[index].assignedProjectIDs
+        resources[index].assignedProjectIDs.removeAll { $0 == projectID }
+        guard resources[index].assignedProjectIDs != previousAssignments else { return }
+
+        resources[index].favoriteProjectIDs.removeAll { $0 == projectID }
+        resources[index].updatedAt = .now
+        resources = sortResources(resources)
+        persist()
+    }
+
     func deleteResource(resourceID: UUID) {
         resources.removeAll { $0.id == resourceID }
         decisions = decisions.map { decision in
@@ -2288,6 +2513,8 @@ final class SamouraiStore {
 
         for draft in drafts {
             let trimmedNotes = draft.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedEmail = cleanedOptionalString(draft.email)
+            let normalizedPhone = cleanedOptionalString(draft.phone)
             let normalized = normalizedResourceFields(
                 nom: draft.nom,
                 parentDescription: draft.parentDescription,
@@ -2320,17 +2547,29 @@ final class SamouraiStore {
                 continue
             }
 
-            let normalizedKey = resourceMatchingKey(fullName: normalized.fullName, jobTitle: normalized.jobTitle)
+            let normalizedKey = resourceMatchingKey(
+                fullName: normalized.fullName,
+                firstName: draft.prenom,
+                lastName: draft.nomDeFamille,
+                email: normalizedEmail
+            )
 
             if let index = resources.firstIndex(where: {
-                resourceMatchingKey(fullName: $0.fullName, jobTitle: $0.jobTitle) == normalizedKey
+                resourceMatchingKey(
+                    fullName: $0.fullName,
+                    firstName: nil,
+                    lastName: nil,
+                    email: cleanedOptionalString($0.email)
+                ) == normalizedKey
             }) {
                 let existingResource = resources[index]
                 let updateResult = mergeExistingResource(
                     existingResource,
                     draft: draft,
                     normalized: normalized,
-                    trimmedNotes: trimmedNotes
+                    trimmedNotes: trimmedNotes,
+                    normalizedEmail: normalizedEmail,
+                    normalizedPhone: normalizedPhone
                 )
 
                 reviewItems.append(
@@ -2363,8 +2602,8 @@ final class SamouraiStore {
                     localisation: normalized.localisation,
                     typeDeRessource: normalized.typeDeRessource,
                     journeesTempsPartiel: normalized.journeesTempsPartiel,
-                    email: "",
-                    phone: "",
+                    email: normalizedEmail ?? "",
+                    phone: normalizedPhone ?? "",
                     engagement: normalized.engagement,
                     status: normalized.status,
                     allocationPercent: normalized.allocationPercent,
@@ -2452,7 +2691,9 @@ final class SamouraiStore {
         _ existingResource: Resource,
         draft: ResourceImportDraft,
         normalized: NormalizedResourceFields,
-        trimmedNotes: String
+        trimmedNotes: String,
+        normalizedEmail: String?,
+        normalizedPhone: String?
     ) -> MergeExistingResourceResult {
         var merged = existingResource
         var changes: [ResourceImportFieldChange] = []
@@ -2504,6 +2745,8 @@ final class SamouraiStore {
         applyOptionalStringValue(normalized.localisation, label: "Localisation", keyPath: \.localisation)
         applyOptionalStringValue(normalized.typeDeRessource, label: "Type de Ressource", keyPath: \.typeDeRessource)
         applyOptionalStringValue(normalized.journeesTempsPartiel, label: "Journée(s) temps partiel", keyPath: \.journeesTempsPartiel)
+        applyStringValue(normalizedEmail, label: "E-mail", keyPath: \.email)
+        applyStringValue(normalizedPhone, label: "Téléphone", keyPath: \.phone)
 
         if draft.typeDeRessource?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
            merged.engagement != normalized.engagement {
@@ -2655,6 +2898,18 @@ final class SamouraiStore {
         }
     }
 
+    private func normalizedActivityDates(
+        estimatedStartDate: Date,
+        estimatedEndDate: Date,
+        isMilestone: Bool
+    ) -> (startDate: Date, endDate: Date) {
+        if isMilestone {
+            return (estimatedEndDate, estimatedEndDate)
+        }
+        let normalizedEndDate = max(estimatedEndDate, estimatedStartDate)
+        return (estimatedStartDate, normalizedEndDate)
+    }
+
     private func sortMeetings(_ meetings: [ProjectMeeting]) -> [ProjectMeeting] {
         meetings.sorted {
             if $0.meetingAt == $1.meetingAt {
@@ -2748,19 +3003,65 @@ final class SamouraiStore {
         resources.map { resource in
             var normalizedResource = resource
             normalizedResource.assignedProjectIDs = resource.assignedProjectIDs.filter { projectIDs.contains($0) }
+            normalizedResource.favoriteProjectIDs = resource.favoriteProjectIDs.filter {
+                projectIDs.contains($0) && normalizedResource.assignedProjectIDs.contains($0)
+            }
             return normalizedResource
         }
     }
 
     private func sanitizeActivities(_ activities: [ProjectActivity], projectIDs: Set<UUID>) -> [ProjectActivity] {
-        activities
+        let filteredActivities = activities
             .filter { projectIDs.contains($0.projectID) }
-            .map { activity in
+        let activitiesByID = Dictionary(uniqueKeysWithValues: filteredActivities.map { ($0.id, $0) })
+        let effectiveScenarioIDs = Dictionary(uniqueKeysWithValues: filteredActivities.map { activity in
+            let scenarioID: UUID
+            if let project = project(with: activity.projectID) {
+                let validScenarioIDs = Set(project.orderedPlanningScenarios.map(\.id))
+                scenarioID = validScenarioIDs.contains(activity.scenarioID)
+                    ? activity.scenarioID
+                    : project.defaultPlanningScenarioID
+            } else {
+                scenarioID = activity.scenarioID
+            }
+            return (activity.id, scenarioID)
+        })
+
+        return filteredActivities.map { activity in
                 var normalized = activity
+                normalized.scenarioID = effectiveScenarioIDs[activity.id] ?? activity.scenarioID
                 normalized.estimatedEndDate = max(activity.estimatedEndDate, activity.estimatedStartDate)
-                let projectActivityIDs = Set(activities.filter { $0.projectID == activity.projectID }.map(\.id))
+                let projectActivityIDs = Set(
+                    filteredActivities
+                        .filter { $0.projectID == activity.projectID && effectiveScenarioIDs[$0.id] == normalized.scenarioID }
+                        .map(\.id)
+                )
                 normalized.predecessorActivityIDs = activity.predecessorActivityIDs.filter {
                     $0 != activity.id && projectActivityIDs.contains($0)
+                }
+                if let parentActivityID = activity.parentActivityID {
+                    let parentIsValid = {
+                        guard parentActivityID != activity.id,
+                              let parent = activitiesByID[parentActivityID],
+                              parent.projectID == activity.projectID,
+                              effectiveScenarioIDs[parentActivityID] == normalized.scenarioID,
+                              parent.hierarchyLevel.sortRank < activity.hierarchyLevel.sortRank
+                        else { return false }
+
+                        var cursor: UUID? = parentActivityID
+                        var visited = Set<UUID>()
+                        while let cursorID = cursor, visited.insert(cursorID).inserted {
+                            if cursorID == activity.id {
+                                return false
+                            }
+                            cursor = activitiesByID[cursorID]?.parentActivityID
+                        }
+                        return true
+                    }()
+
+                    normalized.parentActivityID = parentIsValid ? parentActivityID : nil
+                } else {
+                    normalized.parentActivityID = nil
                 }
                 if let project = project(with: activity.projectID) {
                     let validDeliverableIDs = Set(project.deliverables.map(\.id))
@@ -3003,10 +3304,11 @@ final class SamouraiStore {
 
     private func sanitizedPredecessorActivityIDs(
         projectID: UUID,
+        scenarioID: UUID,
         predecessorIDs: [UUID],
         currentActivityID: UUID?
     ) -> [UUID] {
-        let validIDs = Set(activities(for: projectID).map(\.id))
+        let validIDs = Set(activities(for: projectID, scenarioID: scenarioID).map(\.id))
         var seen = Set<UUID>()
         return predecessorIDs.filter { predecessorID in
             if let currentActivityID, predecessorID == currentActivityID {
@@ -3015,6 +3317,47 @@ final class SamouraiStore {
             guard validIDs.contains(predecessorID) else { return false }
             return seen.insert(predecessorID).inserted
         }
+    }
+
+    private func sanitizedParentActivityID(
+        projectID: UUID,
+        scenarioID: UUID,
+        parentActivityID: UUID?,
+        childHierarchyLevel: ActivityHierarchyLevel,
+        currentActivityID: UUID?
+    ) -> UUID? {
+        guard let parentActivityID else { return nil }
+        if let currentActivityID, parentActivityID == currentActivityID {
+            return nil
+        }
+
+        let projectActivities = activities.filter { $0.projectID == projectID && $0.scenarioID == scenarioID }
+        let activitiesByID = Dictionary(uniqueKeysWithValues: projectActivities.map { ($0.id, $0) })
+        guard let parentActivity = activitiesByID[parentActivityID] else { return nil }
+        guard parentActivity.hierarchyLevel.sortRank < childHierarchyLevel.sortRank else {
+            return nil
+        }
+
+        var cursor: UUID? = parentActivityID
+        var visited = Set<UUID>()
+        while let cursorID = cursor, visited.insert(cursorID).inserted {
+            if let currentActivityID, cursorID == currentActivityID {
+                return nil
+            }
+            cursor = activitiesByID[cursorID]?.parentActivityID
+        }
+
+        return parentActivityID
+    }
+
+    private func sanitizedPlanningScenarioID(projectID: UUID, scenarioID: UUID?) -> UUID? {
+        guard let scenarioID else { return nil }
+        let validScenarioIDs = Set(planningScenarios(for: projectID).map(\.id))
+        return validScenarioIDs.contains(scenarioID) ? scenarioID : nil
+    }
+
+    private func defaultScenarioName(for project: Project) -> String {
+        "Scénario \(project.orderedPlanningScenarios.count + 1)"
     }
 
     private func sanitizedResourceIDs(_ resourceIDs: [UUID]) -> [UUID] {
@@ -3380,15 +3723,50 @@ final class SamouraiStore {
         return alerts
     }
 
-    private func resourceMatchingKey(fullName: String, jobTitle: String) -> String {
-        let normalizedFullName = fullName
+    private func resourceMatchingKey(fullName: String, firstName: String?, lastName: String?, email: String?) -> String {
+        if let normalizedEmail = cleanedOptionalString(email)?
             .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedJobTitle = jobTitle
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           normalizedEmail.isEmpty == false {
+            return "email|\(normalizedEmail)"
+        }
 
-        return "\(normalizedFullName)|\(normalizedJobTitle)"
+        let identityPair = explicitNamePair(
+            fullName: fullName,
+            firstName: cleanedOptionalString(firstName),
+            lastName: cleanedOptionalString(lastName)
+        )
+
+        return "name|\(identityPair.first)|\(identityPair.last)"
+    }
+
+    private func explicitNamePair(fullName: String, firstName: String?, lastName: String?) -> (first: String, last: String) {
+        let normalizedFirstName = normalizedNameToken(firstName)
+        let normalizedLastName = normalizedNameToken(lastName)
+
+        if normalizedFirstName.isEmpty == false || normalizedLastName.isEmpty == false {
+            return (normalizedFirstName, normalizedLastName)
+        }
+
+        let tokens = fullName
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+
+        guard tokens.isEmpty == false else { return ("", "") }
+        if tokens.count == 1 {
+            return ("", tokens[0])
+        }
+
+        return (tokens.dropLast().joined(separator: " "), tokens.last ?? "")
+    }
+
+    private func normalizedNameToken(_ value: String?) -> String {
+        value?
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     private func normalizedResourceFields(
@@ -3657,12 +4035,6 @@ enum SamouraiSeedFactory {
                     owner: "Chef de projet",
                     dueDate: calendar.date(byAdding: .day, value: -5, to: today) ?? today,
                     isDone: true
-                ),
-                Deliverable(
-                    title: "Pack UAT lot 1",
-                    details: "Jeux de tests, environnement et critères de go/no-go.",
-                    owner: "QA Lead",
-                    dueDate: calendar.date(byAdding: .day, value: 16, to: today) ?? today
                 )
             ]
         )

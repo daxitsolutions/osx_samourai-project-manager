@@ -10,8 +10,7 @@ struct TestingWorkspaceView: View {
     @State private var selectedPhaseKind: ProjectTestingPhaseKind?
     @State private var selectedRows: Set<String> = []
     @State private var sortOrder: [KeyPathComparator<TestingRow>] = [
-        .init(\TestingRow.projectName, order: .forward),
-        .init(\TestingRow.phaseOrder, order: .forward)
+        .init(\TestingRow.projectName, order: .reverse)
     ]
     @State private var isShowingAddSheet = false
     @State private var isShowingDeleteConfirmation = false
@@ -20,7 +19,7 @@ struct TestingWorkspaceView: View {
     @State private var exportFilename = "testing"
 
     var body: some View {
-        HSplitView {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 760, sidebarIdealWidth: 900) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -121,13 +120,13 @@ struct TestingWorkspaceView: View {
                         }
                         .width(min: 170, ideal: 230)
 
-                        TableColumn("Phase") { row in
+                        TableColumn("Phase", value: \.phaseOrder) { row in
                             Text(row.phase.kind.shortLabel)
                                 .font(.callout.weight(.semibold))
                         }
                         .width(min: 70, ideal: 90)
 
-                        TableColumn("Statut") { row in
+                        TableColumn("Statut", value: \.statusSortKey) { row in
                             Picker(
                                 "Statut",
                                 selection: Binding(
@@ -148,7 +147,7 @@ struct TestingWorkspaceView: View {
                         }
                         .width(min: 150, ideal: 180)
 
-                        TableColumn("Progression") { row in
+                        TableColumn("Progression", value: \.progressPercentSortKey) { row in
                             TextField(
                                 "%",
                                 value: Binding(
@@ -166,7 +165,7 @@ struct TestingWorkspaceView: View {
                         }
                         .width(min: 90, ideal: 100)
 
-                        TableColumn("Owner") { row in
+                        TableColumn("Owner", value: \.ownerSortKey) { row in
                             TextField(
                                 "Owner",
                                 text: Binding(
@@ -182,7 +181,7 @@ struct TestingWorkspaceView: View {
                         }
                         .width(min: 150, ideal: 220)
 
-                        TableColumn("Bloqué") { row in
+                        TableColumn("Bloqué", value: \.blockedSortKey) { row in
                             Image(systemName: row.phase.isBlocked ? "exclamationmark.triangle.fill" : "checkmark.circle")
                                 .foregroundStyle(row.phase.isBlocked ? Color.red : .secondary)
                         }
@@ -193,6 +192,7 @@ struct TestingWorkspaceView: View {
             }
             .frame(minWidth: 760, idealWidth: 900)
 
+        } detail: {
             Group {
                 if let selectedRow = selectedRow {
                     TestingRowDetailView(
@@ -213,9 +213,8 @@ struct TestingWorkspaceView: View {
                     )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .sheet(isPresented: $isShowingAddSheet) {
+        .inspector(isPresented: $isShowingAddSheet) {
             TestingPhaseEditorSheet(
                 projects: store.projects,
                 initialProjectID: appState.resolvedPrimaryProjectID(in: store)
@@ -231,6 +230,11 @@ struct TestingWorkspaceView: View {
                 store.replaceProjectTestingPhase(projectID: payload.projectID, phase: phase)
             }
         }
+        .inspectorColumnWidth(min: 460, ideal: 620, max: 760)
+        .dynamicWindowSizingForInspector(
+            isPresented: isShowingAddSheet,
+            preferredInspectorWidth: 620
+        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -351,6 +355,22 @@ private struct TestingRow: Identifiable, Hashable {
 
     var phaseOrder: Int {
         ProjectTestingPhaseKind.allCases.firstIndex(of: phase.kind) ?? 0
+    }
+
+    var statusSortKey: String {
+        phase.status.rawValue
+    }
+
+    var progressPercentSortKey: Int {
+        phase.progressPercent
+    }
+
+    var ownerSortKey: String {
+        phase.owner
+    }
+
+    var blockedSortKey: Int {
+        phase.isBlocked ? 1 : 0
     }
 }
 

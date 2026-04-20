@@ -60,8 +60,10 @@ enum ResourceImportService {
         }
 
         let headerMap = buildHeaderMap(from: headerRow)
-        guard headerMap[.nom] != nil else {
-            throw ResourceImportError.missingRequiredColumn("Nom")
+        let hasCombinedName = headerMap[.nom] != nil
+        let hasSplitName = headerMap[.prenom] != nil && headerMap[.nomDeFamille] != nil
+        guard hasCombinedName || hasSplitName else {
+            throw ResourceImportError.missingRequiredColumn("Nom ou couple Prénom/Nom")
         }
 
         return rows.dropFirst().compactMap { row in
@@ -73,10 +75,16 @@ enum ResourceImportService {
                 return nil
             }
 
-            let fullName = values[.nom, default: ""]
-            guard fullName.isEmpty == false else {
+            let firstName = optionalString(values[.prenom, default: ""])
+            let lastName = optionalString(values[.nomDeFamille, default: ""])
+            let fullName = optionalString(values[.nom, default: ""])
+                ?? combinedName(firstName: firstName, lastName: lastName)
+
+            guard fullName?.isEmpty == false else {
                 return ResourceImportDraft(
                     nom: nil,
+                    prenom: nil,
+                    nomDeFamille: nil,
                     parentDescription: nil,
                     primaryResourceRole: nil,
                     resourceRoles: nil,
@@ -90,6 +98,8 @@ enum ResourceImportService {
                     localisation: nil,
                     typeDeRessource: nil,
                     journeesTempsPartiel: nil,
+                    email: nil,
+                    phone: nil,
                     engagement: .internalEmployee,
                     status: .active,
                     allocationPercent: 100,
@@ -103,7 +113,9 @@ enum ResourceImportService {
             let startDate = values[.resourceStartDate, default: ""]
 
             return ResourceImportDraft(
-                nom: optionalString(values[.nom, default: ""]),
+                nom: fullName,
+                prenom: firstName,
+                nomDeFamille: lastName,
                 parentDescription: optionalString(values[.parentDescription, default: ""]),
                 primaryResourceRole: optionalString(values[.primaryResourceRole, default: ""]),
                 resourceRoles: optionalString(values[.resourceRoles, default: ""]),
@@ -117,6 +129,8 @@ enum ResourceImportService {
                 localisation: optionalString(values[.location, default: ""]),
                 typeDeRessource: optionalString(values[.resourceType, default: ""]),
                 journeesTempsPartiel: optionalString(partTimeDays),
+                email: optionalString(values[.email, default: ""]),
+                phone: optionalString(values[.phone, default: ""]),
                 engagement: mapEngagement(from: values[.resourceType, default: ""]),
                 status: mapStatus(finishDate: finishDate, partTimeDays: partTimeDays),
                 allocationPercent: mapAllocationPercent(from: partTimeDays),
@@ -203,6 +217,15 @@ enum ResourceImportService {
         return nil
     }
 
+    private static func combinedName(firstName: String?, lastName: String?) -> String? {
+        let parts = [firstName, lastName]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+
+        guard parts.isEmpty == false else { return nil }
+        return parts.joined(separator: " ")
+    }
+
     private static func optionalString(_ rawValue: String) -> String? {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
@@ -263,6 +286,8 @@ struct ParsedSpreadsheetRow {
 
 private enum ResourceSpreadsheetColumn: CaseIterable {
     case nom
+    case prenom
+    case nomDeFamille
     case parentDescription
     case primaryResourceRole
     case resourceRoles
@@ -276,9 +301,18 @@ private enum ResourceSpreadsheetColumn: CaseIterable {
     case location
     case resourceType
     case partTimeDays
+    case email
+    case phone
 
     static let headerAliases: [String: ResourceSpreadsheetColumn] = [
         "nom": .nom,
+        "prenom": .prenom,
+        "prenom usuel": .prenom,
+        "first name": .prenom,
+        "nom de famille": .nomDeFamille,
+        "lastname": .nomDeFamille,
+        "last name": .nomDeFamille,
+        "surname": .nomDeFamille,
         "parent description": .parentDescription,
         "primary resource role": .primaryResourceRole,
         "resource roles": .resourceRoles,
@@ -292,13 +326,23 @@ private enum ResourceSpreadsheetColumn: CaseIterable {
         "localisation": .location,
         "type de ressource": .resourceType,
         "journee(s) temps partiel": .partTimeDays,
-        "journees temps partiel": .partTimeDays
+        "journees temps partiel": .partTimeDays,
+        "email": .email,
+        "e-mail": .email,
+        "mail": .email,
+        "telephone": .phone,
+        "phone": .phone,
+        "mobile": .phone
     ]
 
     var label: String {
         switch self {
         case .nom:
             "Nom"
+        case .prenom:
+            "Prénom"
+        case .nomDeFamille:
+            "Nom de famille"
         case .parentDescription:
             "Parent Description"
         case .primaryResourceRole:
@@ -325,6 +369,10 @@ private enum ResourceSpreadsheetColumn: CaseIterable {
             "Type de Ressource"
         case .partTimeDays:
             "Journée(s) temps partiel"
+        case .email:
+            "E-mail"
+        case .phone:
+            "Téléphone"
         }
     }
 }

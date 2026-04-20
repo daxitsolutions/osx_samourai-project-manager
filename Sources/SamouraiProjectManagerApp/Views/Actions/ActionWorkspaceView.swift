@@ -13,11 +13,14 @@ struct ActionWorkspaceView: View {
     @State private var exportDocument: EntityCSVDocument?
     @State private var exportFilename = "actions"
     @State private var isShowingDeleteConfirmation = false
+    @State private var sortOrder: [KeyPathComparator<ProjectAction>] = [
+        .init(\.dueDate, order: .reverse)
+    ]
 
     var body: some View {
         @Bindable var appState = appState
 
-        HSplitView {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 760, sidebarIdealWidth: 900) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -103,7 +106,7 @@ struct ActionWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredActions, selection: $selectedActionIDs) {
+                    Table(filteredActions, selection: $selectedActionIDs, sortOrder: $sortOrder) {
                         TableColumn("") { action in
                             Toggle(
                                 "Terminée",
@@ -117,12 +120,12 @@ struct ActionWorkspaceView: View {
                         }
                         .width(34)
 
-                        TableColumn("Flux") { action in
+                        TableColumn("Flux", value: \.flowSortKey) { action in
                             Label(action.flow.label, systemImage: action.flow.systemImage)
                         }
                         .width(min: 160, ideal: 170)
 
-                        TableColumn("Priorité") { action in
+                        TableColumn("Priorité", value: \.prioritySortWeight) { action in
                             Picker(
                                 "Priorité",
                                 selection: Binding(
@@ -149,7 +152,7 @@ struct ActionWorkspaceView: View {
                         }
                         .width(min: 110, ideal: 120)
 
-                        TableColumn("Titre") { action in
+                        TableColumn("Titre", value: \.displayTitle) { action in
                             TextField(
                                 "Titre",
                                 text: Binding(
@@ -172,7 +175,7 @@ struct ActionWorkspaceView: View {
                         }
                         .width(min: 220, ideal: 360)
 
-                        TableColumn("Activité") { action in
+                        TableColumn("Activité", value: \.activityIDSortKey) { action in
                             if let projectID = action.projectID {
                                 Picker(
                                     "Activité",
@@ -195,17 +198,17 @@ struct ActionWorkspaceView: View {
                         }
                         .width(min: 150, ideal: 220)
 
-                        TableColumn("Projet") { action in
+                        TableColumn("Projet", value: \.projectIDSortKey) { action in
                             Text(store.projectName(for: action.projectID))
                         }
                         .width(min: 150, ideal: 220)
 
-                        TableColumn("Échéance") { action in
+                        TableColumn("Échéance", value: \.dueDate) { action in
                             Text(action.dueDate.formatted(date: .abbreviated, time: .omitted))
                         }
                         .width(min: 120, ideal: 130)
 
-                        TableColumn("Créée le") { action in
+                        TableColumn("Créée le", value: \.createdAt) { action in
                             Text(action.createdAt.formatted(date: .abbreviated, time: .shortened))
                                 .foregroundStyle(.secondary)
                         }
@@ -216,6 +219,7 @@ struct ActionWorkspaceView: View {
             }
             .frame(minWidth: 760, idealWidth: 900)
 
+        } detail: {
             Group {
                 if let action = selectedAction {
                     ActionDetailView(
@@ -237,11 +241,20 @@ struct ActionWorkspaceView: View {
                     )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .sheet(item: $editorContext) { context in
-            ActionEditorSheet(action: context.action(in: store))
+        .inspector(isPresented: Binding(
+            get: { editorContext != nil },
+            set: { if $0 == false { editorContext = nil } }
+        )) {
+            if let context = editorContext {
+                ActionEditorSheet(action: context.action(in: store))
+            }
         }
+        .inspectorColumnWidth(min: 460, ideal: 620, max: 760)
+        .dynamicWindowSizingForInspector(
+            isPresented: editorContext != nil,
+            preferredInspectorWidth: 620
+        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -299,7 +312,7 @@ struct ActionWorkspaceView: View {
         }
 
         let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedQuery.isEmpty == false else { return flowFilteredActions }
+        guard trimmedQuery.isEmpty == false else { return flowFilteredActions.sorted(using: sortOrder) }
 
         let terms = trimmedQuery
             .split(whereSeparator: \.isWhitespace)
@@ -307,7 +320,7 @@ struct ActionWorkspaceView: View {
             .map(normalize)
             .filter { $0.isEmpty == false }
 
-        guard terms.isEmpty == false else { return flowFilteredActions }
+        guard terms.isEmpty == false else { return flowFilteredActions.sorted(using: sortOrder) }
 
         return flowFilteredActions.filter { action in
             let searchableValues: [String] = [
@@ -326,6 +339,7 @@ struct ActionWorkspaceView: View {
                 normalizedValues.contains(where: { $0.contains(term) })
             }
         }
+        .sorted(using: sortOrder)
     }
 
     private var scopedActions: [ProjectAction] {
@@ -375,6 +389,13 @@ struct ActionWorkspaceView: View {
         exportFilename = "samourai-actions-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
         isShowingFileExporter = true
     }
+}
+
+private extension ProjectAction {
+    var flowSortKey: String { flow.rawValue }
+    var prioritySortWeight: Int { priority.sortWeight }
+    var activityIDSortKey: String { activityID?.uuidString ?? "" }
+    var projectIDSortKey: String { projectID?.uuidString ?? "" }
 }
 
 private struct ActionDetailView: View {

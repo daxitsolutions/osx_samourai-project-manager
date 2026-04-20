@@ -16,11 +16,14 @@ struct MeetingWorkspaceView: View {
     @State private var exportDocument: EntityCSVDocument?
     @State private var exportFilename = "meetings"
     @State private var isShowingDeleteConfirmation = false
+    @State private var sortOrder: [KeyPathComparator<ProjectMeeting>] = [
+        .init(\.meetingAt, order: .reverse)
+    ]
 
     var body: some View {
         @Bindable var appState = appState
 
-        HSplitView {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 860, sidebarIdealWidth: 980) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -102,13 +105,13 @@ struct MeetingWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredMeetings, selection: $selectedMeetingIDs) {
-                        TableColumn("Date") { meeting in
+                    Table(filteredMeetings, selection: $selectedMeetingIDs, sortOrder: $sortOrder) {
+                        TableColumn("Date", value: \.meetingAt) { meeting in
                             Text(meeting.meetingAt.formatted(date: .abbreviated, time: .shortened))
                         }
                         .width(min: 165, ideal: 190)
 
-                        TableColumn("Réunion") { meeting in
+                        TableColumn("Réunion", value: \.displayTitle) { meeting in
                             TextField(
                                 "Réunion",
                                 text: Binding(
@@ -136,12 +139,12 @@ struct MeetingWorkspaceView: View {
                         }
                         .width(min: 220, ideal: 320)
 
-                        TableColumn("Projet") { meeting in
+                        TableColumn("Projet", value: \.projectIDSortKey) { meeting in
                             Text(store.projectName(for: meeting.projectID))
                         }
                         .width(min: 150, ideal: 220)
 
-                        TableColumn("Mode") { meeting in
+                        TableColumn("Mode", value: \.modeSortKey) { meeting in
                             Picker(
                                 "Mode",
                                 selection: Binding(
@@ -173,12 +176,12 @@ struct MeetingWorkspaceView: View {
                         }
                         .width(min: 120, ideal: 140)
 
-                        TableColumn("Durée") { meeting in
+                        TableColumn("Durée", value: \.durationMinutes) { meeting in
                             Text("\(meeting.durationMinutes) min")
                         }
                         .width(min: 90, ideal: 110)
 
-                        TableColumn("Résumé IA") { meeting in
+                        TableColumn("Résumé IA", value: \.aiSummary) { meeting in
                             Text(meeting.aiSummary)
                                 .lineLimit(2)
                         }
@@ -189,6 +192,7 @@ struct MeetingWorkspaceView: View {
             }
             .frame(minWidth: 860, idealWidth: 980)
 
+        } detail: {
             Group {
                 if let meeting = selectedMeeting {
                     MeetingDetailView(
@@ -208,11 +212,20 @@ struct MeetingWorkspaceView: View {
                     )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .sheet(item: $editorContext) { context in
-            MeetingEditorSheet(meeting: context.meeting(in: store), prefill: context.prefill)
+        .inspector(isPresented: Binding(
+            get: { editorContext != nil },
+            set: { if $0 == false { editorContext = nil } }
+        )) {
+            if let context = editorContext {
+                MeetingEditorSheet(meeting: context.meeting(in: store), prefill: context.prefill)
+            }
         }
+        .inspectorColumnWidth(min: 500, ideal: 680, max: 820)
+        .dynamicWindowSizingForInspector(
+            isPresented: editorContext != nil,
+            preferredInspectorWidth: 680
+        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -304,7 +317,7 @@ struct MeetingWorkspaceView: View {
     private var filteredMeetings: [ProjectMeeting] {
         let baseMeetings = scopedMeetings
         let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedQuery.isEmpty == false else { return baseMeetings }
+        guard trimmedQuery.isEmpty == false else { return baseMeetings.sorted(using: sortOrder) }
 
         let terms = trimmedQuery
             .split(whereSeparator: \.isWhitespace)
@@ -312,7 +325,7 @@ struct MeetingWorkspaceView: View {
             .map(normalize)
             .filter { $0.isEmpty == false }
 
-        guard terms.isEmpty == false else { return baseMeetings }
+        guard terms.isEmpty == false else { return baseMeetings.sorted(using: sortOrder) }
 
         return baseMeetings.filter { meeting in
             let searchableValues: [String] = [
@@ -332,6 +345,7 @@ struct MeetingWorkspaceView: View {
                 normalizedValues.contains(where: { $0.contains(term) })
             }
         }
+        .sorted(using: sortOrder)
     }
 
     private var scopedMeetings: [ProjectMeeting] {
@@ -375,6 +389,11 @@ struct MeetingWorkspaceView: View {
         exportFilename = "samourai-reunions-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
         isShowingFileExporter = true
     }
+}
+
+private extension ProjectMeeting {
+    var projectIDSortKey: String { projectID?.uuidString ?? "" }
+    var modeSortKey: String { mode.rawValue }
 }
 
 private struct MeetingDetailView: View {

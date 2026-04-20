@@ -1,5 +1,54 @@
 import Foundation
 
+struct ProjectPlanningScenario: Identifiable, Codable, Hashable {
+    var id: UUID
+    var name: String
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        createdAt: Date = .now,
+        updatedAt: Date = .now
+    ) {
+        self.id = id
+        self.name = name
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    static func normalizedScenarios(_ scenarios: [ProjectPlanningScenario], fallbackDate: Date = .now) -> [ProjectPlanningScenario] {
+        var seen = Set<UUID>()
+        let normalized = scenarios
+            .filter { seen.insert($0.id).inserted }
+            .map { scenario -> ProjectPlanningScenario in
+                var updated = scenario
+                let cleanedName = scenario.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                updated.name = cleanedName.isEmpty ? "Scénario" : cleanedName
+                return updated
+            }
+            .sorted { lhs, rhs in
+                if lhs.createdAt == rhs.createdAt {
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+                return lhs.createdAt < rhs.createdAt
+            }
+
+        if normalized.isEmpty {
+            return [
+                ProjectPlanningScenario(
+                    name: "Scénario 1",
+                    createdAt: fallbackDate,
+                    updatedAt: fallbackDate
+                )
+            ]
+        }
+
+        return normalized
+    }
+}
+
 struct Project: Identifiable, Codable, Hashable {
     var id: UUID
     var name: String
@@ -18,6 +67,7 @@ struct Project: Identifiable, Codable, Hashable {
     var scopeDefinition: ProjectScopeDefinition?
     var scopeBaselines: [ScopeBaseline]
     var scopeChangeRequests: [ScopeChangeRequest]
+    var planningScenarios: [ProjectPlanningScenario]
     var planningBaselines: [PlanningBaseline]
     var testingPhases: [ProjectTestingPhase]
 
@@ -39,6 +89,7 @@ struct Project: Identifiable, Codable, Hashable {
         scopeDefinition: ProjectScopeDefinition? = nil,
         scopeBaselines: [ScopeBaseline] = [],
         scopeChangeRequests: [ScopeChangeRequest] = [],
+        planningScenarios: [ProjectPlanningScenario] = [],
         planningBaselines: [PlanningBaseline] = [],
         testingPhases: [ProjectTestingPhase] = ProjectTestingPhase.defaultPhases
     ) {
@@ -59,6 +110,7 @@ struct Project: Identifiable, Codable, Hashable {
         self.scopeDefinition = scopeDefinition
         self.scopeBaselines = scopeBaselines.sorted { $0.createdAt < $1.createdAt }
         self.scopeChangeRequests = scopeChangeRequests.sorted { $0.createdAt < $1.createdAt }
+        self.planningScenarios = ProjectPlanningScenario.normalizedScenarios(planningScenarios, fallbackDate: createdAt)
         self.planningBaselines = planningBaselines.sorted { $0.createdAt < $1.createdAt }
         self.testingPhases = ProjectTestingPhase.normalizedPhases(testingPhases)
     }
@@ -81,6 +133,7 @@ struct Project: Identifiable, Codable, Hashable {
         case scopeDefinition
         case scopeBaselines
         case scopeChangeRequests
+        case planningScenarios
         case planningBaselines
         case testingPhases
     }
@@ -106,6 +159,10 @@ struct Project: Identifiable, Codable, Hashable {
             .sorted { $0.createdAt < $1.createdAt }
         scopeChangeRequests = (try container.decodeIfPresent([ScopeChangeRequest].self, forKey: .scopeChangeRequests) ?? [])
             .sorted { $0.createdAt < $1.createdAt }
+        planningScenarios = ProjectPlanningScenario.normalizedScenarios(
+            try container.decodeIfPresent([ProjectPlanningScenario].self, forKey: .planningScenarios) ?? [],
+            fallbackDate: createdAt
+        )
         planningBaselines = (try container.decodeIfPresent([PlanningBaseline].self, forKey: .planningBaselines) ?? [])
             .sorted { $0.createdAt < $1.createdAt }
         testingPhases = ProjectTestingPhase.normalizedPhases(
@@ -132,6 +189,7 @@ struct Project: Identifiable, Codable, Hashable {
         try container.encodeIfPresent(scopeDefinition, forKey: .scopeDefinition)
         try container.encode(scopeBaselines, forKey: .scopeBaselines)
         try container.encode(scopeChangeRequests, forKey: .scopeChangeRequests)
+        try container.encode(planningScenarios, forKey: .planningScenarios)
         try container.encode(planningBaselines, forKey: .planningBaselines)
         try container.encode(testingPhases, forKey: .testingPhases)
     }
@@ -168,6 +226,14 @@ extension Project {
 
     var orderedTestingPhases: [ProjectTestingPhase] {
         ProjectTestingPhase.normalizedPhases(testingPhases)
+    }
+
+    var orderedPlanningScenarios: [ProjectPlanningScenario] {
+        ProjectPlanningScenario.normalizedScenarios(planningScenarios, fallbackDate: createdAt)
+    }
+
+    var defaultPlanningScenarioID: UUID {
+        orderedPlanningScenarios.first?.id ?? UUID()
     }
 
     var testingAverageProgressPercent: Int {
@@ -1081,6 +1147,7 @@ struct Resource: Identifiable, Codable, Hashable {
     var status: ResourceStatus
     var allocationPercent: Int
     var assignedProjectIDs: [UUID]
+    var favoriteProjectIDs: [UUID]
     var performanceEvaluations: [ResourcePerformanceEvaluation]
     var notes: String
     var createdAt: Date
@@ -1111,6 +1178,7 @@ struct Resource: Identifiable, Codable, Hashable {
         status: ResourceStatus,
         allocationPercent: Int,
         assignedProjectIDs: [UUID] = [],
+        favoriteProjectIDs: [UUID] = [],
         performanceEvaluations: [ResourcePerformanceEvaluation] = [],
         notes: String,
         createdAt: Date = .now,
@@ -1139,7 +1207,11 @@ struct Resource: Identifiable, Codable, Hashable {
         self.engagement = engagement
         self.status = status
         self.allocationPercent = allocationPercent
-        self.assignedProjectIDs = assignedProjectIDs.removingDuplicateValues()
+        let normalizedAssignedProjectIDs = assignedProjectIDs.removingDuplicateValues()
+        self.assignedProjectIDs = normalizedAssignedProjectIDs
+        self.favoriteProjectIDs = favoriteProjectIDs
+            .removingDuplicateValues()
+            .filter { normalizedAssignedProjectIDs.contains($0) }
         self.performanceEvaluations = performanceEvaluations.sorted { $0.evaluatedAt < $1.evaluatedAt }
         self.notes = notes
         self.createdAt = createdAt
@@ -1171,6 +1243,7 @@ struct Resource: Identifiable, Codable, Hashable {
         case status
         case allocationPercent
         case assignedProjectIDs
+        case favoriteProjectIDs
         case assignedProjectID
         case performanceEvaluations
         case notes
@@ -1208,13 +1281,19 @@ struct Resource: Identifiable, Codable, Hashable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
 
+        let decodedAssignedProjectIDs: [UUID]
         if let multiAssignments = try container.decodeIfPresent([UUID].self, forKey: .assignedProjectIDs) {
-            assignedProjectIDs = multiAssignments.removingDuplicateValues()
+            decodedAssignedProjectIDs = multiAssignments.removingDuplicateValues()
         } else if let legacyAssignment = try container.decodeIfPresent(UUID.self, forKey: .assignedProjectID) {
-            assignedProjectIDs = [legacyAssignment]
+            decodedAssignedProjectIDs = [legacyAssignment]
         } else {
-            assignedProjectIDs = []
+            decodedAssignedProjectIDs = []
         }
+        assignedProjectIDs = decodedAssignedProjectIDs
+        let decodedFavoriteProjectIDs = (try container.decodeIfPresent([UUID].self, forKey: .favoriteProjectIDs) ?? [])
+            .removingDuplicateValues()
+        favoriteProjectIDs = decodedFavoriteProjectIDs
+            .filter { decodedAssignedProjectIDs.contains($0) }
 
         performanceEvaluations = (try container.decodeIfPresent([ResourcePerformanceEvaluation].self, forKey: .performanceEvaluations) ?? [])
             .sorted { $0.evaluatedAt < $1.evaluatedAt }
@@ -1247,6 +1326,7 @@ struct Resource: Identifiable, Codable, Hashable {
         try container.encode(status, forKey: .status)
         try container.encode(allocationPercent, forKey: .allocationPercent)
         try container.encode(assignedProjectIDs, forKey: .assignedProjectIDs)
+        try container.encode(favoriteProjectIDs, forKey: .favoriteProjectIDs)
         try container.encode(assignedProjectIDs.first, forKey: .assignedProjectID)
         try container.encode(performanceEvaluations, forKey: .performanceEvaluations)
         try container.encode(notes, forKey: .notes)
@@ -1258,6 +1338,10 @@ struct Resource: Identifiable, Codable, Hashable {
 extension Resource {
     var allocationLabel: String {
         "\(allocationPercent)%"
+    }
+
+    func isFavorite(in projectID: UUID) -> Bool {
+        favoriteProjectIDs.contains(projectID)
     }
 
     var displayName: String {
@@ -1814,9 +1898,59 @@ enum RiskSeverity: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum ActivityHierarchyLevel: String, Codable, CaseIterable, Identifiable {
+    case governancePortfolio
+    case program
+    case strategicProject
+    case criticalPhaseMilestone
+    case mainDeliverable
+    case activityTask
+    case subtaskAction
+    case archiveNote
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .governancePortfolio:
+            "Gouvernance / Portefeuille"
+        case .program:
+            "Programme"
+        case .strategicProject:
+            "Projet Stratégique"
+        case .criticalPhaseMilestone:
+            "Phase / Jalon Critique"
+        case .mainDeliverable:
+            "Livrable Principal"
+        case .activityTask:
+            "Activité / Tâche"
+        case .subtaskAction:
+            "Sous-tâche / Action"
+        case .archiveNote:
+            "Archive / Note"
+        }
+    }
+
+    var sortRank: Int {
+        switch self {
+        case .governancePortfolio: return 1
+        case .program: return 2
+        case .strategicProject: return 3
+        case .criticalPhaseMilestone: return 4
+        case .mainDeliverable: return 5
+        case .activityTask: return 6
+        case .subtaskAction: return 7
+        case .archiveNote: return 8
+        }
+    }
+}
+
 struct ProjectActivity: Identifiable, Codable, Hashable {
     var id: UUID
     var projectID: UUID
+    var scenarioID: UUID
+    var parentActivityID: UUID?
+    var hierarchyLevel: ActivityHierarchyLevel
     var title: String
     var estimatedStartDate: Date
     var estimatedEndDate: Date
@@ -1830,6 +1964,9 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
     init(
         id: UUID = UUID(),
         projectID: UUID,
+        scenarioID: UUID,
+        parentActivityID: UUID? = nil,
+        hierarchyLevel: ActivityHierarchyLevel = .activityTask,
         title: String,
         estimatedStartDate: Date,
         estimatedEndDate: Date,
@@ -1842,6 +1979,9 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
     ) {
         self.id = id
         self.projectID = projectID
+        self.scenarioID = scenarioID
+        self.parentActivityID = parentActivityID
+        self.hierarchyLevel = hierarchyLevel
         self.title = title
         self.estimatedStartDate = estimatedStartDate
         self.estimatedEndDate = estimatedEndDate
@@ -1856,6 +1996,9 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id
         case projectID
+        case scenarioID
+        case parentActivityID
+        case hierarchyLevel
         case title
         case estimatedStartDate
         case estimatedEndDate
@@ -1871,6 +2014,9 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         projectID = try container.decode(UUID.self, forKey: .projectID)
+        scenarioID = try container.decodeIfPresent(UUID.self, forKey: .scenarioID) ?? projectID
+        parentActivityID = try container.decodeIfPresent(UUID.self, forKey: .parentActivityID)
+        hierarchyLevel = try container.decodeIfPresent(ActivityHierarchyLevel.self, forKey: .hierarchyLevel) ?? .activityTask
         title = try container.decode(String.self, forKey: .title)
         estimatedStartDate = try container.decode(Date.self, forKey: .estimatedStartDate)
         estimatedEndDate = try container.decode(Date.self, forKey: .estimatedEndDate)
@@ -1886,6 +2032,9 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(projectID, forKey: .projectID)
+        try container.encode(scenarioID, forKey: .scenarioID)
+        try container.encodeIfPresent(parentActivityID, forKey: .parentActivityID)
+        try container.encode(hierarchyLevel, forKey: .hierarchyLevel)
         try container.encode(title, forKey: .title)
         try container.encode(estimatedStartDate, forKey: .estimatedStartDate)
         try container.encode(estimatedEndDate, forKey: .estimatedEndDate)
@@ -1917,6 +2066,7 @@ extension ProjectActivity {
 struct PlanningBaselineActivitySnapshot: Identifiable, Codable, Hashable {
     var id: UUID
     var title: String
+    var hierarchyLevel: ActivityHierarchyLevel
     var estimatedStartDate: Date
     var estimatedEndDate: Date
     var predecessorActivityIDs: [UUID]
@@ -1925,6 +2075,7 @@ struct PlanningBaselineActivitySnapshot: Identifiable, Codable, Hashable {
     init(from activity: ProjectActivity) {
         id = activity.id
         title = activity.title
+        hierarchyLevel = activity.hierarchyLevel
         estimatedStartDate = activity.estimatedStartDate
         estimatedEndDate = activity.estimatedEndDate
         predecessorActivityIDs = activity.predecessorActivityIDs
@@ -1936,6 +2087,7 @@ struct PlanningBaseline: Identifiable, Codable, Hashable {
     var id: UUID
     var label: String
     var validatedBy: String
+    var scenarioID: UUID?
     var activitySnapshots: [PlanningBaselineActivitySnapshot]
     var createdAt: Date
 
@@ -1943,12 +2095,14 @@ struct PlanningBaseline: Identifiable, Codable, Hashable {
         id: UUID = UUID(),
         label: String,
         validatedBy: String,
+        scenarioID: UUID? = nil,
         activitySnapshots: [PlanningBaselineActivitySnapshot],
         createdAt: Date = .now
     ) {
         self.id = id
         self.label = label
         self.validatedBy = validatedBy
+        self.scenarioID = scenarioID
         self.activitySnapshots = activitySnapshots
         self.createdAt = createdAt
     }

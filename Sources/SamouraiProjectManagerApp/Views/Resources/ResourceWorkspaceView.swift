@@ -27,24 +27,44 @@ struct ResourceWorkspaceView: View {
     @State private var inlineEditFeedbackMessage: String?
     @State private var evaluationContext: ResourceEvaluationContext?
     @State private var evaluationFeedbackMessage: String?
+    @State private var projectFavoriteFilter: ResourceProjectFavoriteFilter = .all
+    @State private var sortOrder: [KeyPathComparator<Resource>] = [
+        .init(\.fullName, order: .reverse)
+    ]
     @FocusState private var focusedInlineCell: ResourceInlineCellKey?
 
     var body: some View {
         @Bindable var appState = appState
 
-        HSplitView {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 420, sidebarIdealWidth: 560) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Ressources humaines")
+                        Text("Annuaire des ressources")
                             .font(.title2.weight(.semibold))
-                        Text("\(filteredResources.count) / \(scopedResources.count) ressource(s) affichée(s)")
+                        Text("\(filteredResources.count) / \(searchBaseResources.count) ressource(s) affichée(s)")
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
                     if let selectedResource = selectedResource {
+                        if canAssignSelectedResourceToScopedProject {
+                            Button {
+                                assignSelectedResourceToScopedProject()
+                            } label: {
+                                Label("Ajouter au projet", systemImage: "plus.circle")
+                            }
+                            .disabled(isImporting)
+                        } else if canRemoveSelectedResourceFromScopedProject {
+                            Button {
+                                removeSelectedResourceFromScopedProject()
+                            } label: {
+                                Label("Retirer du projet", systemImage: "minus.circle")
+                            }
+                            .disabled(isImporting)
+                        }
+
                         Button {
                             evaluationContext = .init(resourceID: selectedResource.id)
                         } label: {
@@ -122,8 +142,21 @@ struct ResourceWorkspaceView: View {
                     .padding(.horizontal, 16)
 
                     HStack(spacing: 12) {
-                        TextField("Rechercher une ressource", text: $searchText)
+                        TextField(
+                            scopedProjectID == nil ? "Rechercher dans l'annuaire" : "Rechercher dans l'annuaire global et le projet",
+                            text: $searchText
+                        )
                             .textFieldStyle(.roundedBorder)
+
+                        if scopedProjectID != nil {
+                            Picker("Favoris", selection: $projectFavoriteFilter) {
+                                ForEach(ResourceProjectFavoriteFilter.allCases) { filter in
+                                    Text(filter.label).tag(filter)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 220)
+                        }
 
                         Picker("Affichage", selection: displayModeBinding) {
                             ForEach(ResourceDisplayMode.allCases) { mode in
@@ -143,21 +176,28 @@ struct ResourceWorkspaceView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 4)
 
+                    if let assignmentContextNote {
+                        Text(assignmentContextNote)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                    }
+
                     resourceCollectionView(selectedResourceID: $appState.selectedResourceID)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
                 .overlay {
-                    if scopedResources.isEmpty {
+                    if searchBaseResources.isEmpty {
                         ContentUnavailableView(
                             "Aucune ressource",
                             systemImage: "person.3",
-                            description: Text("Crée les membres de ton dispositif projet pour suivre la capacité réelle.")
+                            description: Text("Importe ou crée les ressources du référentiel pour les réutiliser dans les projets.")
                         )
                     } else if filteredResources.isEmpty {
                         ContentUnavailableView(
                             "Aucun résultat",
                             systemImage: "line.3.horizontal.decrease.circle",
-                            description: Text("Ajuste la recherche ou la colonne filtrée pour retrouver des ressources.")
+                            description: Text("Ajuste la recherche pour retrouver une ressource de l'annuaire ou l'ajouter au projet en cours.")
                         )
                     }
                 }
@@ -165,17 +205,30 @@ struct ResourceWorkspaceView: View {
             .frame(maxHeight: .infinity)
             .frame(minWidth: 420, idealWidth: 560)
 
+        } detail: {
             Group {
                 if let selectedResourceID = appState.selectedResourceID,
                    let resource = store.resource(with: selectedResourceID) {
                     ResourceDetailView(
                         resource: resource,
                         assignedProjectNames: projectNames(for: resource.assignedProjectIDs),
+                        scopedProjectName: scopedProjectName,
+                        isAssignedToScopedProject: scopedProjectID.flatMap { resource.assignedProjectIDs.contains($0) } ?? false,
+                        isFavoriteInScopedProject: scopedProjectID.flatMap { resource.isFavorite(in: $0) } ?? false,
                         performanceSnapshot: store.performanceSnapshot(for: resource.id, scopedProjectID: scopedProjectID),
                         scopedEvaluations: scopedEvaluations(for: resource),
                         onEdit: {
                             editorContext = .edit(resource.id)
                         },
+                        onAssignToScopedProject: canAssignResource(resource) ? {
+                            assignResourceToScopedProject(resource.id)
+                        } : nil,
+                        onRemoveFromScopedProject: canRemoveResource(resource) ? {
+                            removeResourceFromScopedProject(resource.id)
+                        } : nil,
+                        onToggleFavoriteInScopedProject: canToggleFavorite(resource) ? {
+                            toggleFavoriteForScopedProject(resource.id)
+                        } : nil,
                         onEvaluate: {
                             evaluationContext = .init(resourceID: resource.id)
                         },
@@ -191,34 +244,47 @@ struct ResourceWorkspaceView: View {
                     )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .sheet(item: $editorContext) { context in
-            ResourceEditorSheet(resource: context.resource(in: store))
-        }
-        .sheet(item: $evaluationContext) { context in
-            if let resource = store.resource(with: context.resourceID) {
-                ResourceEvaluationSheet(
-                    resource: resource,
-                    scopedProject: scopedProjectID.flatMap { store.project(with: $0) },
-                    onSave: { payload in
-                        store.addResourceEvaluation(
-                            resourceID: resource.id,
-                            projectID: scopedProjectID,
-                            milestone: payload.milestone,
-                            evaluator: payload.evaluator,
-                            comment: payload.comment,
-                            criterionScores: payload.criterionScores,
-                            evaluatedAt: payload.evaluatedAt
-                        )
-                        evaluationFeedbackMessage = "Évaluation enregistrée pour \(resource.displayName)."
-                    }
-                )
-            } else {
-                Text("Ressource introuvable.")
-                    .padding(24)
+        .inspector(isPresented: Binding(
+            get: { editorContext != nil || evaluationContext != nil },
+            set: { isPresented in
+                if isPresented == false {
+                    editorContext = nil
+                    evaluationContext = nil
+                }
+            }
+        )) {
+            if let context = editorContext {
+                ResourceEditorSheet(resource: context.resource(in: store))
+            } else if let context = evaluationContext {
+                if let resource = store.resource(with: context.resourceID) {
+                    ResourceEvaluationSheet(
+                        resource: resource,
+                        scopedProject: scopedProjectID.flatMap { store.project(with: $0) },
+                        onSave: { payload in
+                            store.addResourceEvaluation(
+                                resourceID: resource.id,
+                                projectID: scopedProjectID,
+                                milestone: payload.milestone,
+                                evaluator: payload.evaluator,
+                                comment: payload.comment,
+                                criterionScores: payload.criterionScores,
+                                evaluatedAt: payload.evaluatedAt
+                            )
+                            evaluationFeedbackMessage = "Évaluation enregistrée pour \(resource.displayName)."
+                        }
+                    )
+                } else {
+                    Text("Ressource introuvable.")
+                        .padding(24)
+                }
             }
         }
+        .inspectorColumnWidth(min: 520, ideal: 680, max: 860)
+        .dynamicWindowSizingForInspector(
+            isPresented: editorContext != nil || evaluationContext != nil,
+            preferredInspectorWidth: 680
+        )
         .fileImporter(
             isPresented: $isShowingFileImporter,
             allowedContentTypes: SamouraiImportContentTypes.allowedTypes,
@@ -333,6 +399,10 @@ struct ResourceWorkspaceView: View {
         appState.resolvedPrimaryProjectID(in: store)
     }
 
+    private var scopedProjectName: String? {
+        scopedProjectID.flatMap { store.project(with: $0)?.name }
+    }
+
     private var resourceProfilingReport: ResourceProfilingReport {
         store.resourceProfiling(for: scopedProjectID)
     }
@@ -377,9 +447,20 @@ struct ResourceWorkspaceView: View {
         return Array(ordered.prefix(9))
     }
 
+    private var searchBaseResources: [Resource] {
+        if scopedProjectID != nil, searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return store.resources
+        }
+        return scopedResources
+    }
+
     private var filteredResources: [Resource] {
         let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedQuery.isEmpty == false else { return scopedResources }
+        guard trimmedQuery.isEmpty == false else {
+            return scopedResources
+                .filter(matchesScopedFavoriteFilter)
+                .sorted(using: sortOrder)
+        }
 
         let terms = trimmedQuery
             .split(whereSeparator: \.isWhitespace)
@@ -387,9 +468,10 @@ struct ResourceWorkspaceView: View {
             .map(normalize)
             .filter { $0.isEmpty == false }
 
-        guard terms.isEmpty == false else { return scopedResources }
+        guard terms.isEmpty == false else { return scopedResources.sorted(using: sortOrder) }
 
-        return scopedResources.filter { resource in
+        return searchBaseResources.filter { resource in
+            guard matchesScopedFavoriteFilter(resource) else { return false }
             let resourceProjectNames = projectNames(for: resource.assignedProjectIDs)
             let searchableValues = allSearchableValues(for: resource, assignedProjectNames: resourceProjectNames)
             let normalizedEmail = normalize(resource.email)
@@ -404,6 +486,7 @@ struct ResourceWorkspaceView: View {
                 return searchableValues.contains { normalize($0).contains(term) }
             }
         }
+        .sorted(using: sortOrder)
     }
 
     private var scopedResources: [Resource] {
@@ -411,6 +494,34 @@ struct ResourceWorkspaceView: View {
             return store.resources.filter { $0.assignedProjectIDs.contains(primaryProjectID) }
         }
         return store.resources
+    }
+
+    private func matchesScopedFavoriteFilter(_ resource: Resource) -> Bool {
+        guard let scopedProjectID else { return true }
+        switch projectFavoriteFilter {
+        case .all:
+            return true
+        case .favoritesOnly:
+            return resource.isFavorite(in: scopedProjectID)
+        }
+    }
+
+    private var assignmentContextNote: String? {
+        guard let scopedProjectName else { return nil }
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Affichage centré sur les ressources déjà affectées à \(scopedProjectName). Lance une recherche pour explorer tout l'annuaire et ajouter une ressource existante."
+        }
+        return "Recherche annuaire globale active pour \(scopedProjectName). Les ressources non encore affectées peuvent être ajoutées directement au projet."
+    }
+
+    private var canAssignSelectedResourceToScopedProject: Bool {
+        guard let selectedResource else { return false }
+        return canAssignResource(selectedResource)
+    }
+
+    private var canRemoveSelectedResourceFromScopedProject: Bool {
+        guard let selectedResource else { return false }
+        return canRemoveResource(selectedResource)
     }
 
     @ViewBuilder
@@ -426,11 +537,15 @@ struct ResourceWorkspaceView: View {
                         ResourceGridCard(
                             resource: resource,
                             assignedProjectNames: projectNames(for: resource.assignedProjectIDs),
+                            scopedProjectID: scopedProjectID,
                             isSelected: selectedResourceID.wrappedValue == resource.id,
                             isMarkedForExport: selectedResourceIDs.contains(resource.id),
                             onToggleExportSelection: {
                                 toggleResourceSelectionForExport(resource.id)
-                            }
+                            },
+                            onToggleFavorite: canToggleFavorite(resource)
+                                ? ({ toggleFavoriteForScopedProject(resource.id) })
+                                : nil
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -460,22 +575,34 @@ struct ResourceWorkspaceView: View {
                         .padding(.horizontal, 16)
                 }
 
-                Table(filteredResources, selection: selectedResourceID) {
+                Table(filteredResources, selection: selectedResourceID, sortOrder: $sortOrder) {
                     TableColumn("") { resource in
-                        Button {
-                            toggleResourceSelectionForExport(resource.id)
-                        } label: {
-                            Image(systemName: selectedResourceIDs.contains(resource.id) ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(selectedResourceIDs.contains(resource.id) ? Color.accentColor : .secondary)
+                        HStack(spacing: 8) {
+                            Button {
+                                toggleResourceSelectionForExport(resource.id)
+                            } label: {
+                                Image(systemName: selectedResourceIDs.contains(resource.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(selectedResourceIDs.contains(resource.id) ? Color.accentColor : .secondary)
+                            }
+                            .buttonStyle(.plain)
+
+                            if let scopedProjectID, resource.assignedProjectIDs.contains(scopedProjectID) {
+                                Button {
+                                    toggleFavoriteForScopedProject(resource.id)
+                                } label: {
+                                    Image(systemName: resource.isFavorite(in: scopedProjectID) ? "star.fill" : "star")
+                                        .foregroundStyle(resource.isFavorite(in: scopedProjectID) ? .yellow : .secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
-                    .width(34)
+                    .width(68)
 
                     TableColumnForEach(activeTableColumns) { column in
                         switch column {
                         case .name:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.fullName) { (resource: Resource) in
                                 TextField(
                                     "Nom",
                                     text: inlineTextBinding(for: resource, field: \.nom)
@@ -489,7 +616,7 @@ struct ResourceWorkspaceView: View {
                             .width(min: 160, ideal: 220)
 
                         case .primaryResourceRole:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.primaryResourceRoleSortKey) { (resource: Resource) in
                                 TextField(
                                     "Rôle",
                                     text: inlineTextBinding(for: resource, field: \.primaryResourceRole)
@@ -503,7 +630,7 @@ struct ResourceWorkspaceView: View {
                             .width(min: 150, ideal: 200)
 
                         case .parentDescription:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.parentDescriptionSortKey) { (resource: Resource) in
                                 TextField(
                                     "Département",
                                     text: inlineTextBinding(for: resource, field: \.parentDescription)
@@ -517,14 +644,14 @@ struct ResourceWorkspaceView: View {
                             .width(min: 130, ideal: 180)
 
                         case .projects:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.assignedProjectCount) { (resource: Resource) in
                                 let assignedProjectNames = projectNames(for: resource.assignedProjectIDs)
                                 Text(assignedProjectNames.isEmpty ? "-" : assignedProjectNames.joined(separator: ", "))
                             }
                             .width(min: 180, ideal: 260)
 
                         case .allocationPercent:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.allocationPercent) { (resource: Resource) in
                                 TextField(
                                     "Allocation",
                                     text: inlineTextBinding(for: resource, field: \.allocationPercentText)
@@ -539,7 +666,7 @@ struct ResourceWorkspaceView: View {
                             .width(min: 70, ideal: 90)
 
                         case .status:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.statusSortKey) { (resource: Resource) in
                                 Picker(
                                     "Statut",
                                     selection: inlineStatusBinding(for: resource)
@@ -554,7 +681,7 @@ struct ResourceWorkspaceView: View {
                             .width(min: 100, ideal: 130)
 
                         case .engagement:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.engagementSortKey) { (resource: Resource) in
                                 Picker(
                                     "Engagement",
                                     selection: inlineEngagementBinding(for: resource)
@@ -569,7 +696,7 @@ struct ResourceWorkspaceView: View {
                             .width(min: 100, ideal: 140)
 
                         case .email:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.email) { (resource: Resource) in
                                 TextField(
                                     "E-mail",
                                     text: inlineTextBinding(for: resource, field: \.email)
@@ -583,7 +710,7 @@ struct ResourceWorkspaceView: View {
                             .width(min: 180, ideal: 240)
 
                         case .phone:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.phone) { (resource: Resource) in
                                 TextField(
                                     "Téléphone",
                                     text: inlineTextBinding(for: resource, field: \.phone)
@@ -597,85 +724,85 @@ struct ResourceWorkspaceView: View {
                             .width(min: 120, ideal: 160)
 
                         case .resourceRoles:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.resourceRolesSortKey) { (resource: Resource) in
                                 Text(resource.resourceRoles ?? "-")
                             }
                             .width(min: 140, ideal: 190)
 
                         case .organizationalResource:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.organizationalResourceSortKey) { (resource: Resource) in
                                 Text(resource.organizationalResource ?? "-")
                             }
                             .width(min: 140, ideal: 190)
 
                         case .competence1:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.competence1SortKey) { (resource: Resource) in
                                 Text(resource.competence1 ?? "-")
                             }
                             .width(min: 120, ideal: 160)
 
                         case .resourceCalendar:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.resourceCalendarSortKey) { (resource: Resource) in
                                 Text(resource.resourceCalendar ?? "-")
                             }
                             .width(min: 120, ideal: 160)
 
                         case .resourceStartDate:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.resourceStartDateSortKey) { (resource: Resource) in
                                 Text(resource.resourceStartDate?.formatted(date: .abbreviated, time: .omitted) ?? "-")
                             }
                             .width(min: 110, ideal: 140)
 
                         case .resourceFinishDate:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.resourceFinishDateSortKey) { (resource: Resource) in
                                 Text(resource.resourceFinishDate?.formatted(date: .abbreviated, time: .omitted) ?? "-")
                             }
                             .width(min: 110, ideal: 140)
 
                         case .responsableOperationnel:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.responsableOperationnelSortKey) { (resource: Resource) in
                                 Text(resource.responsableOperationnel ?? "-")
                             }
                             .width(min: 120, ideal: 170)
 
                         case .responsableInterne:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.responsableInterneSortKey) { (resource: Resource) in
                                 Text(resource.responsableInterne ?? "-")
                             }
                             .width(min: 130, ideal: 170)
 
                         case .localisation:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.localisationSortKey) { (resource: Resource) in
                                 Text(resource.localisation ?? "-")
                             }
                             .width(min: 110, ideal: 150)
 
                         case .typeDeRessource:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.typeDeRessourceSortKey) { (resource: Resource) in
                                 Text(resource.typeDeRessource ?? "-")
                             }
                             .width(min: 100, ideal: 140)
 
                         case .journeesTempsPartiel:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.journeesTempsPartielSortKey) { (resource: Resource) in
                                 Text(resource.journeesTempsPartiel ?? "-")
                             }
                             .width(min: 100, ideal: 140)
 
                         case .notes:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.notes) { (resource: Resource) in
                                 Text(resource.notes.isEmpty ? "-" : resource.notes)
                             }
                             .width(min: 160, ideal: 260)
 
                         case .createdAt:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.createdAt) { (resource: Resource) in
                                 Text(resource.createdAt.formatted(date: .abbreviated, time: .omitted))
                             }
                             .width(min: 110, ideal: 140)
 
                         case .updatedAt:
-                            TableColumn(column.label) { (resource: Resource) in
+                            TableColumn(column.label, value: \.updatedAt) { (resource: Resource) in
                                 Text(resource.updatedAt.formatted(date: .abbreviated, time: .omitted))
                             }
                             .width(min: 110, ideal: 140)
@@ -869,6 +996,46 @@ struct ResourceWorkspaceView: View {
         } else {
             selectedResourceIDs.insert(resourceID)
         }
+    }
+
+    private func canAssignResource(_ resource: Resource) -> Bool {
+        guard let scopedProjectID else { return false }
+        return resource.assignedProjectIDs.contains(scopedProjectID) == false
+    }
+
+    private func canToggleFavorite(_ resource: Resource) -> Bool {
+        guard let scopedProjectID else { return false }
+        return resource.assignedProjectIDs.contains(scopedProjectID)
+    }
+
+    private func canRemoveResource(_ resource: Resource) -> Bool {
+        guard let scopedProjectID else { return false }
+        return resource.assignedProjectIDs.contains(scopedProjectID)
+    }
+
+    private func assignSelectedResourceToScopedProject() {
+        guard let selectedResource else { return }
+        assignResourceToScopedProject(selectedResource.id)
+    }
+
+    private func removeSelectedResourceFromScopedProject() {
+        guard let selectedResource else { return }
+        removeResourceFromScopedProject(selectedResource.id)
+    }
+
+    private func assignResourceToScopedProject(_ resourceID: UUID) {
+        guard let scopedProjectID else { return }
+        store.assignResource(resourceID: resourceID, to: scopedProjectID)
+    }
+
+    private func removeResourceFromScopedProject(_ resourceID: UUID) {
+        guard let scopedProjectID else { return }
+        store.unassignResource(resourceID: resourceID, from: scopedProjectID)
+    }
+
+    private func toggleFavoriteForScopedProject(_ resourceID: UUID) {
+        guard let scopedProjectID else { return }
+        store.toggleFavoriteResource(resourceID: resourceID, in: scopedProjectID)
     }
 
     private func prepareExport(resources: [Resource], defaultFilename: String) {
@@ -1357,6 +1524,20 @@ private struct ResourceImportReviewSheet: View {
                     Text("Validation ligne par ligne")
                         .font(.title2.weight(.semibold))
                     Spacer()
+                    Button("Tout conserver") {
+                        for index in decisions.indices where decisions[index].reviewItem.action == .update {
+                            decisions[index].shouldApply = false
+                        }
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Tout écraser") {
+                        for index in decisions.indices where decisions[index].reviewItem.action == .update {
+                            decisions[index].shouldApply = true
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+
                     Text(summaryText)
                         .foregroundStyle(.secondary)
                 }
@@ -1376,7 +1557,12 @@ private struct ResourceImportReviewSheet: View {
 
                             switch decision.reviewItem.action {
                             case .create, .update:
-                                Toggle("Valider cet écrasement", isOn: $decision.shouldApply)
+                                Toggle(
+                                    decision.reviewItem.action == .update
+                                        ? "Écraser les informations existantes avec l'import"
+                                        : "Importer cette nouvelle ressource",
+                                    isOn: $decision.shouldApply
+                                )
                                     .toggleStyle(.checkbox)
                             case .noChange:
                                 Text("Aucune modification détectée.")
@@ -1496,6 +1682,22 @@ private struct ResourceEvaluationContext: Identifiable {
     var id: UUID { resourceID }
 }
 
+private enum ResourceProjectFavoriteFilter: String, CaseIterable, Identifiable {
+    case all
+    case favoritesOnly
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all:
+            "Toutes"
+        case .favoritesOnly:
+            "Favoris"
+        }
+    }
+}
+
 private enum ResourceDisplayMode: String, CaseIterable, Identifiable {
     case grid
     case table
@@ -1521,12 +1723,33 @@ private enum ResourceDisplayMode: String, CaseIterable, Identifiable {
     }
 }
 
+private extension Resource {
+    var assignedProjectCount: Int { assignedProjectIDs.count }
+    var primaryResourceRoleSortKey: String { primaryResourceRole ?? "" }
+    var parentDescriptionSortKey: String { parentDescription ?? "" }
+    var statusSortKey: String { status.rawValue }
+    var engagementSortKey: String { engagement.rawValue }
+    var resourceRolesSortKey: String { resourceRoles ?? "" }
+    var organizationalResourceSortKey: String { organizationalResource ?? "" }
+    var competence1SortKey: String { competence1 ?? "" }
+    var resourceCalendarSortKey: String { resourceCalendar ?? "" }
+    var resourceStartDateSortKey: Date { resourceStartDate ?? .distantPast }
+    var resourceFinishDateSortKey: Date { resourceFinishDate ?? .distantPast }
+    var responsableOperationnelSortKey: String { responsableOperationnel ?? "" }
+    var responsableInterneSortKey: String { responsableInterne ?? "" }
+    var localisationSortKey: String { localisation ?? "" }
+    var typeDeRessourceSortKey: String { typeDeRessource ?? "" }
+    var journeesTempsPartielSortKey: String { journeesTempsPartiel ?? "" }
+}
+
 private struct ResourceGridCard: View {
     let resource: Resource
     let assignedProjectNames: [String]
+    let scopedProjectID: UUID?
     let isSelected: Bool
     let isMarkedForExport: Bool
     let onToggleExportSelection: () -> Void
+    let onToggleFavorite: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1534,6 +1757,15 @@ private struct ResourceGridCard: View {
                 Text(resource.displayName)
                     .font(.headline)
                 Spacer()
+                if let scopedProjectID, resource.assignedProjectIDs.contains(scopedProjectID) {
+                    Button(action: {
+                        onToggleFavorite?()
+                    }) {
+                        Image(systemName: resource.isFavorite(in: scopedProjectID) ? "star.fill" : "star")
+                            .foregroundStyle(resource.isFavorite(in: scopedProjectID) ? .yellow : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
                 Button(action: onToggleExportSelection) {
                     Image(systemName: isMarkedForExport ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(isMarkedForExport ? Color.accentColor : .secondary)
@@ -1568,9 +1800,15 @@ private struct ResourceGridCard: View {
 private struct ResourceDetailView: View {
     let resource: Resource
     let assignedProjectNames: [String]
+    let scopedProjectName: String?
+    let isAssignedToScopedProject: Bool
+    let isFavoriteInScopedProject: Bool
     let performanceSnapshot: ResourcePerformanceSnapshot?
     let scopedEvaluations: [ResourcePerformanceEvaluation]
     let onEdit: () -> Void
+    let onAssignToScopedProject: (() -> Void)?
+    let onRemoveFromScopedProject: (() -> Void)?
+    let onToggleFavoriteInScopedProject: (() -> Void)?
     let onEvaluate: () -> Void
     let onDelete: () -> Void
 
@@ -1589,6 +1827,20 @@ private struct ResourceDetailView: View {
                         Spacer()
 
                         HStack {
+                            if let onToggleFavoriteInScopedProject, let scopedProjectName, isAssignedToScopedProject {
+                                Button(action: onToggleFavoriteInScopedProject) {
+                                    Label(
+                                        isFavoriteInScopedProject ? "Favori \(scopedProjectName)" : "Marquer favori",
+                                        systemImage: isFavoriteInScopedProject ? "star.fill" : "star"
+                                    )
+                                }
+                                .tint(isFavoriteInScopedProject ? .yellow : .accentColor)
+                            }
+                            if let onAssignToScopedProject, let scopedProjectName, isAssignedToScopedProject == false {
+                                Button("Ajouter à \(scopedProjectName)", action: onAssignToScopedProject)
+                            } else if let onRemoveFromScopedProject, let scopedProjectName, isAssignedToScopedProject {
+                                Button("Retirer de \(scopedProjectName)", action: onRemoveFromScopedProject)
+                            }
                             Button("Évaluer", action: onEvaluate)
                             Button("Modifier", action: onEdit)
                             Button("Supprimer", role: .destructive, action: onDelete)

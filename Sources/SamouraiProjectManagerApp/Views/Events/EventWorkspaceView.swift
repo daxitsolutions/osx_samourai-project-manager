@@ -12,11 +12,14 @@ struct EventWorkspaceView: View {
     @State private var exportDocument: EntityCSVDocument?
     @State private var exportFilename = "events"
     @State private var isShowingDeleteConfirmation = false
+    @State private var sortOrder: [KeyPathComparator<ProjectEvent>] = [
+        .init(\.happenedAt, order: .reverse)
+    ]
 
     var body: some View {
         @Bindable var appState = appState
 
-        HSplitView {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 760, sidebarIdealWidth: 900) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -94,13 +97,13 @@ struct EventWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredEvents, selection: $selectedEventIDs) {
-                        TableColumn("Date/Heure") { event in
+                    Table(filteredEvents, selection: $selectedEventIDs, sortOrder: $sortOrder) {
+                        TableColumn("Date/Heure", value: \.happenedAt) { event in
                             Text(event.happenedAt.formatted(date: .abbreviated, time: .shortened))
                         }
                         .width(min: 160, ideal: 190)
 
-                        TableColumn("Priorité") { event in
+                        TableColumn("Priorité", value: \.prioritySortWeight) { event in
                             Picker(
                                 "Priorité",
                                 selection: Binding(
@@ -128,7 +131,7 @@ struct EventWorkspaceView: View {
                         }
                         .width(min: 110, ideal: 120)
 
-                        TableColumn("Événement") { event in
+                        TableColumn("Événement", value: \.displayTitle) { event in
                             TextField(
                                 "Événement",
                                 text: Binding(
@@ -152,18 +155,18 @@ struct EventWorkspaceView: View {
                         }
                         .width(min: 220, ideal: 320)
 
-                        TableColumn("Source") { event in
+                        TableColumn("Source", value: \.sourceSortKey) { event in
                             Text(event.hasSource ? event.source : "-")
                                 .foregroundStyle(event.hasSource ? .primary : .secondary)
                         }
                         .width(min: 180, ideal: 250)
 
-                        TableColumn("Projet") { event in
+                        TableColumn("Projet", value: \.projectIDSortKey) { event in
                             Text(store.projectName(for: event.projectID))
                         }
                         .width(min: 150, ideal: 220)
 
-                        TableColumn("Ressources") { event in
+                        TableColumn("Ressources", value: \.resourceCount) { event in
                             let names = store.resourceNames(for: event.resourceIDs)
                             Text(names.isEmpty ? "-" : names.joined(separator: ", "))
                                 .lineLimit(2)
@@ -175,6 +178,7 @@ struct EventWorkspaceView: View {
             }
             .frame(minWidth: 760, idealWidth: 900)
 
+        } detail: {
             Group {
                 if let event = selectedEvent {
                     EventDetailView(
@@ -197,11 +201,20 @@ struct EventWorkspaceView: View {
                     )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .sheet(item: $editorContext) { context in
-            EventEditorSheet(event: context.event(in: store))
+        .inspector(isPresented: Binding(
+            get: { editorContext != nil },
+            set: { if $0 == false { editorContext = nil } }
+        )) {
+            if let context = editorContext {
+                EventEditorSheet(event: context.event(in: store))
+            }
         }
+        .inspectorColumnWidth(min: 460, ideal: 620, max: 760)
+        .dynamicWindowSizingForInspector(
+            isPresented: editorContext != nil,
+            preferredInspectorWidth: 620
+        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -250,7 +263,7 @@ struct EventWorkspaceView: View {
     private var filteredEvents: [ProjectEvent] {
         let baseEvents = scopedEvents
         let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedQuery.isEmpty == false else { return baseEvents }
+        guard trimmedQuery.isEmpty == false else { return baseEvents.sorted(using: sortOrder) }
 
         let terms = trimmedQuery
             .split(whereSeparator: \.isWhitespace)
@@ -258,7 +271,7 @@ struct EventWorkspaceView: View {
             .map(normalize)
             .filter { $0.isEmpty == false }
 
-        guard terms.isEmpty == false else { return baseEvents }
+        guard terms.isEmpty == false else { return baseEvents.sorted(using: sortOrder) }
 
         return baseEvents.filter { event in
             let resourceNames = store.resourceNames(for: event.resourceIDs)
@@ -276,6 +289,7 @@ struct EventWorkspaceView: View {
                 normalizedValues.contains(where: { $0.contains(term) })
             }
         }
+        .sorted(using: sortOrder)
     }
 
     private var scopedEvents: [ProjectEvent] {
@@ -318,6 +332,13 @@ struct EventWorkspaceView: View {
         exportFilename = "samourai-evenements-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
         isShowingFileExporter = true
     }
+}
+
+private extension ProjectEvent {
+    var prioritySortWeight: Int { priority.sortWeight }
+    var sourceSortKey: String { source.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var projectIDSortKey: String { projectID?.uuidString ?? "" }
+    var resourceCount: Int { resourceIDs.count }
 }
 
 private struct EventDetailView: View {

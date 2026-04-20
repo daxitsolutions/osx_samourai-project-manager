@@ -15,11 +15,14 @@ struct RiskRegisterView: View {
     @State private var isShowingFileExporter = false
     @State private var exportDocument: EntityCSVDocument?
     @State private var exportFilename = "risks"
+    @State private var sortOrder: [KeyPathComparator<RiskEntry>] = [
+        .init(\.severitySortWeight, order: .reverse)
+    ]
 
     var body: some View {
         @Bindable var appState = appState
 
-        HSplitView {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 620, sidebarIdealWidth: 760) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -89,12 +92,12 @@ struct RiskRegisterView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredRisks, selection: $selectedRiskIDs) {
-                        TableColumn("ID") { entry in
+                    Table(filteredRisks, selection: $selectedRiskIDs, sortOrder: $sortOrder) {
+                        TableColumn("ID", value: \.externalIDSortKey) { entry in
                             Text(entry.risk.externalID ?? "-")
                         }
 
-                        TableColumn("Titre") { entry in
+                        TableColumn("Titre", value: \.titleSortKey) { entry in
                             TextField(
                                 "Titre",
                                 text: Binding(
@@ -113,11 +116,11 @@ struct RiskRegisterView: View {
                             .textFieldStyle(.plain)
                         }
 
-                        TableColumn("Projet(s)") { entry in
+                        TableColumn("Projet(s)", value: \.projectsSortKey) { entry in
                             Text(entry.risk.projectNames ?? entry.projectName)
                         }
 
-                        TableColumn("Assigné à") { entry in
+                        TableColumn("Assigné à", value: \.ownerSortKey) { entry in
                             TextField(
                                 "Owner",
                                 text: Binding(
@@ -136,7 +139,7 @@ struct RiskRegisterView: View {
                             .textFieldStyle(.plain)
                         }
 
-                        TableColumn("Sévérité") { entry in
+                        TableColumn("Sévérité", value: \.severitySortWeight) { entry in
                             Picker(
                                 "Sévérité",
                                 selection: Binding(
@@ -160,7 +163,7 @@ struct RiskRegisterView: View {
                             .pickerStyle(.menu)
                         }
 
-                        TableColumn("Statut") { entry in
+                        TableColumn("Statut", value: \.statusSortKey) { entry in
                             TextField(
                                 "Statut",
                                 text: Binding(
@@ -179,7 +182,7 @@ struct RiskRegisterView: View {
                             .textFieldStyle(.plain)
                         }
 
-                        TableColumn("Score") { entry in
+                        TableColumn("Score", value: \.scoreSortValue) { entry in
                             Text(scoreLabel(for: entry.risk.score0to10))
                         }
                     }
@@ -188,6 +191,7 @@ struct RiskRegisterView: View {
             }
             .frame(minWidth: 620, idealWidth: 760)
 
+        } detail: {
             Group {
                 if let selectedRiskID = appState.selectedRiskID,
                    let risk = store.risk(with: selectedRiskID) {
@@ -203,7 +207,6 @@ struct RiskRegisterView: View {
                     )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .fileImporter(
             isPresented: $isShowingFileImporter,
@@ -216,11 +219,16 @@ struct RiskRegisterView: View {
         ) { result in
             handleImportSelection(result)
         }
-        .sheet(isPresented: $isShowingManualRiskEditor) {
+        .inspector(isPresented: $isShowingManualRiskEditor) {
             ManualRiskEditorSheet(
                 suggestedProjectID: appState.resolvedPrimaryProjectID(in: store)
             )
         }
+        .inspectorColumnWidth(min: 460, ideal: 580, max: 760)
+        .dynamicWindowSizingForInspector(
+            isPresented: isShowingManualRiskEditor,
+            preferredInspectorWidth: 580
+        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -312,7 +320,7 @@ struct RiskRegisterView: View {
 
     private var filteredRisks: [RiskEntry] {
         let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedQuery.isEmpty == false else { return scopedRisks }
+        guard trimmedQuery.isEmpty == false else { return scopedRisks.sorted(using: sortOrder) }
         let terms = trimmedQuery
             .split(whereSeparator: \.isWhitespace)
             .map { $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current) }
@@ -331,6 +339,7 @@ struct RiskRegisterView: View {
                 normalized.contains(where: { $0.contains(term) })
             }
         }
+        .sorted(using: sortOrder)
     }
 
     private var selectedRisksForExport: [RiskEntry] {
@@ -360,6 +369,16 @@ struct RiskRegisterView: View {
     private func deleteRisk(_ riskID: UUID) {
         store.deleteRisk(riskID: riskID)
     }
+}
+
+private extension RiskEntry {
+    var externalIDSortKey: String { risk.externalID ?? "" }
+    var titleSortKey: String { risk.displayTitle }
+    var projectsSortKey: String { risk.projectNames ?? projectName }
+    var ownerSortKey: String { risk.displayOwner }
+    var severitySortWeight: Int { risk.severity.sortWeight }
+    var statusSortKey: String { risk.displayStatus }
+    var scoreSortValue: Double { risk.score0to10 ?? -1 }
 }
 
 private struct ManualRiskEditorSheet: View {

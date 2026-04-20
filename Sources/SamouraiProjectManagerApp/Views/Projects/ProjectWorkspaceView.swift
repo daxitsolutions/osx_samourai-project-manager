@@ -14,7 +14,7 @@ struct ProjectWorkspaceView: View {
         @Bindable var appState = appState
         let projects = filteredProjects
 
-        HSplitView {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 280, sidebarIdealWidth: 320) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -93,6 +93,7 @@ struct ProjectWorkspaceView: View {
                 }
             }
 
+        } detail: {
             Group {
                 if let selectedProjectID = selectedProjectIDs.singleSelection {
                     ProjectDetailView(projectID: selectedProjectID)
@@ -104,7 +105,6 @@ struct ProjectWorkspaceView: View {
                     )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .fileExporter(
             isPresented: $isShowingFileExporter,

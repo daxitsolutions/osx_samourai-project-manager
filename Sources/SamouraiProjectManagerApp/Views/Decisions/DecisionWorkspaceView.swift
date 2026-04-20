@@ -15,11 +15,14 @@ struct DecisionWorkspaceView: View {
     @State private var exportDocument: EntityCSVDocument?
     @State private var exportFilename = "decisions"
     @State private var isShowingDeleteConfirmation = false
+    @State private var sortOrder: [KeyPathComparator<ProjectDecision>] = [
+        .init(\.sequenceNumber, order: .reverse)
+    ]
 
     var body: some View {
         @Bindable var appState = appState
 
-        HSplitView {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 900, sidebarIdealWidth: 1050) {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -97,14 +100,14 @@ struct DecisionWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredDecisions, selection: $selectedDecisionIDs) {
-                        TableColumn("Ref") { decision in
+                    Table(filteredDecisions, selection: $selectedDecisionIDs, sortOrder: $sortOrder) {
+                        TableColumn("Ref", value: \.sequenceNumber) { decision in
                             Text("D-\(decision.sequenceNumber)")
                                 .monospacedDigit()
                         }
                         .width(min: 70, ideal: 80)
 
-                        TableColumn("Statut") { decision in
+                        TableColumn("Statut", value: \.statusSortKey) { decision in
                             Picker(
                                 "Statut",
                                 selection: Binding(
@@ -133,7 +136,7 @@ struct DecisionWorkspaceView: View {
                         }
                         .width(min: 130, ideal: 160)
 
-                        TableColumn("Décision") { decision in
+                        TableColumn("Décision", value: \.displayTitle) { decision in
                             TextField(
                                 "Décision",
                                 text: Binding(
@@ -158,27 +161,27 @@ struct DecisionWorkspaceView: View {
                         }
                         .width(min: 240, ideal: 340)
 
-                        TableColumn("Projet") { decision in
+                        TableColumn("Projet", value: \.projectIDSortKey) { decision in
                             Text(store.projectName(for: decision.projectID))
                         }
                         .width(min: 150, ideal: 220)
 
-                        TableColumn("Réunions liées") { decision in
+                        TableColumn("Réunions liées", value: \.meetingCount) { decision in
                             Text("\(decision.meetingIDs.count)")
                         }
                         .width(min: 90, ideal: 110)
 
-                        TableColumn("Événements liés") { decision in
+                        TableColumn("Événements liés", value: \.eventCount) { decision in
                             Text("\(decision.eventIDs.count)")
                         }
                         .width(min: 100, ideal: 120)
 
-                        TableColumn("Révisions") { decision in
+                        TableColumn("Révisions", value: \.revisionCount) { decision in
                             Text("\(decision.history.count)")
                         }
                         .width(min: 90, ideal: 110)
 
-                        TableColumn("Commentaires") { decision in
+                        TableColumn("Commentaires", value: \.commentCount) { decision in
                             Text("\(decision.comments.count)")
                         }
                         .width(min: 110, ideal: 130)
@@ -188,6 +191,7 @@ struct DecisionWorkspaceView: View {
             }
             .frame(minWidth: 900, idealWidth: 1050)
 
+        } detail: {
             Group {
                 if let decision = selectedDecision {
                     DecisionDetailView(
@@ -215,11 +219,20 @@ struct DecisionWorkspaceView: View {
                     )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .sheet(item: $editorContext) { context in
-            DecisionEditorSheet(decision: context.decision(in: store))
+        .inspector(isPresented: Binding(
+            get: { editorContext != nil },
+            set: { if $0 == false { editorContext = nil } }
+        )) {
+            if let context = editorContext {
+                DecisionEditorSheet(decision: context.decision(in: store))
+            }
         }
+        .inspectorColumnWidth(min: 520, ideal: 700, max: 860)
+        .dynamicWindowSizingForInspector(
+            isPresented: editorContext != nil,
+            preferredInspectorWidth: 700
+        )
         .fileExporter(
             isPresented: $isShowingFileExporter,
             document: exportDocument,
@@ -276,7 +289,7 @@ struct DecisionWorkspaceView: View {
     private var filteredDecisions: [ProjectDecision] {
         let baseDecisions = scopedDecisions
         let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedQuery.isEmpty == false else { return baseDecisions }
+        guard trimmedQuery.isEmpty == false else { return baseDecisions.sorted(using: sortOrder) }
 
         let terms = trimmedQuery
             .split(whereSeparator: \.isWhitespace)
@@ -284,7 +297,7 @@ struct DecisionWorkspaceView: View {
             .map(normalize)
             .filter { $0.isEmpty == false }
 
-        guard terms.isEmpty == false else { return baseDecisions }
+        guard terms.isEmpty == false else { return baseDecisions.sorted(using: sortOrder) }
 
         return baseDecisions.filter { decision in
             var searchableValues: [String] = [
@@ -306,6 +319,7 @@ struct DecisionWorkspaceView: View {
                 normalizedValues.contains(where: { $0.contains(term) })
             }
         }
+        .sorted(using: sortOrder)
     }
 
     private var scopedDecisions: [ProjectDecision] {
@@ -359,6 +373,15 @@ struct DecisionWorkspaceView: View {
         store.addDecisionComment(decisionID: decisionID, author: newCommentAuthor, body: cleanedBody)
         newCommentBody = ""
     }
+}
+
+private extension ProjectDecision {
+    var statusSortKey: String { status.rawValue }
+    var projectIDSortKey: String { projectID?.uuidString ?? "" }
+    var meetingCount: Int { meetingIDs.count }
+    var eventCount: Int { eventIDs.count }
+    var revisionCount: Int { history.count }
+    var commentCount: Int { comments.count }
 }
 
 private struct DecisionDetailView: View {

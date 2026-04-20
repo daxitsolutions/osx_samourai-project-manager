@@ -19,7 +19,7 @@ struct DeliverableBoardView: View {
         Group {
             if let primaryProject = primaryProject {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: SamouraiLayout.sectionSpacing) {
                         header(primaryProject: primaryProject)
                         scopeDefinitionSection(primaryProject: primaryProject)
                         deliverablesWBSSection(primaryProject: primaryProject)
@@ -27,54 +27,69 @@ struct DeliverableBoardView: View {
                         changeControlSection(primaryProject: primaryProject)
                         annexIntegrationSection(primaryProject: primaryProject)
                     }
-                    .padding(24)
+                    .padding(SamouraiLayout.pagePadding)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .scrollIndicators(.visible)
             } else {
-                ContentUnavailableView(
-                    "Projet principal requis",
+                SamouraiEmptyStateCard(
+                    title: "Projet principal requis",
                     systemImage: "scope",
-                    description: Text("Définis un Projet Principal dans la barre supérieure pour piloter le périmètre et les livrables.")
+                    description: "Définis un Projet Principal dans la barre supérieure pour piloter le périmètre et les livrables."
                 )
             }
         }
-        .sheet(isPresented: $isShowingDeliverableEditor) {
-            DeliverableScopeEditorSheet(
-                primaryProject: primaryProject,
-                context: deliverableEditorContext,
-                onSave: { payload in
-                    guard let primaryProject else { return }
-                    store.addDeliverable(
-                        to: primaryProject.id,
-                        title: payload.title,
-                        details: payload.details,
-                        owner: payload.owner,
-                        dueDate: payload.dueDate,
-                        phase: payload.phase,
-                        parentDeliverableID: payload.parentDeliverableID,
-                        isMilestone: payload.isMilestone,
-                        acceptanceCriteria: payload.acceptanceCriteria
-                    )
+        .samouraiCanvasBackground()
+        .inspector(isPresented: Binding(
+            get: { isShowingDeliverableEditor || isShowingChangeRequestEditor },
+            set: { isPresented in
+                if isPresented == false {
+                    isShowingDeliverableEditor = false
+                    isShowingChangeRequestEditor = false
                 }
-            )
+            }
+        )) {
+            if isShowingDeliverableEditor {
+                DeliverableScopeEditorSheet(
+                    primaryProject: primaryProject,
+                    context: deliverableEditorContext,
+                    onSave: { payload in
+                        guard let primaryProject else { return }
+                        store.addDeliverable(
+                            to: primaryProject.id,
+                            title: payload.title,
+                            details: payload.details,
+                            owner: payload.owner,
+                            dueDate: payload.dueDate,
+                            phase: payload.phase,
+                            parentDeliverableID: payload.parentDeliverableID,
+                            isMilestone: payload.isMilestone,
+                            acceptanceCriteria: payload.acceptanceCriteria
+                        )
+                    }
+                )
+            } else if isShowingChangeRequestEditor {
+                ScopeChangeRequestEditorSheet(
+                    project: primaryProject,
+                    onSubmit: { payload in
+                        guard let primaryProject else { return }
+                        changeControlFeedbackMessage = store.submitScopeChangeRequest(
+                            projectID: primaryProject.id,
+                            description: payload.description,
+                            impactPlanning: payload.impactPlanning,
+                            impactResources: payload.impactResources,
+                            impactRisks: payload.impactRisks,
+                            requestedBy: payload.requestedBy
+                        ) ?? "Création impossible."
+                    }
+                )
+            }
         }
-        .sheet(isPresented: $isShowingChangeRequestEditor) {
-            ScopeChangeRequestEditorSheet(
-                project: primaryProject,
-                onSubmit: { payload in
-                    guard let primaryProject else { return }
-                    changeControlFeedbackMessage = store.submitScopeChangeRequest(
-                        projectID: primaryProject.id,
-                        description: payload.description,
-                        impactPlanning: payload.impactPlanning,
-                        impactResources: payload.impactResources,
-                        impactRisks: payload.impactRisks,
-                        requestedBy: payload.requestedBy
-                    ) ?? "Création impossible."
-                }
-            )
-        }
+        .inspectorColumnWidth(min: 500, ideal: 680, max: 860)
+        .dynamicWindowSizingForInspector(
+            isPresented: isShowingDeliverableEditor || isShowingChangeRequestEditor,
+            preferredInspectorWidth: 680
+        )
         .alert("Change Control", isPresented: Binding(
             get: { changeControlFeedbackMessage != nil },
             set: { if $0 == false { changeControlFeedbackMessage = nil } }
@@ -103,16 +118,11 @@ struct DeliverableBoardView: View {
 
     @ViewBuilder
     private func header(primaryProject: Project) -> some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Deliverables & Scope")
-                    .font(.largeTitle.weight(.semibold))
-                Text("Projet principal: \(primaryProject.name)")
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
+        SamouraiPageHeader(
+            eyebrow: "Scope",
+            title: "Livrables & périmètre",
+            subtitle: "Tout ce qui aide l’utilisateur à comprendre le scope, la couverture et les changements sans perdre le fil du projet."
+        ) {
             Button {
                 deliverableEditorContext = DeliverableEditorContext(parentDeliverableID: nil, suggestedPhase: .delivery)
                 isShowingDeliverableEditor = true
@@ -125,18 +135,16 @@ struct DeliverableBoardView: View {
 
     @ViewBuilder
     private func scopeDefinitionSection(primaryProject: Project) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("1) Définition du périmètre")
-                .font(.title2.weight(.semibold))
-
+        SamouraiSectionCard(
+            title: "Définition du périmètre",
+            subtitle: "Rendre explicite ce qui est inclus, exclu et connecté aux autres projets."
+        ) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("In scope")
                         .font(.headline)
                     TextEditor(text: $inScopeDraft)
-                        .frame(minHeight: 120)
-                        .padding(8)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .samouraiEditorSurface(minHeight: 140)
                     Text("Une ligne = un élément inclus")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -146,9 +154,7 @@ struct DeliverableBoardView: View {
                     Text("Out of scope")
                         .font(.headline)
                     TextEditor(text: $outOfScopeDraft)
-                        .frame(minHeight: 120)
-                        .padding(8)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .samouraiEditorSurface(minHeight: 140)
                     Text("Une ligne = un élément explicitement exclu")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -196,16 +202,16 @@ struct DeliverableBoardView: View {
 
     @ViewBuilder
     private func deliverablesWBSSection(primaryProject: Project) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("2) Structure des livrables (WBS légère)")
-                .font(.title2.weight(.semibold))
-
+        SamouraiSectionCard(
+            title: "Structure des livrables",
+            subtitle: "Une lecture simple du WBS léger, directement orientée action et validation."
+        ) {
             let deliverables = primaryProject.deliverables
             if deliverables.isEmpty {
-                ContentUnavailableView(
-                    "Aucun livrable",
+                SamouraiEmptyStateCard(
+                    title: "Aucun livrable",
                     systemImage: "checklist",
-                    description: Text("Crée un livrable principal puis ses sous-livrables par phase.")
+                    description: "Crée un livrable principal puis ses sous-livrables par phase."
                 )
             } else {
                 ForEach(DeliverablePhase.allCases) { phase in
@@ -225,8 +231,12 @@ struct DeliverableBoardView: View {
             .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
 
         VStack(alignment: .leading, spacing: 10) {
-            Text(phase.label)
-                .font(.headline)
+            HStack {
+                Text(phase.label)
+                    .font(.headline)
+                Spacer()
+                SamouraiStatusPill(text: "\(mains.count) bloc(s)", tint: SamouraiSurface.accent)
+            }
 
             ForEach(mains) { main in
                 deliverableCard(projectID: projectID, deliverable: main, level: 0)
@@ -239,8 +249,8 @@ struct DeliverableBoardView: View {
                 }
             }
         }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(16)
+        .samouraiCardSurface()
     }
 
     @ViewBuilder
@@ -296,10 +306,7 @@ struct DeliverableBoardView: View {
         }
         .padding(10)
         .padding(.leading, CGFloat(level) * 24)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.secondary.opacity(0.08))
-        )
+        .samouraiCardSurface()
     }
 
     @ViewBuilder
@@ -373,10 +380,10 @@ struct DeliverableBoardView: View {
 
     @ViewBuilder
     private func annexIntegrationSection(primaryProject: Project) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("4) Intégration des projets annexes")
-                .font(.title2.weight(.semibold))
-
+        SamouraiSectionCard(
+            title: "Intégration des projets annexes",
+            subtitle: "Les apports externes au scope principal restent visibles et reliés au bon contexte."
+        ) {
             let integrated = store.annexDeliverablesIntegrated(into: primaryProject.id)
             if integrated.isEmpty {
                 Text("Aucun livrable annexe intégré pour l'instant.")
@@ -395,17 +402,10 @@ struct DeliverableBoardView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text(entry.deliverable.phase.label)
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.secondary.opacity(0.12), in: Capsule())
+                        SamouraiStatusPill(text: entry.deliverable.phase.label, tint: SamouraiSurface.accent)
                     }
                     .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.secondary.opacity(0.08))
-                    )
+                    .samouraiCardSurface()
                 }
             }
         }
@@ -416,10 +416,10 @@ struct DeliverableBoardView: View {
         let coverage = store.scopeCoverageReport(projectID: primaryProject.id)
         let baselineProgress = store.scopeBaselineExecutionProgress(projectID: primaryProject.id)
 
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Traçabilité Scope → Plan → Exécution")
-                .font(.title2.weight(.semibold))
-
+        SamouraiSectionCard(
+            title: "Traçabilité scope → plan → exécution",
+            subtitle: "Montrer au bon niveau de détail où le scope est couvert et où l’exécution manque encore de relais."
+        ) {
             HStack(spacing: 14) {
                 traceabilityMetric(
                     title: "Couverture du périmètre",
@@ -455,10 +455,7 @@ struct DeliverableBoardView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.secondary.opacity(0.08))
-                    )
+                    .samouraiCardSurface()
                 }
             }
         }
@@ -478,18 +475,15 @@ struct DeliverableBoardView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.secondary.opacity(0.08))
-        )
+        .samouraiCardSurface()
     }
 
     @ViewBuilder
     private func changeControlSection(primaryProject: Project) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("3) Change Control & Scope Baselining")
-                .font(.title2.weight(.semibold))
-
+        SamouraiSectionCard(
+            title: "Change control et scope baselining",
+            subtitle: "Les baselines et demandes de changement sont regroupées pour garder une gouvernance simple."
+        ) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Baseline de référence")
                     .font(.headline)
@@ -525,10 +519,7 @@ struct DeliverableBoardView: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding(8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.secondary.opacity(0.08))
-                        )
+                        .samouraiCardSurface()
                     }
                 }
             }
@@ -606,10 +597,7 @@ struct DeliverableBoardView: View {
                             }
                         }
                         .padding(10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.secondary.opacity(0.08))
-                        )
+                        .samouraiCardSurface()
                     }
                 }
             }
@@ -637,10 +625,7 @@ struct DeliverableBoardView: View {
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.secondary.opacity(0.08))
-        )
+        .samouraiCardSurface()
     }
 
     private func parseLines(_ raw: String) -> [String] {

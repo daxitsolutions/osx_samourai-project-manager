@@ -23,12 +23,11 @@ struct ReportingWorkspaceView: View {
     @State private var exportFilename = "samourai-reporting"
 
     var body: some View {
-        HStack(spacing: 0) {
+        SamouraiWorkspaceSplitView(sidebarMinWidth: 320, sidebarIdealWidth: 356) {
             archiveSidebar
-            Divider()
+        } detail: {
             reportDetailPane
         }
-        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             cadence = appState.reportingCadence
             selectedScopeKey = defaultScopeKey
@@ -76,152 +75,185 @@ struct ReportingWorkspaceView: View {
 
     private var archiveSidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Weekly Governance")
-                    .font(.title2.weight(.semibold))
-                Text("One-Click Generator + Archive")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            SamouraiPageHeader(
+                eyebrow: "Reporting",
+                title: "Gouvernance",
+                subtitle: "Prépare, archive et réédite les synthèses sans quitter le flux de travail."
+            )
 
-            Picker("Cadence", selection: $cadence) {
-                ForEach(ReportingCadence.allCases) { value in
-                    Text(value.label).tag(value)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            Picker("Périmètre", selection: $selectedScopeKey) {
-                Text("Portefeuille complet").tag("portfolio")
-                if let primary = resolvedPrimaryProject {
-                    Text("Projet principal: \(primary.name)").tag("primary")
-                }
-                ForEach(store.projects) { project in
-                    Text("Projet: \(project.name)").tag(projectScopeKey(project.id))
-                }
-            }
-            .pickerStyle(.menu)
-
-            Button("Générer le rapport (One-Click)") {
-                generateOneClickReport()
-            }
-            .buttonStyle(.borderedProminent)
-
-            Divider()
-
-            Text("Historique")
-                .font(.headline)
-
-            if filteredArchive.isEmpty {
-                ContentUnavailableView(
-                    "Aucun rapport",
-                    systemImage: "clock.arrow.circlepath",
-                    description: Text("Génère un premier rapport pour activer l'archivage.")
-                )
-            } else {
-                List(selection: $selectedReportID) {
-                    ForEach(filteredArchive) { record in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(record.generatedReport.cadence.label)
-                                .font(.subheadline.weight(.semibold))
-                            Text(record.generatedReport.periodLabel)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .tag(record.id)
+            SamouraiSectionCard(
+                title: "Paramètres",
+                subtitle: "Choisis la cadence et le périmètre avant génération."
+            ) {
+                Picker("Cadence", selection: $cadence) {
+                    ForEach(ReportingCadence.allCases) { value in
+                        Text(value.label).tag(value)
                     }
                 }
-                .listStyle(.inset)
-                .scrollIndicators(.visible)
+                .pickerStyle(.segmented)
+
+                Picker("Périmètre", selection: $selectedScopeKey) {
+                    Text("Portefeuille complet").tag("portfolio")
+                    if let primary = resolvedPrimaryProject {
+                        Text("Projet principal: \(primary.name)").tag("primary")
+                    }
+                    ForEach(store.projects) { project in
+                        Text("Projet: \(project.name)").tag(projectScopeKey(project.id))
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Button("Générer le rapport") {
+                    generateOneClickReport()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            SamouraiSectionCard(
+                title: "Historique",
+                subtitle: "Chaque rapport sauvegardé reste réutilisable et exportable."
+            ) {
+                if filteredArchive.isEmpty {
+                    SamouraiEmptyStateCard(
+                        title: "Aucun rapport",
+                        systemImage: "clock.arrow.circlepath",
+                        description: "Génère un premier rapport pour activer l’archive."
+                    )
+                } else {
+                    List(selection: $selectedReportID) {
+                        ForEach(filteredArchive) { record in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(record.generatedReport.cadence.label)
+                                        .font(.subheadline.weight(.semibold))
+                                    Spacer()
+                                    SamouraiStatusPill(
+                                        text: record.generatedReport.scopeLabel,
+                                        tint: SamouraiSurface.accent
+                                    )
+                                }
+
+                                Text(record.generatedReport.periodLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 4)
+                            .tag(record.id)
+                        }
+                    }
+                    .listStyle(.inset)
+                    .frame(minHeight: 260)
+                    .scrollIndicators(.visible)
+                }
             }
         }
-        .padding(16)
-        .frame(minWidth: 320, idealWidth: 340, maxWidth: 380, maxHeight: .infinity, alignment: .topLeading)
+        .padding(20)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var reportDetailPane: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: SamouraiLayout.sectionSpacing) {
                 if let record = selectedRecord {
-                    HStack {
-                        Text("Rapport de Gouvernance")
-                            .font(.largeTitle.weight(.semibold))
-                        Spacer()
-                        Button("Enregistrer modifications") {
-                            savePMEdits(recordID: record.id)
-                        }
-                        .buttonStyle(.borderedProminent)
+                    SamouraiPageHeader(
+                        eyebrow: "Rapport",
+                        title: "Synthèse de gouvernance",
+                        subtitle: "Une vue éditable, exportable et relisible rapidement pour préparer les instances."
+                    ) {
+                        HStack(spacing: 10) {
+                            Button("Enregistrer") {
+                                savePMEdits(recordID: record.id)
+                            }
+                            .buttonStyle(.borderedProminent)
 
-                        Menu("Exporter") {
-                            Button("Markdown (.md)") {
-                                exportAsMarkdown(record)
+                            Menu("Exporter") {
+                                Button("Markdown (.md)") {
+                                    exportAsMarkdown(record)
+                                }
+                                Button("Texte brut (.txt)") {
+                                    exportAsText(record)
+                                }
+                                Button("PDF professionnel (.pdf)") {
+                                    exportAsPDF(record)
+                                }
                             }
-                            Button("Texte brut (.txt)") {
-                                exportAsText(record)
-                            }
-                            Button("PDF professionnel (.pdf)") {
-                                exportAsPDF(record)
-                            }
-                        }
 
-                        Button(role: .destructive) {
-                            store.deleteGovernanceReportRecord(reportID: record.id)
-                        } label: {
-                            Label("Supprimer", systemImage: "trash")
+                            Button(role: .destructive) {
+                                store.deleteGovernanceReportRecord(reportID: record.id)
+                            } label: {
+                                Label("Supprimer", systemImage: "trash")
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
 
-                    sectionCard(title: "1) En-tête & Contexte") {
+                    sectionCard(
+                        title: "Contexte",
+                        subtitle: "Le cadre du rapport reste visible immédiatement pour limiter les ambiguïtés."
+                    ) {
                         Text("Période couverte: \(record.periodLabel)")
                         Text("Projets concernés: \(record.projectsLabel)")
                         Text("Généré le: \(record.createdAt.formatted(date: .abbreviated, time: .shortened))")
                             .foregroundStyle(.secondary)
                     }
 
-                    sectionCard(title: "2) Résumé Exécutif") {
+                    sectionCard(
+                        title: "Résumé exécutif",
+                        subtitle: "Le résumé automatique et l’affinage PM sont regroupés dans un seul bloc."
+                    ) {
                         ForEach(record.executiveHighlightsAuto.prefix(4), id: \.self) { line in
-                            Text("• \(line)")
+                            Label(line, systemImage: "checkmark.circle")
                         }
                         Divider()
                         Text("Affinage PM (éditable)")
                             .font(.subheadline.weight(.semibold))
                         TextEditor(text: $executiveSummaryPMDraft)
                             .font(.body)
-                            .frame(minHeight: 70, maxHeight: 100)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+                            .samouraiEditorSurface(minHeight: 88)
                     }
 
-                    sectionCard(title: "3) Accomplissements (Done)") {
+                    sectionCard(
+                        title: "Accomplissements",
+                        subtitle: "Les éléments livrés sont listés de façon simple et scannable."
+                    ) {
                         if record.generatedReport.accomplishments.isEmpty {
                             Text("Aucun accomplissement détecté automatiquement.")
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(record.generatedReport.accomplishments.prefix(8), id: \.self) { line in
-                                Text("• \(line)")
+                                Label(line, systemImage: "checkmark.circle")
                             }
                         }
                     }
 
-                    sectionCard(title: "4) Avancement des Tests") {
+                    sectionCard(
+                        title: "Avancement des tests",
+                        subtitle: "Le statut qualité reste visible sans surcharger l’écran."
+                    ) {
                         ForEach(record.testsProgressAutoLines, id: \.self) { line in
-                            Text("• \(line)")
+                            Label(line, systemImage: "testtube.2")
                         }
                     }
 
-                    sectionCard(title: "5) Risques, Problèmes & Blocages") {
+                    sectionCard(
+                        title: "Risques, problèmes et blocages",
+                        subtitle: "Les signaux d’alerte sont regroupés dans une zone dédiée."
+                    ) {
                         ForEach(record.risksAndBlocksAutoLines.prefix(8), id: \.self) { line in
-                            Text("• \(line)")
+                            Label(line, systemImage: "exclamationmark.triangle")
                         }
                     }
 
-                    sectionCard(title: "6) Planification Prochaine") {
+                    sectionCard(
+                        title: "Planification prochaine",
+                        subtitle: "Les prochaines actions attendues sont séparées du diagnostic pour faciliter la lecture."
+                    ) {
                         if record.nextPlanningAutoLines.isEmpty {
                             Text("Aucun jalon/livrable/action à court terme détecté.")
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(record.nextPlanningAutoLines.prefix(8), id: \.self) { line in
-                                Text("• \(line)")
+                                Label(line, systemImage: "calendar")
                             }
                         }
                         Divider()
@@ -229,40 +261,37 @@ struct ReportingWorkspaceView: View {
                             .font(.subheadline.weight(.semibold))
                         TextEditor(text: $planningActionsPMDraft)
                             .font(.body)
-                            .frame(minHeight: 70, maxHeight: 100)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+                            .samouraiEditorSurface(minHeight: 88)
                     }
 
-                    sectionCard(title: "7) Conclusion & Actions Requises") {
+                    sectionCard(
+                        title: "Conclusion et actions requises",
+                        subtitle: "Le PM peut poser ici une synthèse claire à destination des décideurs."
+                    ) {
                         TextEditor(text: $conclusionPMDraft)
                             .font(.body)
-                            .frame(minHeight: 70, maxHeight: 100)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+                            .samouraiEditorSurface(minHeight: 88)
                     }
                 } else {
-                    ContentUnavailableView(
-                        "Aucun rapport sélectionné",
+                    SamouraiEmptyStateCard(
+                        title: "Aucun rapport sélectionné",
                         systemImage: "doc.text.magnifyingglass",
-                        description: Text("Génère un rapport en un clic ou sélectionne un rapport archivé.")
+                        description: "Génère un rapport en un clic ou sélectionne un rapport archivé."
                     )
                     .frame(maxWidth: .infinity, minHeight: 320)
                 }
             }
-            .padding(24)
+            .padding(SamouraiLayout.pagePadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.visible)
+        .samouraiCanvasBackground()
     }
 
-    private func sectionCard<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.title3.weight(.semibold))
+    private func sectionCard<Content: View>(title: String, subtitle: String, @ViewBuilder content: @escaping () -> Content) -> some View {
+        SamouraiSectionCard(title: title, subtitle: subtitle) {
             content()
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var filteredArchive: [GovernanceReportRecord] {

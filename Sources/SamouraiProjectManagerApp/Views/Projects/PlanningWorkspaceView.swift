@@ -209,7 +209,7 @@ struct PlanningWorkspaceView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 430)
+                .frame(width: 540)
 
                 if viewMode == .table {
                     Button {
@@ -363,6 +363,13 @@ struct PlanningWorkspaceView: View {
                     }
                 )
                 .padding(16)
+            } else if viewMode == .dailyGrid {
+                ProjectPlanningDailyGridView(
+                    activities: scenarioActivities,
+                    onEditActivity: { activity in
+                        editorContext = .edit(project.id, activity.id)
+                    }
+                )
             } else {
                 scenarioTableView(project: project, activities: scenarioActivities)
             }
@@ -972,6 +979,7 @@ private enum PlanningViewMode: String, CaseIterable, Identifiable {
     case table
     case timeline
     case ganttLite
+    case dailyGrid
 
     var id: String { rawValue }
 
@@ -985,6 +993,8 @@ private enum PlanningViewMode: String, CaseIterable, Identifiable {
             "Timeline"
         case .ganttLite:
             "Gantt Lite"
+        case .dailyGrid:
+            "Grille Jours"
         }
     }
 }
@@ -1110,6 +1120,199 @@ private struct ProjectPlanningTimelineView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Daily Grid View
+
+private struct ProjectPlanningDailyGridView: View {
+    let activities: [ProjectActivity]
+    var onEditActivity: ((ProjectActivity) -> Void)? = nil
+
+    private static let calendar = Calendar.current
+    private static let dayWidth: CGFloat = 36
+    private static let rowHeight: CGFloat = 32
+    private static let labelWidth: CGFloat = 220
+
+    private var sortedActivities: [ProjectActivity] {
+        activities.sorted { $0.estimatedStartDate < $1.estimatedStartDate }
+    }
+
+    private var days: [Date] {
+        guard let minDate = activities.map(\.estimatedStartDate).min(),
+              let maxDate = activities.map(\.estimatedEndDate).max() else { return [] }
+        let start = Self.calendar.startOfDay(for: minDate)
+        let end = Self.calendar.startOfDay(for: maxDate)
+        var result: [Date] = []
+        var current = start
+        while current <= end {
+            result.append(current)
+            current = Self.calendar.date(byAdding: .day, value: 1, to: current)!
+        }
+        return result
+    }
+
+    private func isActive(_ activity: ProjectActivity, on day: Date) -> Bool {
+        let start = Self.calendar.startOfDay(for: activity.estimatedStartDate)
+        let end = Self.calendar.startOfDay(for: activity.estimatedEndDate)
+        return day >= start && day <= end
+    }
+
+    private func isCompleted(_ activity: ProjectActivity) -> Bool {
+        activity.actualEndDate != nil
+    }
+
+    var body: some View {
+        if activities.isEmpty {
+            ContentUnavailableView(
+                "Aucune activité",
+                systemImage: "calendar.badge.exclamationmark",
+                description: Text("Ajoutez des activités pour afficher la grille journalière.")
+            )
+        } else {
+            ScrollView([.vertical, .horizontal]) {
+                VStack(alignment: .leading, spacing: 0) {
+                    headerRow
+                    Divider()
+                    ForEach(Array(sortedActivities.enumerated()), id: \.element.id) { index, activity in
+                        activityRow(activity: activity, isEven: index.isMultiple(of: 2))
+                        Divider().opacity(0.25)
+                    }
+                }
+            }
+            .scrollIndicators(.visible)
+            .padding(16)
+        }
+    }
+
+    private var headerRow: some View {
+        let grouped = groupDaysByMonth(days)
+        return VStack(alignment: .leading, spacing: 0) {
+            // Month headers
+            HStack(spacing: 0) {
+                Color.clear.frame(width: Self.labelWidth, height: 20)
+                ForEach(grouped, id: \.month) { group in
+                    Text(group.month)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: CGFloat(group.days.count) * Self.dayWidth, alignment: .leading)
+                        .padding(.leading, 4)
+                }
+            }
+            // Day numbers
+            HStack(spacing: 0) {
+                Text("Activité")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: Self.labelWidth, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(Color.secondary.opacity(0.08))
+                ForEach(days, id: \.self) { day in
+                    let dayNum = Self.calendar.component(.day, from: day)
+                    let isWeekend = isWeekend(day)
+                    Text("\(dayNum)")
+                        .font(.caption2.weight(isWeekend ? .bold : .regular))
+                        .foregroundStyle(isWeekend ? Color.orange : Color.secondary)
+                        .frame(width: Self.dayWidth, height: Self.rowHeight)
+                        .background(Color.secondary.opacity(isWeekend ? 0.06 : 0.08))
+                }
+            }
+        }
+    }
+
+    private func activityRow(activity: ProjectActivity, isEven: Bool) -> some View {
+        HStack(spacing: 0) {
+            // Activity label
+            HStack(spacing: 6) {
+                if activity.isMilestone {
+                    Image(systemName: "diamond.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.purple)
+                } else {
+                    Circle()
+                        .fill(activity.hierarchyLevel.tintColor.opacity(0.85))
+                        .frame(width: 8, height: 8)
+                }
+                Text(activity.displayTitle)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .foregroundStyle(isCompleted(activity) ? Color.secondary : Color.primary)
+                if isCompleted(activity) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.green)
+                }
+            }
+            .frame(width: Self.labelWidth, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.secondary.opacity(isEven ? 0.04 : 0.0))
+            .onTapGesture(count: 2) {
+                onEditActivity?(activity)
+            }
+
+            // Day cells
+            ForEach(days, id: \.self) { day in
+                let active = isActive(activity, on: day)
+                let weekend = isWeekend(day)
+                ZStack {
+                    if weekend {
+                        Color.orange.opacity(0.04)
+                    } else if isEven {
+                        Color.secondary.opacity(0.03)
+                    }
+                    if active {
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(activity.isMilestone
+                                ? Color.purple.opacity(0.75)
+                                : activity.hierarchyLevel.tintColor.opacity(isCompleted(activity) ? 0.35 : 0.70))
+                            .padding(.horizontal, 2)
+                            .padding(.vertical, 8)
+                    }
+                }
+                .frame(width: Self.dayWidth, height: Self.rowHeight)
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.10))
+                        .frame(width: 0.5)
+                }
+            }
+        }
+    }
+
+    private struct MonthGroup {
+        let month: String
+        let days: [Date]
+    }
+
+    private func groupDaysByMonth(_ days: [Date]) -> [MonthGroup] {
+        var groups: [MonthGroup] = []
+        var currentLabel = ""
+        var currentDays: [Date] = []
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM yyyy"
+        for day in days {
+            let label = formatter.string(from: day)
+            if label == currentLabel {
+                currentDays.append(day)
+            } else {
+                if !currentDays.isEmpty {
+                    groups.append(MonthGroup(month: currentLabel, days: currentDays))
+                }
+                currentLabel = label
+                currentDays = [day]
+            }
+        }
+        if !currentDays.isEmpty {
+            groups.append(MonthGroup(month: currentLabel, days: currentDays))
+        }
+        return groups
+    }
+
+    private func isWeekend(_ day: Date) -> Bool {
+        let weekday = Self.calendar.component(.weekday, from: day)
+        return weekday == 1 || weekday == 7
     }
 }
 

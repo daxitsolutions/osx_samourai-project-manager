@@ -17,12 +17,54 @@ struct ReportingWorkspaceView: View {
     @State private var isShowingMarkdownExporter = false
     @State private var isShowingTextExporter = false
     @State private var isShowingPDFExporter = false
-    @State private var markdownDocument: ReportingTextDocument?
+    @State private var markdownDocument: ReportingMarkdownDocument?
     @State private var textDocument: ReportingTextDocument?
     @State private var pdfDocument: ReportingBinaryDocument?
     @State private var exportFilename = "samourai-reporting"
+    @State private var reportPendingDeletion: GovernanceReportRecord?
+    @State private var hiddenSections: Set<String> = []
 
     var body: some View {
+        mainView
+            .fileExporter(
+                isPresented: $isShowingMarkdownExporter,
+                document: markdownDocument,
+                contentType: ReportingMarkdownDocument.writableContentTypes[0],
+                defaultFilename: "\(exportFilename).md"
+            ) { _ in }
+            .fileExporter(
+                isPresented: $isShowingTextExporter,
+                document: textDocument,
+                contentType: .plainText,
+                defaultFilename: "\(exportFilename).txt"
+            ) { _ in }
+            .fileExporter(
+                isPresented: $isShowingPDFExporter,
+                document: pdfDocument,
+                contentType: .pdf,
+                defaultFilename: "\(exportFilename).pdf"
+            ) { _ in }
+            .confirmationDialog(
+                "Supprimer ce rapport ?",
+                isPresented: Binding(
+                    get: { reportPendingDeletion != nil },
+                    set: { if $0 == false { reportPendingDeletion = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                if let record = reportPendingDeletion {
+                    Button("Supprimer", role: .destructive) {
+                        store.deleteGovernanceReportRecord(reportID: record.id)
+                        reportPendingDeletion = nil
+                    }
+                }
+                Button("Annuler", role: .cancel) { reportPendingDeletion = nil }
+            } message: {
+                Text("Cette action est irréversible. Le rapport sera définitivement supprimé de l'archive.")
+            }
+    }
+
+    private var mainView: some View {
         SamouraiWorkspaceSplitView(sidebarMinWidth: 320, sidebarIdealWidth: 356) {
             archiveSidebar
         } detail: {
@@ -38,9 +80,7 @@ struct ReportingWorkspaceView: View {
             appState.reportingCadence = newCadence
         }
         .onChange(of: selectedScopeKey) { _, _ in
-            if selectedReportID == nil {
-                selectInitialReportIfNeeded()
-            }
+            if selectedReportID == nil { selectInitialReportIfNeeded() }
         }
         .onChange(of: selectedReportID) { _, _ in
             loadEditorDraftFromSelection()
@@ -53,24 +93,6 @@ struct ReportingWorkspaceView: View {
             }
             loadEditorDraftFromSelection()
         }
-        .fileExporter(
-            isPresented: $isShowingMarkdownExporter,
-            document: markdownDocument,
-            contentType: .plainText,
-            defaultFilename: "\(exportFilename).md"
-        ) { _ in }
-        .fileExporter(
-            isPresented: $isShowingTextExporter,
-            document: textDocument,
-            contentType: .plainText,
-            defaultFilename: "\(exportFilename).txt"
-        ) { _ in }
-        .fileExporter(
-            isPresented: $isShowingPDFExporter,
-            document: pdfDocument,
-            contentType: .pdf,
-            defaultFilename: "\(exportFilename).pdf"
-        ) { _ in }
     }
 
     private var archiveSidebar: some View {
@@ -158,36 +180,33 @@ struct ReportingWorkspaceView: View {
                     SamouraiPageHeader(
                         eyebrow: "Rapport",
                         title: "Synthèse de gouvernance",
-                        subtitle: "Une vue éditable, exportable et relisible rapidement pour préparer les instances."
-                    ) {
-                        HStack(spacing: 10) {
-                            Button("Enregistrer") {
-                                savePMEdits(recordID: record.id)
-                            }
-                            .buttonStyle(.borderedProminent)
+                        subtitle: "Vue éditable, exportable et relisible rapidement pour préparer les instances."
+                    )
 
-                            Menu("Exporter") {
-                                Button("Markdown (.md)") {
-                                    exportAsMarkdown(record)
-                                }
-                                Button("Texte brut (.txt)") {
-                                    exportAsText(record)
-                                }
-                                Button("PDF professionnel (.pdf)") {
-                                    exportAsPDF(record)
-                                }
-                            }
-
-                            Button(role: .destructive) {
-                                store.deleteGovernanceReportRecord(reportID: record.id)
-                            } label: {
-                                Label("Supprimer", systemImage: "trash")
-                            }
-                            .buttonStyle(.bordered)
+                    HStack(spacing: 10) {
+                        Button("Enregistrer") {
+                            savePMEdits(recordID: record.id)
                         }
+                        .buttonStyle(.borderedProminent)
+
+                        Menu("Exporter") {
+                            Button("Markdown (.md)") { exportAsMarkdown(record) }
+                            Button("Texte brut (.txt)") { exportAsText(record) }
+                            Button("PDF professionnel (.pdf)") { exportAsPDF(record) }
+                        }
+
+                        Spacer()
+
+                        Button(role: .destructive) {
+                            reportPendingDeletion = record
+                        } label: {
+                            Label("Supprimer", systemImage: "trash")
+                        }
+                        .buttonStyle(.bordered)
                     }
 
                     sectionCard(
+                        id: "context",
                         title: "Contexte",
                         subtitle: "Le cadre du rapport reste visible immédiatement pour limiter les ambiguïtés."
                     ) {
@@ -198,21 +217,21 @@ struct ReportingWorkspaceView: View {
                     }
 
                     sectionCard(
+                        id: "executive",
                         title: "Résumé exécutif",
-                        subtitle: "Le résumé automatique et l’affinage PM sont regroupés dans un seul bloc."
+                        subtitle: "Indicateurs automatiques et note PM regroupés dans un seul bloc."
                     ) {
                         ForEach(record.executiveHighlightsAuto.prefix(4), id: \.self) { line in
                             Label(line, systemImage: "checkmark.circle")
                         }
                         Divider()
-                        Text("Affinage PM (éditable)")
-                            .font(.subheadline.weight(.semibold))
                         TextEditor(text: $executiveSummaryPMDraft)
                             .font(.body)
                             .samouraiEditorSurface(minHeight: 88)
                     }
 
                     sectionCard(
+                        id: "accomplishments",
                         title: "Accomplissements",
                         subtitle: "Les éléments livrés sont listés de façon simple et scannable."
                     ) {
@@ -227,6 +246,7 @@ struct ReportingWorkspaceView: View {
                     }
 
                     sectionCard(
+                        id: "tests",
                         title: "Avancement des tests",
                         subtitle: "Le statut qualité reste visible sans surcharger l’écran."
                     ) {
@@ -236,6 +256,7 @@ struct ReportingWorkspaceView: View {
                     }
 
                     sectionCard(
+                        id: "risks",
                         title: "Risques, problèmes et blocages",
                         subtitle: "Les signaux d’alerte sont regroupés dans une zone dédiée."
                     ) {
@@ -245,6 +266,7 @@ struct ReportingWorkspaceView: View {
                     }
 
                     sectionCard(
+                        id: "planning",
                         title: "Planification prochaine",
                         subtitle: "Les prochaines actions attendues sont séparées du diagnostic pour faciliter la lecture."
                     ) {
@@ -257,16 +279,15 @@ struct ReportingWorkspaceView: View {
                             }
                         }
                         Divider()
-                        Text("Actions spécifiques attendues de l'équipe (éditable)")
-                            .font(.subheadline.weight(.semibold))
                         TextEditor(text: $planningActionsPMDraft)
                             .font(.body)
                             .samouraiEditorSurface(minHeight: 88)
                     }
 
                     sectionCard(
-                        title: "Conclusion et actions requises",
-                        subtitle: "Le PM peut poser ici une synthèse claire à destination des décideurs."
+                        id: "conclusion",
+                        title: "Commentaire du chef de projet",
+                        subtitle: "Le PM pose ici une synthèse claire à destination des décideurs."
                     ) {
                         TextEditor(text: $conclusionPMDraft)
                             .font(.body)
@@ -288,9 +309,23 @@ struct ReportingWorkspaceView: View {
         .samouraiCanvasBackground()
     }
 
-    private func sectionCard<Content: View>(title: String, subtitle: String, @ViewBuilder content: @escaping () -> Content) -> some View {
-        SamouraiSectionCard(title: title, subtitle: subtitle) {
-            content()
+    private func sectionCard<Content: View>(
+        id: String,
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        let isHidden = hiddenSections.contains(id)
+        return SamouraiSectionCard(title: title, subtitle: subtitle, trailing: {
+            Button {
+                if isHidden { hiddenSections.remove(id) } else { hiddenSections.insert(id) }
+            } label: {
+                Image(systemName: isHidden ? "eye.slash" : "eye")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }) {
+            if !isHidden { content() }
         }
     }
 
@@ -399,21 +434,21 @@ struct ReportingWorkspaceView: View {
 
     private func exportAsMarkdown(_ record: GovernanceReportRecord) {
         exportFilename = filenameBase(for: record)
-        markdownDocument = ReportingTextDocument(text: record.markdownOnePager)
-        isShowingMarkdownExporter = true
+        markdownDocument = ReportingMarkdownDocument(text: record.markdownOnePager)
+        Task { @MainActor in isShowingMarkdownExporter = true }
     }
 
     private func exportAsText(_ record: GovernanceReportRecord) {
         exportFilename = filenameBase(for: record)
         textDocument = ReportingTextDocument(text: record.plainTextOnePager)
-        isShowingTextExporter = true
+        Task { @MainActor in isShowingTextExporter = true }
     }
 
     private func exportAsPDF(_ record: GovernanceReportRecord) {
         exportFilename = filenameBase(for: record)
-        let pdfData = renderPDFData(from: record.plainTextOnePager)
+        let pdfData = renderPDFData(from: record)
         pdfDocument = ReportingBinaryDocument(data: pdfData)
-        isShowingPDFExporter = true
+        Task { @MainActor in isShowingPDFExporter = true }
     }
 
     private func filenameBase(for record: GovernanceReportRecord) -> String {
@@ -421,19 +456,47 @@ struct ReportingWorkspaceView: View {
         return "samourai-\(record.generatedReport.cadence.rawValue)-\(day)"
     }
 
-    private func renderPDFData(from text: String) -> Data {
-        let pageRect = NSRect(x: 0, y: 0, width: 595, height: 842) // A4 @72dpi
-        let textView = NSTextView(frame: pageRect)
-        textView.string = text
-        textView.font = SamouraiTypography.shared.nsFont(size: 11)
-        textView.isRichText = false
-        textView.textContainerInset = NSSize(width: 20, height: 20)
-        return textView.dataWithPDF(inside: pageRect)
+    private func renderPDFData(from record: GovernanceReportRecord) -> Data {
+        let content = ReportPDFContent(record: record)
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2.0
+        let mutableData = NSMutableData()
+        renderer.render { size, renderContext in
+            guard let consumer = CGDataConsumer(data: mutableData) else { return }
+            var mediaBox = CGRect(origin: .zero, size: CGSize(width: size.width, height: max(size.height, 842)))
+            guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return }
+            context.beginPDFPage(nil)
+            renderContext(context)
+            context.endPDFPage()
+            context.closePDF()
+        }
+        return mutableData as Data
+    }
+}
+
+private struct ReportingMarkdownDocument: FileDocument {
+    static let markdownType: UTType = UTType(filenameExtension: "md", conformingTo: .plainText) ?? .plainText
+    static var readableContentTypes: [UTType] { [markdownType, .plainText] }
+    static var writableContentTypes: [UTType] { [markdownType] }
+
+    let data: Data
+
+    init(text: String) {
+        self.data = text.data(using: .utf8) ?? Data()
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
     }
 }
 
 private struct ReportingTextDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.plainText] }
+    static var writableContentTypes: [UTType] { [.plainText] }
 
     let data: Data
 
@@ -452,6 +515,7 @@ private struct ReportingTextDocument: FileDocument {
 
 private struct ReportingBinaryDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.pdf] }
+    static var writableContentTypes: [UTType] { [.pdf] }
 
     let data: Data
 
@@ -465,5 +529,96 @@ private struct ReportingBinaryDocument: FileDocument {
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: data)
+    }
+}
+
+private struct ReportPDFContent: View {
+    let record: GovernanceReportRecord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("RAPPORT GOUVERNANCE")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.blue)
+                    .tracking(0.8)
+                Text(record.title)
+                    .font(.largeTitle.weight(.bold))
+                Text("Période: \(record.periodLabel)")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                Text("Projets: \(record.projectsLabel)")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+            }
+
+            pdfSection("1. Résumé Exécutif") {
+                ForEach(record.executiveHighlightsAuto.prefix(4), id: \.self) { line in
+                    Label(line, systemImage: "checkmark.circle").font(.body)
+                }
+                if !record.executiveSummaryPMNote.isEmpty {
+                    Text(record.executiveSummaryPMNote)
+                        .font(.body)
+                        .padding(.top, 4)
+                }
+            }
+
+            pdfSection("2. Accomplissements") {
+                let items = record.generatedReport.accomplishments
+                if items.isEmpty {
+                    Text("Aucun accomplissement détecté automatiquement.").font(.body).foregroundStyle(.secondary)
+                } else {
+                    ForEach(items.prefix(8), id: \.self) { line in
+                        Label(line, systemImage: "checkmark.circle").font(.body)
+                    }
+                }
+            }
+
+            pdfSection("3. Avancement des Tests") {
+                ForEach(record.testsProgressAutoLines, id: \.self) { line in
+                    Label(line, systemImage: "testtube.2").font(.body)
+                }
+            }
+
+            pdfSection("4. Risques, Problèmes & Blocages") {
+                ForEach(record.risksAndBlocksAutoLines.prefix(8), id: \.self) { line in
+                    Label(line, systemImage: "exclamationmark.triangle").font(.body)
+                }
+            }
+
+            pdfSection("5. Planification Prochaine") {
+                let items = record.nextPlanningAutoLines
+                if items.isEmpty {
+                    Text("Aucun jalon/livrable/action à court terme détecté.").font(.body).foregroundStyle(.secondary)
+                } else {
+                    ForEach(items.prefix(8), id: \.self) { line in
+                        Label(line, systemImage: "calendar").font(.body)
+                    }
+                }
+                if !record.planningActionsPMNote.isEmpty {
+                    Text(record.planningActionsPMNote).font(.body).padding(.top, 4)
+                }
+            }
+
+            pdfSection("6. Commentaire du Chef de Projet") {
+                if record.conclusionPMMessage.isEmpty {
+                    Text("Aucun commentaire.").font(.body).foregroundStyle(.secondary)
+                } else {
+                    Text(record.conclusionPMMessage).font(.body)
+                }
+            }
+        }
+        .padding(44)
+        .frame(width: 595)
+        .background(Color.white)
+    }
+
+    @ViewBuilder
+    private func pdfSection<Content: View>(_ heading: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(heading)
+                .font(.headline)
+            content()
+        }
     }
 }

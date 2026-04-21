@@ -76,12 +76,14 @@ struct ResourceWorkspaceView: View {
                             .disabled(isImporting)
                         }
 
-                        Button {
-                            evaluationContext = .init(resourceID: selectedResource.id)
-                        } label: {
-                            Label("Évaluer", systemImage: "waveform.path.ecg.rectangle")
+                        if scopeMode == .contextualProject {
+                            Button {
+                                evaluationContext = .init(resourceID: selectedResource.id)
+                            } label: {
+                                Label("Évaluer", systemImage: "waveform.path.ecg.rectangle")
+                            }
+                            .disabled(isImporting)
                         }
-                        .disabled(isImporting)
 
                         Button {
                             editorContext = .edit(selectedResource.id)
@@ -137,20 +139,22 @@ struct ResourceWorkspaceView: View {
                 .padding(.bottom, 8)
 
                 VStack(spacing: 12) {
-                    ResourceProfilingSummaryCard(
-                        report: resourceProfilingReport,
-                        scopeLabel: resourceProfilingScopeLabel
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
+                    if scopeMode == .contextualProject {
+                        ResourceProfilingSummaryCard(
+                            report: resourceProfilingReport,
+                            scopeLabel: resourceProfilingScopeLabel
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
 
-                    ResourceComparativePerformanceCard(
-                        snapshots: comparativePerformanceSnapshots,
-                        onEvaluate: { resourceID in
-                            evaluationContext = .init(resourceID: resourceID)
-                        }
-                    )
-                    .padding(.horizontal, 16)
+                        ResourceComparativePerformanceCard(
+                            snapshots: comparativePerformanceSnapshots,
+                            onEvaluate: { resourceID in
+                                evaluationContext = .init(resourceID: resourceID)
+                            }
+                        )
+                        .padding(.horizontal, 16)
+                    }
 
                     HStack(spacing: 12) {
                         TextField(
@@ -519,7 +523,8 @@ struct ResourceWorkspaceView: View {
                             },
                             onToggleFavorite: canToggleFavorite(resource)
                                 ? ({ toggleFavoriteForScopedProject(resource.id) })
-                                : nil
+                                : nil,
+                            onEdit: { editorContext = .edit(resource.id) }
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -1724,12 +1729,14 @@ private struct ResourceGridCard: View {
     let isMarkedForExport: Bool
     let onToggleExportSelection: () -> Void
     let onToggleFavorite: (() -> Void)?
+    let onEdit: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(resource.displayName)
                     .font(.headline)
+                    .onTapGesture(count: 2) { onEdit?() }
                 Spacer()
                 if let scopedProjectID, resource.assignedProjectIDs.contains(scopedProjectID) {
                     Button(action: {

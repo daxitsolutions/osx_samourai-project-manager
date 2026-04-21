@@ -19,6 +19,8 @@ enum SamouraiSurface {
 }
 
 struct SamouraiPageHeader<Trailing: View>: View {
+    @Environment(SamouraiTypography.self) private var typography
+
     let eyebrow: String?
     let title: String
     let subtitle: String
@@ -41,17 +43,17 @@ struct SamouraiPageHeader<Trailing: View>: View {
             VStack(alignment: .leading, spacing: 8) {
                 if let eyebrow, eyebrow.isEmpty == false {
                     Text(eyebrow.uppercased())
-                        .font(.caption.weight(.semibold))
+                        .font(typography.captionEmphasized)
                         .foregroundStyle(SamouraiSurface.accent)
                         .tracking(0.8)
                 }
 
                 Text(title)
-                    .font(.system(.largeTitle, design: .default, weight: .bold))
+                    .font(typography.titleDisplay)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(subtitle)
-                    .font(.body)
+                    .font(typography.body)
                     .foregroundStyle(SamouraiSurface.mutedText)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -64,6 +66,8 @@ struct SamouraiPageHeader<Trailing: View>: View {
 }
 
 struct SamouraiSectionCard<Content: View, Trailing: View>: View {
+    @Environment(SamouraiTypography.self) private var typography
+
     let title: String
     let subtitle: String?
     @ViewBuilder let trailing: () -> Trailing
@@ -86,11 +90,11 @@ struct SamouraiSectionCard<Content: View, Trailing: View>: View {
             HStack(alignment: .firstTextBaseline, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.title3.weight(.semibold))
+                        .font(typography.title)
 
                     if let subtitle, subtitle.isEmpty == false {
                         Text(subtitle)
-                            .font(.callout)
+                            .font(typography.callout)
                             .foregroundStyle(SamouraiSurface.mutedText)
                     }
                 }
@@ -107,6 +111,8 @@ struct SamouraiSectionCard<Content: View, Trailing: View>: View {
 }
 
 struct SamouraiMetricTile: View {
+    @Environment(SamouraiTypography.self) private var typography
+
     let title: String
     let value: String
     let subtitle: String
@@ -124,15 +130,15 @@ struct SamouraiMetricTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Label(title, systemImage: systemImage)
-                .font(.callout.weight(.medium))
+                .font(typography.calloutMedium)
                 .foregroundStyle(SamouraiSurface.mutedText)
 
             Text(value)
-                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .font(typography.metricLarge)
                 .foregroundStyle(.primary)
 
             Text(subtitle)
-                .font(.callout)
+                .font(typography.callout)
                 .foregroundStyle(SamouraiSurface.mutedText)
         }
         .padding(18)
@@ -175,12 +181,14 @@ struct SamouraiEmptyStateCard: View {
 }
 
 struct SamouraiStatusPill: View {
+    @Environment(SamouraiTypography.self) private var typography
+
     let text: String
     let tint: Color
 
     var body: some View {
         Text(text)
-            .font(.caption.weight(.semibold))
+            .font(typography.captionEmphasized)
             .foregroundStyle(tint)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)

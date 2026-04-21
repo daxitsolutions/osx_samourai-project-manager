@@ -60,6 +60,7 @@ struct ProjectDetailView: View {
                 ProjectActivityEditorSheet(
                     projectID: projectID,
                     activity: context.activity(in: store),
+                    initialParentActivityID: context.initialParentActivityID(),
                     linkedActionIDs: context.linkedActionIDs(in: store),
                     linkedDeliverableIDs: context.linkedDeliverableIDs(in: store)
                 )
@@ -558,6 +559,13 @@ struct ProjectDetailView: View {
                 }
                 .buttonStyle(.bordered)
 
+                Button {
+                    activityEditorContext = .createChild(parentActivityID: activity.id)
+                } label: {
+                    Label("Nouvelle activité", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+
                 Button(role: .destructive) {
                     activityPendingDeletion = activity
                 } label: {
@@ -934,12 +942,15 @@ private struct ProjectTimelineView: View {
 
 private enum ProjectActivityEditorContext: Identifiable {
     case create
+    case createChild(parentActivityID: UUID)
     case edit(UUID)
 
     var id: String {
         switch self {
         case .create:
             "create-activity"
+        case .createChild(let parentID):
+            "create-child-activity-\(parentID.uuidString)"
         case .edit(let activityID):
             "edit-activity-\(activityID.uuidString)"
         }
@@ -948,10 +959,18 @@ private enum ProjectActivityEditorContext: Identifiable {
     @MainActor
     func activity(in store: SamouraiStore) -> ProjectActivity? {
         switch self {
-        case .create:
+        case .create, .createChild:
             nil
         case .edit(let activityID):
             store.activity(with: activityID)
+        }
+    }
+
+    @MainActor
+    func initialParentActivityID() -> UUID? {
+        switch self {
+        case .createChild(let parentID): parentID
+        default: nil
         }
     }
 
@@ -1000,6 +1019,7 @@ struct ProjectActivityEditorSheet: View {
     init(
         projectID: UUID,
         activity: ProjectActivity?,
+        initialParentActivityID: UUID? = nil,
         preferredScenarioID: UUID? = nil,
         linkedActionIDs: [UUID],
         linkedDeliverableIDs: [UUID]
@@ -1017,7 +1037,7 @@ struct ProjectActivityEditorSheet: View {
         _selectedActionIDs = State(initialValue: Set(linkedActionIDs))
         _selectedDeliverableIDs = State(initialValue: Set(linkedDeliverableIDs))
         _selectedPredecessorIDs = State(initialValue: Set(activity?.predecessorActivityIDs ?? []))
-        _parentActivityID = State(initialValue: activity?.parentActivityID)
+        _parentActivityID = State(initialValue: activity?.parentActivityID ?? initialParentActivityID)
         _hierarchyLevel = State(initialValue: activity?.hierarchyLevel ?? .activityTask)
         _isMilestone = State(initialValue: activity?.isMilestone ?? false)
     }

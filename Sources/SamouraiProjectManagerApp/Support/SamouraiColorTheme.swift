@@ -16,6 +16,13 @@ enum SamouraiColorToken: String, CaseIterable {
     case healthOrange
     case healthRed
 
+    // Action status
+    case actionTodo
+    case actionInProgress
+    case actionDone
+    case actionCancelled
+    case actionOnHold
+
     // Loot rarity
     case rarityPoor
     case rarityCommon
@@ -94,6 +101,16 @@ enum SamouraiColorTheme {
             "#FF9F0A"
         case .healthRed:
             "#FF453A"
+        case .actionTodo:
+            "#8A5CF5"
+        case .actionInProgress:
+            "#2C7BE5"
+        case .actionDone:
+            "#00AF5F"
+        case .actionCancelled:
+            "#888888"
+        case .actionOnHold:
+            "#F5A623"
         case .rarityPoor:
             "#8E8E93"
         case .rarityCommon:
@@ -280,6 +297,22 @@ extension ActivityHierarchyLevel {
         case .archiveNote:
             return Color(red: 157 / 255, green: 157 / 255, blue: 157 / 255)
         }
+    }
+}
+
+extension ActionStatus {
+    var colorToken: SamouraiColorToken {
+        switch self {
+        case .todo:       .actionTodo
+        case .inProgress: .actionInProgress
+        case .done:       .actionDone
+        case .cancelled:  .actionCancelled
+        case .onHold:     .actionOnHold
+        }
+    }
+
+    var tintColor: Color {
+        SamouraiColorTheme.color(colorToken)
     }
 }
 

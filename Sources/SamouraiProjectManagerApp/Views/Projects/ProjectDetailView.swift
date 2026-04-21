@@ -1085,6 +1085,11 @@ struct ProjectActivityEditorSheet: View {
                         DatePicker("Date de fin (jalon)", selection: $estimatedEndDate, displayedComponents: .date)
                     } else {
                         DatePicker("Date de début estimée", selection: $estimatedStartDate, displayedComponents: .date)
+                        if !selectedPredecessorIDs.isEmpty {
+                            Label("Date positionnée depuis le prédécesseur", systemImage: "link")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         DatePicker("Date de fin estimée", selection: $estimatedEndDate, displayedComponents: .date)
                     }
                     Toggle("Fin réelle renseignée", isOn: $includeActualEndDate)
@@ -1157,6 +1162,19 @@ struct ProjectActivityEditorSheet: View {
             .onChange(of: isMilestone) { _, isNowMilestone in
                 if isNowMilestone {
                     estimatedStartDate = estimatedEndDate
+                }
+            }
+            .onChange(of: selectedPredecessorIDs) { _, newIDs in
+                guard !newIDs.isEmpty, !isMilestone else { return }
+                let allActivities = store.allActivities(for: projectID).filter {
+                    $0.scenarioID == resolvedScenarioID && $0.id != activity?.id
+                }
+                if let latestEnd = allActivities
+                    .filter({ newIDs.contains($0.id) })
+                    .map(\.estimatedEndDate)
+                    .max()
+                {
+                    estimatedStartDate = latestEnd
                 }
             }
             .onChange(of: hierarchyLevel) { _, _ in

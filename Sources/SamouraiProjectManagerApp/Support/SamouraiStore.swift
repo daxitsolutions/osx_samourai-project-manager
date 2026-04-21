@@ -988,6 +988,7 @@ final class SamouraiStore {
         title: String,
         details: String,
         priority: ActionPriority,
+        status: ActionStatus = .todo,
         dueDate: Date,
         flow: ActionFlow,
         projectID: UUID?
@@ -996,6 +997,7 @@ final class SamouraiStore {
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             details: details.trimmingCharacters(in: .whitespacesAndNewlines),
             priority: priority,
+            status: status,
             dueDate: dueDate,
             flow: flow,
             projectID: sanitizedProjectID(projectID)
@@ -1013,7 +1015,8 @@ final class SamouraiStore {
         priority: ActionPriority,
         dueDate: Date,
         flow: ActionFlow,
-        projectID: UUID?
+        projectID: UUID?,
+        status: ActionStatus? = nil
     ) {
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return }
         actions[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1022,6 +1025,19 @@ final class SamouraiStore {
         actions[index].dueDate = dueDate
         actions[index].flow = flow
         actions[index].projectID = sanitizedProjectID(projectID)
+        if let status {
+            actions[index].status = status
+            actions[index].isDone = (status == .done)
+        }
+        actions[index].updatedAt = .now
+        actions = sortActions(actions)
+        persist()
+    }
+
+    func updateActionStatus(actionID: UUID, status: ActionStatus) {
+        guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return }
+        actions[index].status = status
+        actions[index].isDone = (status == .done)
         actions[index].updatedAt = .now
         actions = sortActions(actions)
         persist()
@@ -1035,6 +1051,11 @@ final class SamouraiStore {
     func markActionDone(actionID: UUID, isDone: Bool) {
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return }
         actions[index].isDone = isDone
+        if isDone {
+            actions[index].status = .done
+        } else if actions[index].status == .done {
+            actions[index].status = .todo
+        }
         actions[index].updatedAt = .now
         actions = sortActions(actions)
         persist()

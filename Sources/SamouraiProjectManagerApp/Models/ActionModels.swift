@@ -1,5 +1,25 @@
 import Foundation
 
+enum ActionStatus: String, Codable, CaseIterable, Identifiable {
+    case todo
+    case inProgress
+    case done
+    case cancelled
+    case onHold
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .todo:       "À faire"
+        case .inProgress: "En cours"
+        case .done:       "Terminé"
+        case .cancelled:  "Annulé"
+        case .onHold:     "En attente"
+        }
+    }
+}
+
 enum ActionFlow: String, Codable, CaseIterable, Identifiable {
     case manuel
     case automatique
@@ -69,6 +89,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
     var title: String
     var details: String
     var priority: ActionPriority
+    var status: ActionStatus
     var dueDate: Date
     var flow: ActionFlow
     var projectID: UUID?
@@ -82,6 +103,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
         title: String,
         details: String,
         priority: ActionPriority,
+        status: ActionStatus = .todo,
         dueDate: Date,
         flow: ActionFlow,
         projectID: UUID? = nil,
@@ -94,6 +116,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
         self.title = title
         self.details = details
         self.priority = priority
+        self.status = status
         self.dueDate = dueDate
         self.flow = flow
         self.projectID = projectID

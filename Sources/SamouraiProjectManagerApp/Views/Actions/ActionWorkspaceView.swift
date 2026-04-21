@@ -120,6 +120,29 @@ struct ActionWorkspaceView: View {
                         }
                         .width(34)
 
+                        TableColumn("Statut", value: \.statusSortKey) { action in
+                            Picker(
+                                "Statut",
+                                selection: Binding(
+                                    get: { action.status },
+                                    set: { store.updateActionStatus(actionID: action.id, status: $0) }
+                                )
+                            ) {
+                                ForEach(ActionStatus.allCases) { status in
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(status.tintColor)
+                                            .frame(width: 8, height: 8)
+                                        Text(status.label)
+                                    }
+                                    .tag(status)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
+                        .width(min: 130, ideal: 145)
+
                         TableColumn("Flux", value: \.flowSortKey) { action in
                             Label(action.flow.label, systemImage: action.flow.systemImage)
                         }
@@ -303,6 +326,7 @@ struct ActionWorkspaceView: View {
                 action.details,
                 action.priority.label,
                 action.flow.label,
+                action.status.label,
                 activityTitle(for: action.activityID),
                 store.projectName(for: action.projectID),
                 action.dueDate.formatted(date: .abbreviated, time: .omitted),
@@ -346,16 +370,16 @@ struct ActionWorkspaceView: View {
 
     private func prepareExport(actions: [ProjectAction], filenameSuffix: String) {
         guard actions.isEmpty == false else { return }
-        let headers = ["Titre", "Priorite", "Flux", "Projet", "Activite", "Echeance", "Statut", "Creee le"]
+        let headers = ["Titre", "Statut", "Priorite", "Flux", "Projet", "Activite", "Echeance", "Creee le"]
         let rows = actions.map { action in
             [
                 action.displayTitle,
+                action.status.label,
                 action.priority.label,
                 action.flow.label,
                 store.projectName(for: action.projectID),
                 activityTitle(for: action.activityID),
                 action.dueDate.formatted(date: .abbreviated, time: .omitted),
-                action.isDone ? "Terminee" : "Ouverte",
                 action.createdAt.formatted(date: .abbreviated, time: .shortened)
             ]
         }
@@ -369,6 +393,7 @@ struct ActionWorkspaceView: View {
 private extension ProjectAction {
     var flowSortKey: String { flow.rawValue }
     var prioritySortWeight: Int { priority.sortWeight }
+    var statusSortKey: String { status.rawValue }
     var activityIDSortKey: String { activityID?.uuidString ?? "" }
     var projectIDSortKey: String { projectID?.uuidString ?? "" }
 }
@@ -383,6 +408,7 @@ private struct ActionEditorSheet: View {
     @State private var title: String
     @State private var details: String
     @State private var priority: ActionPriority
+    @State private var status: ActionStatus
     @State private var dueDate: Date
     @State private var flow: ActionFlow
     @State private var projectID: UUID?
@@ -396,6 +422,7 @@ private struct ActionEditorSheet: View {
         _title = State(initialValue: action?.title ?? "")
         _details = State(initialValue: action?.details ?? "")
         _priority = State(initialValue: action?.priority ?? .minor)
+        _status = State(initialValue: action?.status ?? .todo)
         _dueDate = State(initialValue: action?.dueDate ?? Calendar.current.date(byAdding: .day, value: 3, to: .now) ?? .now)
         _flow = State(initialValue: action?.flow ?? .manuel)
         _projectID = State(initialValue: action?.projectID)
@@ -410,6 +437,18 @@ private struct ActionEditorSheet: View {
                     Picker("Priorité", selection: $priority) {
                         ForEach(ActionPriority.allCases) { value in
                             Text(value.label).tag(value)
+                        }
+                    }
+
+                    Picker("Statut", selection: $status) {
+                        ForEach(ActionStatus.allCases) { value in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(value.tintColor)
+                                    .frame(width: 9, height: 9)
+                                Text(value.label)
+                            }
+                            .tag(value)
                         }
                     }
 
@@ -502,6 +541,7 @@ private struct ActionEditorSheet: View {
             title,
             details,
             priority.rawValue,
+            status.rawValue,
             String(dueDate.timeIntervalSinceReferenceDate),
             flow.rawValue,
             projectID?.uuidString ?? ""
@@ -549,7 +589,8 @@ private struct ActionEditorSheet: View {
                 priority: priority,
                 dueDate: dueDate,
                 flow: flow,
-                projectID: projectID
+                projectID: projectID,
+                status: status
             )
             appState.openAction(action.id)
         } else {
@@ -557,6 +598,7 @@ private struct ActionEditorSheet: View {
                 title: cleanedTitle,
                 details: cleanedDetails,
                 priority: priority,
+                status: status,
                 dueDate: dueDate,
                 flow: flow,
                 projectID: projectID

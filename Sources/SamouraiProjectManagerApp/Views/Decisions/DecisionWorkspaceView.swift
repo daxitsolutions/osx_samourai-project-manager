@@ -372,6 +372,8 @@ private struct DecisionEditorSheet: View {
     @State private var didApplyPrimaryProjectDefault = false
     @State private var initialSnapshot: String?
     @State private var isShowingDismissConfirmation = false
+    @State private var meetingSearchText: String = ""
+    @State private var resourceSearchText: String = ""
 
     init(decision: ProjectDecision?) {
         self.decision = decision
@@ -410,21 +412,19 @@ private struct DecisionEditorSheet: View {
                 }
 
                 Section("Liens contextuels") {
-                    contextToggleSection(title: "Réunions liées", items: store.meetings, selectedIDs: $selectedMeetingIDs) { meeting in
-                        "\(meeting.displayTitle) · \(meeting.meetingAt.formatted(date: .abbreviated, time: .shortened))"
-                    }
+                    meetingPickerSection()
 
                     contextToggleSection(title: "Événements liés", items: store.events, selectedIDs: $selectedEventIDs) { event in
                         "\(event.displayTitle) · \(event.happenedAt.formatted(date: .abbreviated, time: .shortened))"
                     }
 
-                    contextToggleSection(title: "Ressources impactées", items: store.resources, selectedIDs: $selectedResourceIDs) { resource in
-                        "\(resource.displayName) · \(resource.displayPrimaryRole)"
-                    }
+                    resourcePickerSection()
                 }
 
-                Section("Journal de modification") {
-                    TextField("Résumé du changement (optionnel)", text: $changeSummary)
+                if decision != nil {
+                    Section("Journal de modification") {
+                        TextField("Résumé du changement (optionnel)", text: $changeSummary)
+                    }
                 }
 
                 if appState.resolvedPrimaryProjectID(in: store) == nil {
@@ -519,6 +519,101 @@ private struct DecisionEditorSheet: View {
         } else {
             dismiss()
         }
+    }
+
+    private var visibleMeetings: [ProjectMeeting] {
+        let q = meetingSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let base: [ProjectMeeting]
+        if q.isEmpty {
+            base = Array(store.meetings.sorted { $0.meetingAt > $1.meetingAt }.prefix(3))
+        } else {
+            base = store.meetings.filter {
+                $0.displayTitle.lowercased().contains(q) || $0.organizer.lowercased().contains(q)
+            }
+        }
+        let baseIDs = Set(base.map(\.id))
+        let extra = store.meetings.filter { selectedMeetingIDs.contains($0.id) && !baseIDs.contains($0.id) }
+        return base + extra
+    }
+
+    private var visibleResources: [Resource] {
+        let q = resourceSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let base: [Resource]
+        if q.isEmpty {
+            base = []
+        } else {
+            base = Array(store.resources.filter {
+                $0.displayName.lowercased().contains(q) || $0.displayPrimaryRole.lowercased().contains(q)
+            }.prefix(3))
+        }
+        let baseIDs = Set(base.map(\.id))
+        let extra = store.resources.filter { selectedResourceIDs.contains($0.id) && !baseIDs.contains($0.id) }
+        return base + extra
+    }
+
+    @ViewBuilder
+    private func meetingPickerSection() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Réunions liées")
+                .font(.headline)
+
+            if store.meetings.isEmpty {
+                Text("Aucune réunion disponible")
+                    .foregroundStyle(.secondary)
+            } else {
+                TextField("Rechercher une réunion…", text: $meetingSearchText)
+                    .textFieldStyle(.roundedBorder)
+
+                ForEach(visibleMeetings) { meeting in
+                    Toggle(
+                        "\(meeting.displayTitle) · \(meeting.meetingAt.formatted(date: .abbreviated, time: .shortened))",
+                        isOn: Binding(
+                            get: { selectedMeetingIDs.contains(meeting.id) },
+                            set: { isOn in
+                                if isOn { selectedMeetingIDs.insert(meeting.id) }
+                                else { selectedMeetingIDs.remove(meeting.id) }
+                            }
+                        )
+                    )
+                    .toggleStyle(.checkbox)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func resourcePickerSection() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Ressources impactées")
+                .font(.headline)
+
+            TextField("Rechercher une ressource…", text: $resourceSearchText)
+                .textFieldStyle(.roundedBorder)
+
+            if visibleResources.isEmpty {
+                Text(resourceSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? "Saisissez un nom ou un rôle pour rechercher"
+                    : "Aucun résultat")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            } else {
+                ForEach(visibleResources) { resource in
+                    Toggle(
+                        "\(resource.displayName) · \(resource.displayPrimaryRole)",
+                        isOn: Binding(
+                            get: { selectedResourceIDs.contains(resource.id) },
+                            set: { isOn in
+                                if isOn { selectedResourceIDs.insert(resource.id) }
+                                else { selectedResourceIDs.remove(resource.id) }
+                            }
+                        )
+                    )
+                    .toggleStyle(.checkbox)
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private func contextToggleSection<Item: Identifiable>(

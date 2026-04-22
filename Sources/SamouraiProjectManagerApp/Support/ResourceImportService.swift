@@ -2,24 +2,38 @@ import Foundation
 
 enum ResourceImportService {
     static func importResources(from fileURL: URL) throws -> [ResourceImportDraft] {
+        try importResources(from: fileURL, reporter: .noop)
+    }
+
+    static func importResources(
+        from fileURL: URL,
+        reporter: ImportProgressReporter
+    ) throws -> [ResourceImportDraft] {
+        reporter.setStage(.reading)
         let fileExtension = fileURL.pathExtension.lowercased()
 
         switch fileExtension {
         case "xlsx":
-            return try importXLSX(from: fileURL)
+            return try importXLSX(from: fileURL, reporter: reporter)
         case "csv":
-            return try importDelimitedText(from: fileURL, separator: ",")
+            return try importDelimitedText(from: fileURL, separator: ",", reporter: reporter)
         case "tsv", "txt":
-            return try importDelimitedText(from: fileURL, separator: "\t")
+            return try importDelimitedText(from: fileURL, separator: "\t", reporter: reporter)
         default:
             throw ResourceImportError.unsupportedFileType
         }
     }
 
-    private static func importXLSX(from fileURL: URL) throws -> [ResourceImportDraft] {
+    private static func importXLSX(
+        from fileURL: URL,
+        reporter: ImportProgressReporter
+    ) throws -> [ResourceImportDraft] {
         let sharedStringsData = try unzipEntryIfAvailable(at: fileURL, entryPath: "xl/sharedStrings.xml")
         let stylesData = try unzipEntryIfAvailable(at: fileURL, entryPath: "xl/styles.xml")
         let worksheetData = try unzipEntry(at: fileURL, entryPath: "xl/worksheets/sheet1.xml")
+
+        try Task.checkCancellation()
+        reporter.setStage(.parsing)
 
         let sharedStrings = try sharedStringsData.map(SharedStringsParser.parse) ?? []
         let dateFormattedStyleIndexes = try stylesData.map(StylesParser.parseDateFormattedStyleIndexes) ?? []
@@ -29,11 +43,19 @@ enum ResourceImportService {
             dateFormattedStyleIndexes: dateFormattedStyleIndexes
         )
 
-        return try makeDrafts(from: rows)
+        return try makeDrafts(from: rows, reporter: reporter)
     }
 
-    private static func importDelimitedText(from fileURL: URL, separator: Character) throws -> [ResourceImportDraft] {
+    private static func importDelimitedText(
+        from fileURL: URL,
+        separator: Character,
+        reporter: ImportProgressReporter
+    ) throws -> [ResourceImportDraft] {
         let rawText = try String(contentsOf: fileURL, encoding: .utf8)
+
+        try Task.checkCancellation()
+        reporter.setStage(.parsing)
+
         let rows = rawText
             .split(whereSeparator: \.isNewline)
             .map(String.init)
@@ -51,10 +73,13 @@ enum ResourceImportService {
                 )
             }
 
-        return try makeDrafts(from: rows)
+        return try makeDrafts(from: rows, reporter: reporter)
     }
 
-    private static func makeDrafts(from rows: [ParsedSpreadsheetRow]) throws -> [ResourceImportDraft] {
+    private static func makeDrafts(
+        from rows: [ParsedSpreadsheetRow],
+        reporter: ImportProgressReporter
+    ) throws -> [ResourceImportDraft] {
         guard let headerRow = rows.first else {
             throw ResourceImportError.emptyFile
         }
@@ -66,78 +91,102 @@ enum ResourceImportService {
             throw ResourceImportError.missingRequiredColumn("Nom ou couple Prénom/Nom")
         }
 
-        return rows.dropFirst().compactMap { row in
-            let values = Dictionary(uniqueKeysWithValues: headerMap.map { column, index in
-                (column, row.cellsByColumnIndex[index]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
-            })
+        let dataRows = Array(rows.dropFirst())
+        reporter.setTotal(dataRows.count)
+        reporter.setProcessed(0)
 
-            guard values.values.contains(where: { $0.isEmpty == false }) else {
-                return nil
+        var drafts: [ResourceImportDraft] = []
+        drafts.reserveCapacity(dataRows.count)
+
+        for (index, row) in dataRows.enumerated() {
+            try Task.checkCancellation()
+
+            if let draft = makeDraft(from: row, headerMap: headerMap) {
+                drafts.append(draft)
             }
 
-            let firstName = optionalString(values[.prenom, default: ""])
-            let lastName = optionalString(values[.nomDeFamille, default: ""])
-            let fullName = optionalString(values[.nom, default: ""])
-                ?? combinedName(firstName: firstName, lastName: lastName)
-
-            guard fullName?.isEmpty == false else {
-                return ResourceImportDraft(
-                    nom: nil,
-                    prenom: nil,
-                    nomDeFamille: nil,
-                    parentDescription: nil,
-                    primaryResourceRole: nil,
-                    resourceRoles: nil,
-                    organizationalResource: nil,
-                    competence1: nil,
-                    resourceCalendar: nil,
-                    resourceStartDate: nil,
-                    resourceFinishDate: nil,
-                    responsableOperationnel: nil,
-                    responsableInterne: nil,
-                    localisation: nil,
-                    typeDeRessource: nil,
-                    journeesTempsPartiel: nil,
-                    email: nil,
-                    phone: nil,
-                    engagement: .internalEmployee,
-                    status: .active,
-                    allocationPercent: 100,
-                    notes: "",
-                    sourceRowNumber: row.rowNumber
-                )
+            if (index + 1) % 25 == 0 || index == dataRows.count - 1 {
+                reporter.setProcessed(index + 1)
             }
+        }
 
-            let partTimeDays = values[.partTimeDays, default: ""]
-            let finishDate = values[.resourceFinishDate, default: ""]
-            let startDate = values[.resourceStartDate, default: ""]
+        return drafts
+    }
 
+    private static func makeDraft(
+        from row: ParsedSpreadsheetRow,
+        headerMap: [ResourceSpreadsheetColumn: Int]
+    ) -> ResourceImportDraft? {
+        let values = Dictionary(uniqueKeysWithValues: headerMap.map { column, index in
+            (column, row.cellsByColumnIndex[index]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+        })
+
+        guard values.values.contains(where: { $0.isEmpty == false }) else {
+            return nil
+        }
+
+        let firstName = optionalString(values[.prenom, default: ""])
+        let lastName = optionalString(values[.nomDeFamille, default: ""])
+        let fullName = optionalString(values[.nom, default: ""])
+            ?? combinedName(firstName: firstName, lastName: lastName)
+
+        guard fullName?.isEmpty == false else {
             return ResourceImportDraft(
-                nom: fullName,
-                prenom: firstName,
-                nomDeFamille: lastName,
-                parentDescription: optionalString(values[.parentDescription, default: ""]),
-                primaryResourceRole: optionalString(values[.primaryResourceRole, default: ""]),
-                resourceRoles: optionalString(values[.resourceRoles, default: ""]),
-                organizationalResource: optionalString(values[.organizationalResource, default: ""]),
-                competence1: optionalString(values[.competency1, default: ""]),
-                resourceCalendar: optionalString(values[.resourceCalendar, default: ""]),
-                resourceStartDate: parseDateString(startDate),
-                resourceFinishDate: parseDateString(finishDate),
-                responsableOperationnel: optionalString(values[.operationalManager, default: ""]),
-                responsableInterne: optionalString(values[.internalManager, default: ""]),
-                localisation: optionalString(values[.location, default: ""]),
-                typeDeRessource: optionalString(values[.resourceType, default: ""]),
-                journeesTempsPartiel: optionalString(partTimeDays),
-                email: optionalString(values[.email, default: ""]),
-                phone: optionalString(values[.phone, default: ""]),
-                engagement: mapEngagement(from: values[.resourceType, default: ""]),
-                status: mapStatus(finishDate: finishDate, partTimeDays: partTimeDays),
-                allocationPercent: mapAllocationPercent(from: partTimeDays),
+                nom: nil,
+                prenom: nil,
+                nomDeFamille: nil,
+                parentDescription: nil,
+                primaryResourceRole: nil,
+                resourceRoles: nil,
+                organizationalResource: nil,
+                competence1: nil,
+                resourceCalendar: nil,
+                resourceStartDate: nil,
+                resourceFinishDate: nil,
+                responsableOperationnel: nil,
+                responsableInterne: nil,
+                localisation: nil,
+                typeDeRessource: nil,
+                journeesTempsPartiel: nil,
+                email: nil,
+                phone: nil,
+                engagement: .internalEmployee,
+                status: .active,
+                allocationPercent: 100,
                 notes: "",
                 sourceRowNumber: row.rowNumber
             )
         }
+
+        let partTimeDays = values[.partTimeDays, default: ""]
+        let finishDate = values[.resourceFinishDate, default: ""]
+        let startDate = values[.resourceStartDate, default: ""]
+
+        return ResourceImportDraft(
+            nom: fullName,
+            prenom: firstName,
+            nomDeFamille: lastName,
+            parentDescription: optionalString(values[.parentDescription, default: ""]),
+            primaryResourceRole: optionalString(values[.primaryResourceRole, default: ""]),
+            resourceRoles: optionalString(values[.resourceRoles, default: ""]),
+            organizationalResource: optionalString(values[.organizationalResource, default: ""]),
+            competence1: optionalString(values[.competency1, default: ""]),
+            resourceCalendar: optionalString(values[.resourceCalendar, default: ""]),
+            resourceStartDate: parseDateString(startDate),
+            resourceFinishDate: parseDateString(finishDate),
+            responsableOperationnel: optionalString(values[.operationalManager, default: ""]),
+            responsableInterne: optionalString(values[.internalManager, default: ""]),
+            localisation: optionalString(values[.location, default: ""]),
+            typeDeRessource: optionalString(values[.resourceType, default: ""]),
+            journeesTempsPartiel: optionalString(partTimeDays),
+            email: optionalString(values[.email, default: ""]),
+            phone: optionalString(values[.phone, default: ""]),
+            engagement: mapEngagement(from: values[.resourceType, default: ""]),
+            status: mapStatus(finishDate: finishDate, partTimeDays: partTimeDays),
+            allocationPercent: mapAllocationPercent(from: partTimeDays),
+            notes: "",
+            sourceRowNumber: row.rowNumber
+        )
     }
 
     private static func buildHeaderMap(from headerRow: ParsedSpreadsheetRow) -> [ResourceSpreadsheetColumn: Int] {

@@ -2085,45 +2085,73 @@ final class SamouraiStore {
     }
 
     func importRisks(_ drafts: [RiskImportDraft]) -> RiskImportResult {
+        applyRiskDraftsSync(drafts)
+    }
+
+    func importRisksAsync(
+        _ drafts: [RiskImportDraft],
+        reporter: ImportProgressReporter
+    ) async throws -> RiskImportResult {
+        reporter.setStage(.importing)
+        reporter.setTotal(drafts.count)
+        reporter.setProcessed(0)
+
+        var importedCount = 0
+        var updatedCount = 0
+        var skippedCount = 0
+        var firstImportedOrUpdatedRiskID: UUID?
+
+        for (index, draft) in drafts.enumerated() {
+            try Task.checkCancellation()
+
+            let outcome = ingestRiskDraft(draft)
+            switch outcome {
+            case .created(let id):
+                importedCount += 1
+                if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = id }
+            case .updated(let id):
+                updatedCount += 1
+                if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = id }
+            case .skipped:
+                skippedCount += 1
+            }
+
+            if (index + 1) % 25 == 0 || index == drafts.count - 1 {
+                reporter.setProcessed(index + 1)
+                await Task.yield()
+            }
+        }
+
+        reporter.setStage(.finalizing)
+        unassignedRisks = sortStandaloneRisks(unassignedRisks)
+        projects = sortProjects(projects)
+        persist()
+
+        return RiskImportResult(
+            importedCount: importedCount,
+            updatedCount: updatedCount,
+            skippedCount: skippedCount,
+            firstImportedOrUpdatedRiskID: firstImportedOrUpdatedRiskID
+        )
+    }
+
+    private func applyRiskDraftsSync(_ drafts: [RiskImportDraft]) -> RiskImportResult {
         var importedCount = 0
         var updatedCount = 0
         var skippedCount = 0
         var firstImportedOrUpdatedRiskID: UUID?
 
         for draft in drafts {
-            let normalized = normalizedRiskFields(from: draft)
-            guard normalized.displayTitle.isEmpty == false else {
+            switch ingestRiskDraft(draft) {
+            case .created(let id):
+                importedCount += 1
+                if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = id }
+            case .updated(let id):
+                updatedCount += 1
+                if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = id }
+            case .skipped:
                 skippedCount += 1
-                continue
             }
-
-            let matchingKey = riskMatchingKey(externalID: normalized.externalID, title: normalized.displayTitle)
-
-            if let existing = findRiskLocation(by: matchingKey) {
-                switch existing {
-                case .project(let projectIndex, let riskIndex):
-                    projects[projectIndex].risks[riskIndex] = normalized.risk
-                    projects[projectIndex].updatedAt = .now
-                    updatedCount += 1
-                    if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = normalized.risk.id }
-                case .unassigned(let riskIndex):
-                    unassignedRisks[riskIndex] = normalized.risk
-                    updatedCount += 1
-                    if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = normalized.risk.id }
-                }
-                continue
-            }
-
-            if let projectID = resolveProjectID(from: normalized.risk.projectNames),
-               let projectIndex = projects.firstIndex(where: { $0.id == projectID }) {
-                projects[projectIndex].risks.append(normalized.risk)
-                projects[projectIndex].updatedAt = .now
-            } else {
-                unassignedRisks.append(normalized.risk)
-            }
-
-            importedCount += 1
-            if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = normalized.risk.id }
         }
 
         unassignedRisks = sortStandaloneRisks(unassignedRisks)
@@ -2136,6 +2164,42 @@ final class SamouraiStore {
             skippedCount: skippedCount,
             firstImportedOrUpdatedRiskID: firstImportedOrUpdatedRiskID
         )
+    }
+
+    private enum RiskIngestionOutcome {
+        case created(UUID)
+        case updated(UUID)
+        case skipped
+    }
+
+    private func ingestRiskDraft(_ draft: RiskImportDraft) -> RiskIngestionOutcome {
+        let normalized = normalizedRiskFields(from: draft)
+        guard normalized.displayTitle.isEmpty == false else {
+            return .skipped
+        }
+
+        let matchingKey = riskMatchingKey(externalID: normalized.externalID, title: normalized.displayTitle)
+
+        if let existing = findRiskLocation(by: matchingKey) {
+            switch existing {
+            case .project(let projectIndex, let riskIndex):
+                projects[projectIndex].risks[riskIndex] = normalized.risk
+                projects[projectIndex].updatedAt = .now
+            case .unassigned(let riskIndex):
+                unassignedRisks[riskIndex] = normalized.risk
+            }
+            return .updated(normalized.risk.id)
+        }
+
+        if let projectID = resolveProjectID(from: normalized.risk.projectNames),
+           let projectIndex = projects.firstIndex(where: { $0.id == projectID }) {
+            projects[projectIndex].risks.append(normalized.risk)
+            projects[projectIndex].updatedAt = .now
+        } else {
+            unassignedRisks.append(normalized.risk)
+        }
+
+        return .created(normalized.risk.id)
     }
 
     func addDeliverable(
@@ -2703,124 +2767,207 @@ final class SamouraiStore {
         return applyResourceImportReview(reviewItems, decisions: decisions)
     }
 
-    func prepareResourceImportReview(_ drafts: [ResourceImportDraft]) -> [ResourceImportReviewItem] {
+    func prepareResourceImportReviewAsync(
+        _ drafts: [ResourceImportDraft],
+        reporter: ImportProgressReporter
+    ) async throws -> [ResourceImportReviewItem] {
+        reporter.setStage(.analyzing)
+        reporter.setTotal(drafts.count)
+        reporter.setProcessed(0)
+
         var reviewItems: [ResourceImportReviewItem] = []
+        reviewItems.reserveCapacity(drafts.count)
 
-        for draft in drafts {
-            let trimmedNotes = draft.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalizedEmail = cleanedOptionalString(draft.email)
-            let normalizedPhone = cleanedOptionalString(draft.phone)
-            let normalized = normalizedResourceFields(
-                nom: draft.nom,
-                parentDescription: draft.parentDescription,
-                primaryResourceRole: draft.primaryResourceRole,
-                resourceRoles: draft.resourceRoles,
-                organizationalResource: draft.organizationalResource,
-                competence1: draft.competence1,
-                resourceCalendar: draft.resourceCalendar,
-                resourceStartDate: draft.resourceStartDate,
-                resourceFinishDate: draft.resourceFinishDate,
-                responsableOperationnel: draft.responsableOperationnel,
-                responsableInterne: draft.responsableInterne,
-                localisation: draft.localisation,
-                typeDeRessource: draft.typeDeRessource,
-                journeesTempsPartiel: draft.journeesTempsPartiel
-            )
+        for (index, draft) in drafts.enumerated() {
+            try Task.checkCancellation()
+            reviewItems.append(makeResourceImportReviewItem(for: draft))
 
-            guard normalized.fullName.isEmpty == false else {
-                reviewItems.append(
-                    ResourceImportReviewItem(
-                        sourceRowNumber: draft.sourceRowNumber,
-                        action: .skipped,
-                        resourceID: nil,
-                        displayName: "(ligne sans nom)",
-                        changes: [],
-                        proposedResource: nil,
-                        isExistingResource: false
-                    )
-                )
-                continue
-            }
-
-            let normalizedKey = resourceMatchingKey(
-                fullName: normalized.fullName,
-                firstName: draft.prenom,
-                lastName: draft.nomDeFamille,
-                email: normalizedEmail
-            )
-
-            if let index = resources.firstIndex(where: {
-                resourceMatchingKey(
-                    fullName: $0.fullName,
-                    firstName: nil,
-                    lastName: nil,
-                    email: cleanedOptionalString($0.email)
-                ) == normalizedKey
-            }) {
-                let existingResource = resources[index]
-                let updateResult = mergeExistingResource(
-                    existingResource,
-                    draft: draft,
-                    normalized: normalized,
-                    trimmedNotes: trimmedNotes,
-                    normalizedEmail: normalizedEmail,
-                    normalizedPhone: normalizedPhone
-                )
-
-                reviewItems.append(
-                    ResourceImportReviewItem(
-                        sourceRowNumber: draft.sourceRowNumber,
-                        action: updateResult.changes.isEmpty ? .noChange : .update,
-                        resourceID: existingResource.id,
-                        displayName: existingResource.displayName,
-                        changes: updateResult.changes,
-                        proposedResource: updateResult.mergedResource,
-                        isExistingResource: true
-                    )
-                )
-            } else {
-                let createdResource = Resource(
-                    fullName: normalized.fullName,
-                    jobTitle: normalized.jobTitle,
-                    department: normalized.department,
-                    nom: normalized.nom,
-                    parentDescription: normalized.parentDescription,
-                    primaryResourceRole: normalized.primaryResourceRole,
-                    resourceRoles: normalized.resourceRoles,
-                    organizationalResource: normalized.organizationalResource,
-                    competence1: normalized.competence1,
-                    resourceCalendar: normalized.resourceCalendar,
-                    resourceStartDate: normalized.resourceStartDate,
-                    resourceFinishDate: normalized.resourceFinishDate,
-                    responsableOperationnel: normalized.responsableOperationnel,
-                    responsableInterne: normalized.responsableInterne,
-                    localisation: normalized.localisation,
-                    typeDeRessource: normalized.typeDeRessource,
-                    journeesTempsPartiel: normalized.journeesTempsPartiel,
-                    email: normalizedEmail ?? "",
-                    phone: normalizedPhone ?? "",
-                    engagement: normalized.engagement,
-                    status: normalized.status,
-                    allocationPercent: normalized.allocationPercent,
-                    assignedProjectIDs: [],
-                    notes: trimmedNotes
-                )
-
-                reviewItems.append(
-                    ResourceImportReviewItem(
-                        sourceRowNumber: draft.sourceRowNumber,
-                        action: .create,
-                        resourceID: createdResource.id,
-                        displayName: createdResource.displayName,
-                        changes: creationFieldChanges(for: createdResource),
-                        proposedResource: createdResource,
-                        isExistingResource: false
-                    )
-                )
+            if (index + 1) % 25 == 0 || index == drafts.count - 1 {
+                reporter.setProcessed(index + 1)
+                await Task.yield()
             }
         }
 
         return reviewItems.sorted { $0.sourceRowNumber < $1.sourceRowNumber }
+    }
+
+    func applyResourceImportReviewAsync(
+        _ reviewItems: [ResourceImportReviewItem],
+        decisions: [ResourceImportDecision],
+        reporter: ImportProgressReporter
+    ) async throws -> ResourceImportResult {
+        reporter.setStage(.importing)
+        reporter.setTotal(reviewItems.count)
+        reporter.setProcessed(0)
+
+        let decisionsByID = Dictionary(uniqueKeysWithValues: decisions.map { ($0.reviewItemID, $0.shouldApply) })
+        var importedCount = 0
+        var updatedCount = 0
+        var skippedCount = 0
+        var firstImportedOrUpdatedResourceID: UUID?
+
+        for (index, item) in reviewItems.enumerated() {
+            try Task.checkCancellation()
+
+            let shouldApply = decisionsByID[item.id] ?? false
+
+            switch item.action {
+            case .create:
+                guard shouldApply, let createdResource = item.proposedResource else {
+                    skippedCount += 1
+                    break
+                }
+                resources.append(createdResource)
+                importedCount += 1
+                if firstImportedOrUpdatedResourceID == nil {
+                    firstImportedOrUpdatedResourceID = createdResource.id
+                }
+            case .update:
+                guard shouldApply, let updatedResource = item.proposedResource else {
+                    skippedCount += 1
+                    break
+                }
+                guard let resourceIndex = resources.firstIndex(where: { $0.id == updatedResource.id }) else {
+                    skippedCount += 1
+                    break
+                }
+                resources[resourceIndex] = updatedResource
+                updatedCount += 1
+                if firstImportedOrUpdatedResourceID == nil {
+                    firstImportedOrUpdatedResourceID = updatedResource.id
+                }
+            case .noChange, .skipped:
+                skippedCount += 1
+            }
+
+            if (index + 1) % 25 == 0 || index == reviewItems.count - 1 {
+                reporter.setProcessed(index + 1)
+                await Task.yield()
+            }
+        }
+
+        reporter.setStage(.finalizing)
+        resources = sortResources(resources)
+        persist()
+
+        return ResourceImportResult(
+            importedCount: importedCount,
+            updatedCount: updatedCount,
+            skippedCount: skippedCount,
+            firstImportedOrUpdatedResourceID: firstImportedOrUpdatedResourceID
+        )
+    }
+
+    func prepareResourceImportReview(_ drafts: [ResourceImportDraft]) -> [ResourceImportReviewItem] {
+        let reviewItems = drafts.map { makeResourceImportReviewItem(for: $0) }
+        return reviewItems.sorted { $0.sourceRowNumber < $1.sourceRowNumber }
+    }
+
+    private func makeResourceImportReviewItem(for draft: ResourceImportDraft) -> ResourceImportReviewItem {
+        let trimmedNotes = draft.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEmail = cleanedOptionalString(draft.email)
+        let normalizedPhone = cleanedOptionalString(draft.phone)
+        let normalized = normalizedResourceFields(
+            nom: draft.nom,
+            parentDescription: draft.parentDescription,
+            primaryResourceRole: draft.primaryResourceRole,
+            resourceRoles: draft.resourceRoles,
+            organizationalResource: draft.organizationalResource,
+            competence1: draft.competence1,
+            resourceCalendar: draft.resourceCalendar,
+            resourceStartDate: draft.resourceStartDate,
+            resourceFinishDate: draft.resourceFinishDate,
+            responsableOperationnel: draft.responsableOperationnel,
+            responsableInterne: draft.responsableInterne,
+            localisation: draft.localisation,
+            typeDeRessource: draft.typeDeRessource,
+            journeesTempsPartiel: draft.journeesTempsPartiel
+        )
+
+        guard normalized.fullName.isEmpty == false else {
+            return ResourceImportReviewItem(
+                sourceRowNumber: draft.sourceRowNumber,
+                action: .skipped,
+                resourceID: nil,
+                displayName: "(ligne sans nom)",
+                changes: [],
+                proposedResource: nil,
+                isExistingResource: false
+            )
+        }
+
+        let normalizedKey = resourceMatchingKey(
+            fullName: normalized.fullName,
+            firstName: draft.prenom,
+            lastName: draft.nomDeFamille,
+            email: normalizedEmail
+        )
+
+        if let index = resources.firstIndex(where: {
+            resourceMatchingKey(
+                fullName: $0.fullName,
+                firstName: nil,
+                lastName: nil,
+                email: cleanedOptionalString($0.email)
+            ) == normalizedKey
+        }) {
+            let existingResource = resources[index]
+            let updateResult = mergeExistingResource(
+                existingResource,
+                draft: draft,
+                normalized: normalized,
+                trimmedNotes: trimmedNotes,
+                normalizedEmail: normalizedEmail,
+                normalizedPhone: normalizedPhone
+            )
+
+            return ResourceImportReviewItem(
+                sourceRowNumber: draft.sourceRowNumber,
+                action: updateResult.changes.isEmpty ? .noChange : .update,
+                resourceID: existingResource.id,
+                displayName: existingResource.displayName,
+                changes: updateResult.changes,
+                proposedResource: updateResult.mergedResource,
+                isExistingResource: true
+            )
+        }
+
+        let createdResource = Resource(
+            fullName: normalized.fullName,
+            jobTitle: normalized.jobTitle,
+            department: normalized.department,
+            nom: normalized.nom,
+            parentDescription: normalized.parentDescription,
+            primaryResourceRole: normalized.primaryResourceRole,
+            resourceRoles: normalized.resourceRoles,
+            organizationalResource: normalized.organizationalResource,
+            competence1: normalized.competence1,
+            resourceCalendar: normalized.resourceCalendar,
+            resourceStartDate: normalized.resourceStartDate,
+            resourceFinishDate: normalized.resourceFinishDate,
+            responsableOperationnel: normalized.responsableOperationnel,
+            responsableInterne: normalized.responsableInterne,
+            localisation: normalized.localisation,
+            typeDeRessource: normalized.typeDeRessource,
+            journeesTempsPartiel: normalized.journeesTempsPartiel,
+            email: normalizedEmail ?? "",
+            phone: normalizedPhone ?? "",
+            engagement: normalized.engagement,
+            status: normalized.status,
+            allocationPercent: normalized.allocationPercent,
+            assignedProjectIDs: [],
+            notes: trimmedNotes
+        )
+
+        return ResourceImportReviewItem(
+            sourceRowNumber: draft.sourceRowNumber,
+            action: .create,
+            resourceID: createdResource.id,
+            displayName: createdResource.displayName,
+            changes: creationFieldChanges(for: createdResource),
+            proposedResource: createdResource,
+            isExistingResource: false
+        )
     }
 
     func applyResourceImportReview(_ reviewItems: [ResourceImportReviewItem], decisions: [ResourceImportDecision]) -> ResourceImportResult {

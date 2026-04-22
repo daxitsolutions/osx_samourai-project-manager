@@ -9,6 +9,7 @@ struct RiskRegisterView: View {
     @State private var riskEditorContext: RiskRegistryEditorContext?
     @State private var importFeedbackMessage: String?
     @State private var isImporting = false
+    @State private var importProgressTracker: ImportProgressTracker?
     @State private var searchText = ""
     @State private var selectedRiskIDs: Set<UUID> = []
     @State private var isShowingDeleteConfirmation = false
@@ -253,6 +254,15 @@ struct RiskRegisterView: View {
         } message: {
             Text(importFeedbackMessage ?? "")
         }
+        .sheet(item: $importProgressTracker) { tracker in
+            SamouraiImportProgressSheet(
+                tracker: tracker,
+                onCancel: {
+                    tracker.cancel()
+                }
+            )
+            .interactiveDismissDisabled()
+        }
         .onChange(of: selectedRiskIDs) { _, newSelection in
             appState.selectedRiskID = newSelection.singleSelection
         }
@@ -278,27 +288,46 @@ struct RiskRegisterView: View {
             return
         }
 
+        let tracker = ImportProgressTracker(
+            title: "Import des risques",
+            fileName: fileURL.lastPathComponent
+        )
+        importProgressTracker = tracker
         isImporting = true
-        let didAccessSecurityScope = fileURL.startAccessingSecurityScopedResource()
 
-        defer {
-            if didAccessSecurityScope {
-                fileURL.stopAccessingSecurityScopedResource()
-            }
-            isImporting = false
-        }
-
-        do {
-            let drafts = try RiskImportService.importRisks(from: fileURL)
-            let importResult = store.importRisks(drafts)
-
-            if let riskID = importResult.firstImportedOrUpdatedRiskID {
-                appState.openRisk(riskID)
+        let currentStore = store
+        tracker.task = Task { @MainActor in
+            let didAccessSecurityScope = fileURL.startAccessingSecurityScopedResource()
+            defer {
+                if didAccessSecurityScope {
+                    fileURL.stopAccessingSecurityScopedResource()
+                }
+                isImporting = false
+                importProgressTracker = nil
             }
 
-            importFeedbackMessage = "Import terminé : \(importResult.summary)"
-        } catch {
-            importFeedbackMessage = error.localizedDescription
+            let reporter = ImportProgressReporter.forwarding(to: tracker)
+            let importURL = fileURL
+
+            do {
+                let drafts = try await Task.detached(priority: .userInitiated) { () throws -> [RiskImportDraft] in
+                    try RiskImportService.importRisks(from: importURL, reporter: reporter)
+                }.value
+
+                try Task.checkCancellation()
+
+                let importResult = try await currentStore.importRisksAsync(drafts, reporter: reporter)
+
+                if let riskID = importResult.firstImportedOrUpdatedRiskID {
+                    appState.openRisk(riskID)
+                }
+
+                importFeedbackMessage = "Import terminé : \(importResult.summary)"
+            } catch is CancellationError {
+                importFeedbackMessage = "Import annulé."
+            } catch {
+                importFeedbackMessage = error.localizedDescription
+            }
         }
     }
 

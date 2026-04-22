@@ -2,24 +2,38 @@ import Foundation
 
 enum RiskImportService {
     static func importRisks(from fileURL: URL) throws -> [RiskImportDraft] {
+        try importRisks(from: fileURL, reporter: .noop)
+    }
+
+    static func importRisks(
+        from fileURL: URL,
+        reporter: ImportProgressReporter
+    ) throws -> [RiskImportDraft] {
+        reporter.setStage(.reading)
         let fileExtension = fileURL.pathExtension.lowercased()
 
         switch fileExtension {
         case "xlsx":
-            return try importXLSX(from: fileURL)
+            return try importXLSX(from: fileURL, reporter: reporter)
         case "csv":
-            return try importDelimitedText(from: fileURL, separator: ",")
+            return try importDelimitedText(from: fileURL, separator: ",", reporter: reporter)
         case "tsv", "txt":
-            return try importDelimitedText(from: fileURL, separator: "\t")
+            return try importDelimitedText(from: fileURL, separator: "\t", reporter: reporter)
         default:
             throw RiskImportError.unsupportedFileType
         }
     }
 
-    private static func importXLSX(from fileURL: URL) throws -> [RiskImportDraft] {
+    private static func importXLSX(
+        from fileURL: URL,
+        reporter: ImportProgressReporter
+    ) throws -> [RiskImportDraft] {
         let sharedStringsData = try unzipEntryIfAvailable(at: fileURL, entryPath: "xl/sharedStrings.xml")
         let stylesData = try unzipEntryIfAvailable(at: fileURL, entryPath: "xl/styles.xml")
         let worksheetData = try unzipEntry(at: fileURL, entryPath: "xl/worksheets/sheet1.xml")
+
+        try Task.checkCancellation()
+        reporter.setStage(.parsing)
 
         let sharedStrings = try sharedStringsData.map(SharedStringsParser.parse) ?? []
         let dateFormattedStyleIndexes = try stylesData.map(StylesParser.parseDateFormattedStyleIndexes) ?? []
@@ -29,11 +43,19 @@ enum RiskImportService {
             dateFormattedStyleIndexes: dateFormattedStyleIndexes
         )
 
-        return try makeDrafts(from: rows)
+        return try makeDrafts(from: rows, reporter: reporter)
     }
 
-    private static func importDelimitedText(from fileURL: URL, separator: Character) throws -> [RiskImportDraft] {
+    private static func importDelimitedText(
+        from fileURL: URL,
+        separator: Character,
+        reporter: ImportProgressReporter
+    ) throws -> [RiskImportDraft] {
         let rawText = try String(contentsOf: fileURL, encoding: .utf8)
+
+        try Task.checkCancellation()
+        reporter.setStage(.parsing)
+
         let rows = rawText
             .split(whereSeparator: \.isNewline)
             .map(String.init)
@@ -51,10 +73,13 @@ enum RiskImportService {
                 )
             }
 
-        return try makeDrafts(from: rows)
+        return try makeDrafts(from: rows, reporter: reporter)
     }
 
-    private static func makeDrafts(from rows: [ParsedSpreadsheetRow]) throws -> [RiskImportDraft] {
+    private static func makeDrafts(
+        from rows: [ParsedSpreadsheetRow],
+        reporter: ImportProgressReporter
+    ) throws -> [RiskImportDraft] {
         guard let headerRow = rows.first else {
             throw RiskImportError.emptyFile
         }
@@ -64,49 +89,73 @@ enum RiskImportService {
             throw RiskImportError.missingRequiredColumn("Titre du risque ou ID")
         }
 
-        return rows.dropFirst().compactMap { row in
-            let values = Dictionary(uniqueKeysWithValues: headerMap.map { column, index in
-                (column, row.cellsByColumnIndex[index]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
-            })
+        let dataRows = Array(rows.dropFirst())
+        reporter.setTotal(dataRows.count)
+        reporter.setProcessed(0)
 
-            guard values.values.contains(where: { $0.isEmpty == false }) else {
-                return nil
+        var drafts: [RiskImportDraft] = []
+        drafts.reserveCapacity(dataRows.count)
+
+        for (index, row) in dataRows.enumerated() {
+            try Task.checkCancellation()
+
+            if let draft = makeDraft(from: row, headerMap: headerMap) {
+                drafts.append(draft)
             }
 
-            let riskTitle = optionalString(values[.riskTitle, default: ""])
-            let externalID = optionalString(values[.externalID, default: ""])
-            guard riskTitle != nil || externalID != nil else {
-                return nil
+            if (index + 1) % 25 == 0 || index == dataRows.count - 1 {
+                reporter.setProcessed(index + 1)
             }
-
-            return RiskImportDraft(
-                externalID: externalID,
-                projectNames: optionalString(values[.projects, default: ""]),
-                detectedBy: optionalString(values[.detectedBy, default: ""]),
-                assignedTo: optionalString(values[.assignedTo, default: ""]),
-                dateCreated: parseDateString(values[.dateCreated, default: ""]),
-                lastModifiedAt: parseDateString(values[.lastModified, default: ""]),
-                riskType: optionalString(values[.riskType, default: ""]),
-                response: optionalString(values[.response, default: ""]),
-                riskTitle: riskTitle,
-                riskOrigin: optionalString(values[.riskOrigin, default: ""]),
-                impactDescription: optionalString(values[.impactDescription, default: ""]),
-                counterMeasure: optionalString(values[.counterMeasure, default: ""]),
-                followUpComment: optionalString(values[.followUpComment, default: ""]),
-                proximity: optionalString(values[.proximity, default: ""]),
-                probability: optionalString(values[.probability, default: ""]),
-                impactScope: optionalString(values[.impactScope, default: ""]),
-                impactBudget: optionalString(values[.impactBudget, default: ""]),
-                impactPlanning: optionalString(values[.impactPlanning, default: ""]),
-                impactResources: optionalString(values[.impactResources, default: ""]),
-                impactTransition: optionalString(values[.impactTransition, default: ""]),
-                impactSecurityIT: optionalString(values[.impactSecurityIT, default: ""]),
-                escalationLevel: optionalString(values[.escalationLevel, default: ""]),
-                riskStatus: optionalString(values[.riskStatus, default: ""]),
-                score0to10: parseScore(values[.score0to10, default: ""]),
-                sourceRowNumber: row.rowNumber
-            )
         }
+
+        return drafts
+    }
+
+    private static func makeDraft(
+        from row: ParsedSpreadsheetRow,
+        headerMap: [RiskSpreadsheetColumn: Int]
+    ) -> RiskImportDraft? {
+        let values = Dictionary(uniqueKeysWithValues: headerMap.map { column, index in
+            (column, row.cellsByColumnIndex[index]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+        })
+
+        guard values.values.contains(where: { $0.isEmpty == false }) else {
+            return nil
+        }
+
+        let riskTitle = optionalString(values[.riskTitle, default: ""])
+        let externalID = optionalString(values[.externalID, default: ""])
+        guard riskTitle != nil || externalID != nil else {
+            return nil
+        }
+
+        return RiskImportDraft(
+            externalID: externalID,
+            projectNames: optionalString(values[.projects, default: ""]),
+            detectedBy: optionalString(values[.detectedBy, default: ""]),
+            assignedTo: optionalString(values[.assignedTo, default: ""]),
+            dateCreated: parseDateString(values[.dateCreated, default: ""]),
+            lastModifiedAt: parseDateString(values[.lastModified, default: ""]),
+            riskType: optionalString(values[.riskType, default: ""]),
+            response: optionalString(values[.response, default: ""]),
+            riskTitle: riskTitle,
+            riskOrigin: optionalString(values[.riskOrigin, default: ""]),
+            impactDescription: optionalString(values[.impactDescription, default: ""]),
+            counterMeasure: optionalString(values[.counterMeasure, default: ""]),
+            followUpComment: optionalString(values[.followUpComment, default: ""]),
+            proximity: optionalString(values[.proximity, default: ""]),
+            probability: optionalString(values[.probability, default: ""]),
+            impactScope: optionalString(values[.impactScope, default: ""]),
+            impactBudget: optionalString(values[.impactBudget, default: ""]),
+            impactPlanning: optionalString(values[.impactPlanning, default: ""]),
+            impactResources: optionalString(values[.impactResources, default: ""]),
+            impactTransition: optionalString(values[.impactTransition, default: ""]),
+            impactSecurityIT: optionalString(values[.impactSecurityIT, default: ""]),
+            escalationLevel: optionalString(values[.escalationLevel, default: ""]),
+            riskStatus: optionalString(values[.riskStatus, default: ""]),
+            score0to10: parseScore(values[.score0to10, default: ""]),
+            sourceRowNumber: row.rowNumber
+        )
     }
 
     private static func buildHeaderMap(from headerRow: ParsedSpreadsheetRow) -> [RiskSpreadsheetColumn: Int] {

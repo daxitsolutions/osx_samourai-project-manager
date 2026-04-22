@@ -9,7 +9,12 @@ final class AppState {
         static let selectedSection = "app.selectedSection"
         static let primaryProjectID = "app.primaryProjectID"
         static let fontSizeOffset = "app.fontSizeOffset"
+        static let debugEnabled = "app.debug.enabled"
+        static let debugHistory = "app.debug.keepHistory"
+        static let debugFilePath = "app.debug.filePath"
     }
+
+    static let debugDefaultFilePath: String = "/tmp/samouraidata/debug.log"
 
     var selectedSection: AppSection? = .dashboard {
         didSet {
@@ -43,6 +48,27 @@ final class AppState {
         }
     }
 
+    var isDebugEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(isDebugEnabled, forKey: StorageKeys.debugEnabled)
+            if isDebugEnabled == false {
+                debugKeepFullHistory = false
+            }
+        }
+    }
+
+    var debugKeepFullHistory: Bool = false {
+        didSet {
+            UserDefaults.standard.set(debugKeepFullHistory, forKey: StorageKeys.debugHistory)
+        }
+    }
+
+    var debugFilePath: String = AppState.debugDefaultFilePath {
+        didSet {
+            UserDefaults.standard.set(debugFilePath, forKey: StorageKeys.debugFilePath)
+        }
+    }
+
     var dynamicTypeSize: DynamicTypeSize {
         switch Int(fontSizeOffset.rounded()) {
         case ..<(-1): return .xSmall
@@ -70,6 +96,15 @@ final class AppState {
         }
 
         fontSizeOffset = UserDefaults.standard.double(forKey: StorageKeys.fontSizeOffset)
+
+        isDebugEnabled = UserDefaults.standard.bool(forKey: StorageKeys.debugEnabled)
+        debugKeepFullHistory = UserDefaults.standard.bool(forKey: StorageKeys.debugHistory)
+        if let storedPath = UserDefaults.standard.string(forKey: StorageKeys.debugFilePath),
+           storedPath.isEmpty == false {
+            debugFilePath = storedPath
+        } else {
+            debugFilePath = AppState.debugDefaultFilePath
+        }
     }
 
     func openProject(_ projectID: UUID) {
@@ -304,5 +339,236 @@ enum AppSectionGroup: String, CaseIterable, Identifiable {
 
     var sections: [AppSection] {
         AppSection.allCases.filter { $0.group == self }
+    }
+}
+
+struct SamouraiDebugContext: Equatable {
+    var section: AppSection
+    var views: [String]
+    var entities: [String]
+    var enumerations: [String]
+    var data: [String]
+    var action: String?
+
+    var signature: String {
+        var parts: [String] = [section.rawValue]
+        parts.append(contentsOf: views)
+        parts.append(contentsOf: entities)
+        parts.append(contentsOf: enumerations)
+        parts.append(contentsOf: data)
+        if let action { parts.append("action=\(action)") }
+        return parts.joined(separator: "|")
+    }
+
+    func formattedLogEntry(timestamp: Date = .now) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let header = "[\(formatter.string(from: timestamp))] section=\(section.rawValue) title=\"\(section.title)\""
+        let body = [
+            "  views: \(views.joined(separator: ", "))",
+            "  entities: \(entities.joined(separator: ", "))",
+            "  enums: \(enumerations.joined(separator: ", "))",
+            "  data: \(data.joined(separator: " | "))",
+            action.map { "  action: \($0)" }
+        ]
+        .compactMap { $0 }
+        return ([header] + body).joined(separator: "\n")
+    }
+}
+
+@MainActor
+enum SamouraiDebugContextFactory {
+    static func make(for section: AppSection, appState: AppState, store: SamouraiStore) -> SamouraiDebugContext {
+        let projectName = appState.resolvedPrimaryProjectID(in: store)
+            .flatMap { store.project(with: $0) }?.name ?? "—"
+        let projectCount = store.projects.count
+
+        switch section {
+        case .dashboard:
+            return .init(
+                section: section,
+                views: ["AppShellView", "DashboardView"],
+                entities: ["Project", "ProjectActivity", "ProjectAction", "ProjectEvent", "Risk", "Deliverable"],
+                enumerations: ["AppSection", "RiskSeverity", "ActionStatus", "DeliverableStatus"],
+                data: [
+                    "projectsCount=\(projectCount)",
+                    "activeProject=\(projectName)",
+                    "actions=\(store.actions.count)",
+                    "events=\(store.events.count)"
+                ],
+                action: nil
+            )
+        case .projects:
+            return .init(
+                section: section,
+                views: ["AppShellView", "ProjectWorkspaceView", "ProjectDetailView", "ProjectEditorSheet"],
+                entities: ["Project", "Deliverable", "Risk", "ProjectMilestone"],
+                enumerations: ["AppSection", "ProjectStatus"],
+                data: [
+                    "projectsCount=\(projectCount)",
+                    "selectedProjectID=\(appState.selectedProjectID?.uuidString ?? "nil")",
+                    "primaryProject=\(projectName)"
+                ],
+                action: nil
+            )
+        case .reporting:
+            return .init(
+                section: section,
+                views: ["AppShellView", "ReportingWorkspaceView"],
+                entities: ["GovernanceReport", "GovernanceReportRecord", "Project"],
+                enumerations: ["AppSection", "ReportingCadence"],
+                data: [
+                    "cadence=\(appState.reportingCadence.rawValue)",
+                    "reports=\(store.governanceReports.count)",
+                    "primaryProject=\(projectName)"
+                ],
+                action: nil
+            )
+        case .resources:
+            return .init(
+                section: section,
+                views: ["AppShellView", "ResourceWorkspaceView"],
+                entities: ["Resource", "ResourceAssignment"],
+                enumerations: ["AppSection", "ResourceRoleCoverage"],
+                data: [
+                    "resourcesCount=\(store.resources.count)",
+                    "selectedResourceID=\(appState.selectedResourceID?.uuidString ?? "nil")",
+                    "scope=projectScoped",
+                    "primaryProject=\(projectName)"
+                ],
+                action: nil
+            )
+        case .resourceDirectory:
+            return .init(
+                section: section,
+                views: ["AppShellView", "ResourceWorkspaceView(scopeMode: .globalDirectory)"],
+                entities: ["Resource"],
+                enumerations: ["AppSection"],
+                data: [
+                    "resourcesCount=\(store.resources.count)",
+                    "scope=globalDirectory"
+                ],
+                action: nil
+            )
+        case .risks:
+            return .init(
+                section: section,
+                views: ["AppShellView", "RiskRegisterView"],
+                entities: ["Risk", "RiskEntry", "Project"],
+                enumerations: ["AppSection", "RiskSeverity"],
+                data: [
+                    "risksCount=\(store.risks.count)",
+                    "unassignedRisks=\(store.unassignedRisks.count)",
+                    "selectedRiskID=\(appState.selectedRiskID?.uuidString ?? "nil")"
+                ],
+                action: nil
+            )
+        case .deliverables:
+            return .init(
+                section: section,
+                views: ["AppShellView", "DeliverableBoardView"],
+                entities: ["Deliverable", "DeliverableEntry", "Project"],
+                enumerations: ["AppSection", "DeliverableStatus"],
+                data: [
+                    "deliverablesCount=\(store.deliverables.count)",
+                    "primaryProject=\(projectName)"
+                ],
+                action: nil
+            )
+        case .events:
+            return .init(
+                section: section,
+                views: ["AppShellView", "EventWorkspaceView"],
+                entities: ["ProjectEvent", "Project"],
+                enumerations: ["AppSection"],
+                data: [
+                    "eventsCount=\(store.events.count)",
+                    "selectedEventID=\(appState.selectedEventID?.uuidString ?? "nil")"
+                ],
+                action: nil
+            )
+        case .actions:
+            return .init(
+                section: section,
+                views: ["AppShellView", "ActionWorkspaceView"],
+                entities: ["ProjectAction", "Project"],
+                enumerations: ["AppSection", "ActionStatus", "ActionPriority"],
+                data: [
+                    "actionsCount=\(store.actions.count)",
+                    "selectedActionID=\(appState.selectedActionID?.uuidString ?? "nil")"
+                ],
+                action: nil
+            )
+        case .meetings:
+            return .init(
+                section: section,
+                views: ["AppShellView", "MeetingWorkspaceView"],
+                entities: ["ProjectMeeting", "Project"],
+                enumerations: ["AppSection"],
+                data: [
+                    "meetingsCount=\(store.meetings.count)",
+                    "selectedMeetingID=\(appState.selectedMeetingID?.uuidString ?? "nil")"
+                ],
+                action: nil
+            )
+        case .decisions:
+            return .init(
+                section: section,
+                views: ["AppShellView", "DecisionWorkspaceView"],
+                entities: ["ProjectDecision", "Project"],
+                enumerations: ["AppSection", "DecisionStatus"],
+                data: [
+                    "decisionsCount=\(store.decisions.count)",
+                    "selectedDecisionID=\(appState.selectedDecisionID?.uuidString ?? "nil")"
+                ],
+                action: nil
+            )
+        case .planning:
+            return .init(
+                section: section,
+                views: ["AppShellView", "PlanningWorkspaceView"],
+                entities: ["Project", "PlanningScenario", "Baseline", "ScopeChange"],
+                enumerations: ["AppSection"],
+                data: [
+                    "primaryProject=\(projectName)"
+                ],
+                action: nil
+            )
+        case .configuration:
+            return .init(
+                section: section,
+                views: ["AppShellView", "ConfigurationWorkspaceView"],
+                entities: ["AppState", "SamouraiStore"],
+                enumerations: ["AppSection", "AppSectionGroup"],
+                data: [
+                    "fontSizeOffset=\(appState.fontSizeOffset)",
+                    "isDebugEnabled=\(appState.isDebugEnabled)",
+                    "debugKeepFullHistory=\(appState.debugKeepFullHistory)",
+                    "debugFilePath=\(appState.debugFilePath)"
+                ],
+                action: nil
+            )
+        case .backups:
+            return .init(
+                section: section,
+                views: ["AppShellView", "BackupWorkspaceView"],
+                entities: ["SamouraiBackupEnvelope", "SamouraiDatabase", "SamouraiBackupDocument"],
+                enumerations: ["AppSection", "SamouraiBackupContentType"],
+                data: [
+                    "projectsCount=\(projectCount)",
+                    "resourcesCount=\(store.resources.count)"
+                ],
+                action: nil
+            )
+        case .testing:
+            return .init(
+                section: section,
+                views: ["AppShellView", "TestingWorkspaceView"],
+                entities: [],
+                enumerations: ["AppSection"],
+                data: ["placeholder=true"],
+                action: nil
+            )
+        }
     }
 }

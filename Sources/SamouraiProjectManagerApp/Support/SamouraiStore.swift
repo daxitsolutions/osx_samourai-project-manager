@@ -396,6 +396,30 @@ final class SamouraiStore {
     private(set) var hasLoaded = false
     var lastErrorMessage: String?
 
+    func appendDebugLog(filePath: String, entry: String) {
+        let expanded = (filePath as NSString).expandingTildeInPath
+        let url = URL(fileURLWithPath: expanded)
+        let directory = url.deletingLastPathComponent()
+        let payload = entry + "\n\n"
+        Task.detached(priority: .utility) {
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    let handle = try FileHandle(forWritingTo: url)
+                    defer { try? handle.close() }
+                    try handle.seekToEnd()
+                    if let data = payload.data(using: .utf8) {
+                        try handle.write(contentsOf: data)
+                    }
+                } else {
+                    try payload.write(to: url, atomically: true, encoding: .utf8)
+                }
+            } catch {
+                // Debug log errors are non-fatal and intentionally silent.
+            }
+        }
+    }
+
     var risks: [RiskEntry] {
         let projectRisks = projects
             .flatMap { project in

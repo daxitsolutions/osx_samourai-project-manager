@@ -431,14 +431,19 @@ private struct ActionEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Métadonnées obligatoires") {
+                Section {
                     TextField("Titre", text: $title)
 
-                    Picker("Priorité", selection: $priority) {
-                        ForEach(ActionPriority.allCases) { value in
-                            Text(value.label).tag(value)
-                        }
+                    DatePicker("Date d'échéance", selection: $dueDate, displayedComponents: [.date])
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Description détaillée")
+                            .foregroundStyle(.secondary)
+                        TextEditor(text: $details)
+                            .frame(minHeight: 140)
                     }
+
+                    severitySlider
 
                     Picker("Statut", selection: $status) {
                         ForEach(ActionStatus.allCases) { value in
@@ -452,11 +457,11 @@ private struct ActionEditorSheet: View {
                         }
                     }
 
-                    DatePicker("Date d'échéance", selection: $dueDate, displayedComponents: [.date])
-
-                    Picker("Flux", selection: $flow) {
-                        ForEach(ActionFlow.allCases) { value in
-                            Text(value.label).tag(value)
+                    if action != nil {
+                        Picker("Flux", selection: $flow) {
+                            ForEach(ActionFlow.allCases) { value in
+                                Text(value.label).tag(value)
+                            }
                         }
                     }
 
@@ -477,11 +482,6 @@ private struct ActionEditorSheet: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                }
-
-                Section("Description détaillée") {
-                    TextEditor(text: $details)
-                        .frame(minHeight: 160)
                 }
             }
             .navigationTitle(action == nil ? "Nouvelle action PM" : "Modifier l'action PM")
@@ -531,9 +531,50 @@ private struct ActionEditorSheet: View {
         }
     }
 
+    private var severitySlider: some View {
+        let binding = Binding<Double>(
+            get: { Double(priority.severityLevel) },
+            set: { priority = ActionPriority(severityLevel: Int($0.rounded())) ?? priority }
+        )
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Sévérité")
+                Spacer()
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(priority.severityColor)
+                        .frame(width: 10, height: 10)
+                    Text(priority.label)
+                        .fontWeight(.medium)
+                        .foregroundStyle(priority.severityColor)
+                }
+            }
+
+            Slider(value: binding, in: 1...4, step: 1)
+                .tint(priority.severityColor)
+
+            HStack {
+                ForEach(ActionPriority.allCases) { level in
+                    Text(level.label)
+                        .font(.caption2)
+                        .foregroundStyle(level == priority ? level.severityColor : .secondary)
+                        .frame(maxWidth: .infinity, alignment: alignment(for: level))
+                }
+            }
+        }
+    }
+
+    private func alignment(for level: ActionPriority) -> Alignment {
+        switch level {
+        case .trivial:  .leading
+        case .critical: .trailing
+        default:        .center
+        }
+    }
+
     private var canSave: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            && details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
     private var snapshot: String {
@@ -573,11 +614,6 @@ private struct ActionEditorSheet: View {
 
         guard cleanedTitle.isEmpty == false else {
             validationMessage = "Le titre est obligatoire."
-            return
-        }
-
-        guard cleanedDetails.isEmpty == false else {
-            validationMessage = "La description détaillée est obligatoire."
             return
         }
 

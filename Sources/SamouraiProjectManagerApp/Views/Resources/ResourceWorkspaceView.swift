@@ -21,6 +21,7 @@ struct ResourceWorkspaceView: View {
     @State private var isShowingFileImporter = false
     @State private var importFeedbackMessage: String?
     @State private var isImporting = false
+    @State private var importProgressTracker: ImportProgressTracker?
     @State private var isShowingFileExporter = false
     @State private var exportDocument: ResourceExportDocument?
     @State private var exportFilename = "ressources"
@@ -276,6 +277,15 @@ struct ResourceWorkspaceView: View {
                     applyImportReview()
                 }
             )
+        }
+        .sheet(item: $importProgressTracker) { tracker in
+            SamouraiImportProgressSheet(
+                tracker: tracker,
+                onCancel: {
+                    tracker.cancel()
+                }
+            )
+            .interactiveDismissDisabled()
         }
         .sheet(isPresented: $isShowingColumnConfiguration) {
             ResourceColumnConfigurationSheet(
@@ -1043,53 +1053,97 @@ struct ResourceWorkspaceView: View {
             return
         }
 
+        let tracker = ImportProgressTracker(
+            title: "Import des ressources",
+            fileName: fileURL.lastPathComponent
+        )
+        importProgressTracker = tracker
         isImporting = true
-        let didAccessSecurityScope = fileURL.startAccessingSecurityScopedResource()
 
-        defer {
-            if didAccessSecurityScope {
-                fileURL.stopAccessingSecurityScopedResource()
-            }
-            isImporting = false
-        }
-
-        do {
-            let drafts = try ResourceImportService.importResources(from: fileURL)
-            let reviewItems = store.prepareResourceImportReview(drafts)
-
-            if reviewItems.isEmpty {
-                importFeedbackMessage = "Aucune ligne exploitable à importer."
-                return
+        let currentStore = store
+        tracker.task = Task { @MainActor in
+            let didAccessSecurityScope = fileURL.startAccessingSecurityScopedResource()
+            defer {
+                if didAccessSecurityScope {
+                    fileURL.stopAccessingSecurityScopedResource()
+                }
+                isImporting = false
+                importProgressTracker = nil
             }
 
-            importReviewItems = reviewItems.map {
-                ResourceImportReviewDecision(
-                    reviewItem: $0,
-                    shouldApply: $0.action == .create
+            let reporter = ImportProgressReporter.forwarding(to: tracker)
+            let importURL = fileURL
+
+            do {
+                // Parse off the main actor so the UI stays responsive.
+                let drafts = try await Task.detached(priority: .userInitiated) { () throws -> [ResourceImportDraft] in
+                    try ResourceImportService.importResources(from: importURL, reporter: reporter)
+                }.value
+
+                try Task.checkCancellation()
+
+                let reviewItems = try await currentStore.prepareResourceImportReviewAsync(
+                    drafts,
+                    reporter: reporter
                 )
+
+                if reviewItems.isEmpty {
+                    importFeedbackMessage = "Aucune ligne exploitable à importer."
+                    return
+                }
+
+                importReviewItems = reviewItems.map {
+                    ResourceImportReviewDecision(
+                        reviewItem: $0,
+                        shouldApply: $0.action == .create
+                    )
+                }
+                isShowingImportReview = true
+            } catch is CancellationError {
+                importFeedbackMessage = "Import annulé."
+            } catch {
+                importFeedbackMessage = error.localizedDescription
             }
-            isShowingImportReview = true
-        } catch {
-            importFeedbackMessage = error.localizedDescription
         }
     }
 
     private func applyImportReview() {
-        let result = store.applyResourceImportReview(
-            importReviewItems.map(\.reviewItem),
-            decisions: importReviewItems.map {
-                ResourceImportDecision(reviewItemID: $0.reviewItem.id, shouldApply: $0.shouldApply)
-            }
-        )
-
-        if let resourceID = result.firstImportedOrUpdatedResourceID {
-            appState.selectedResourceID = resourceID
-            appState.selectedSection = .resources
-        }
-
-        importFeedbackMessage = "Import terminé : \(result.summary)"
-        importReviewItems = []
+        let decisions = importReviewItems
+        let tracker = ImportProgressTracker(title: "Intégration des ressources")
+        importProgressTracker = tracker
+        isImporting = true
         isShowingImportReview = false
+
+        let currentStore = store
+        tracker.task = Task { @MainActor in
+            defer {
+                isImporting = false
+                importProgressTracker = nil
+            }
+
+            let reporter = ImportProgressReporter.forwarding(to: tracker)
+            do {
+                let result = try await currentStore.applyResourceImportReviewAsync(
+                    decisions.map(\.reviewItem),
+                    decisions: decisions.map {
+                        ResourceImportDecision(reviewItemID: $0.reviewItem.id, shouldApply: $0.shouldApply)
+                    },
+                    reporter: reporter
+                )
+
+                if let resourceID = result.firstImportedOrUpdatedResourceID {
+                    appState.selectedResourceID = resourceID
+                    appState.selectedSection = .resources
+                }
+
+                importFeedbackMessage = "Import terminé : \(result.summary)"
+                importReviewItems = []
+            } catch is CancellationError {
+                importFeedbackMessage = "Import annulé."
+            } catch {
+                importFeedbackMessage = error.localizedDescription
+            }
+        }
     }
 }
 

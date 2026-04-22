@@ -1,5 +1,12 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+
+@MainActor
+private final class AppShellDebugLogTracker {
+    static let shared = AppShellDebugLogTracker()
+    var lastSignature: String = ""
+}
 
 struct AppShellView: View {
     @Environment(AppState.self) private var appState
@@ -16,9 +23,26 @@ struct AppShellView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebarView
         } detail: {
-            selectedSectionView
+            VStack(spacing: 0) {
+                selectedSectionView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if appState.isDebugEnabled {
+                    SamouraiDebugPanel(
+                        context: debugContext,
+                        isHistoryEnabled: appState.debugKeepFullHistory,
+                        historyFilePath: appState.debugKeepFullHistory ? appState.debugFilePath : nil
+                    )
+                }
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .samouraiCanvasBackground()
+            .onAppear { logDebugContextIfNeeded() }
+            .onChange(of: debugContext.signature) { _, _ in logDebugContextIfNeeded() }
+            .onChange(of: appState.isDebugEnabled) { _, enabled in
+                if enabled { logDebugContextIfNeeded() }
+            }
+            .onChange(of: appState.debugKeepFullHistory) { _, _ in logDebugContextIfNeeded() }
         }
         .navigationSplitViewStyle(.balanced)
         .samouraiCanvasBackground()
@@ -285,6 +309,19 @@ struct AppShellView: View {
         }
     }
 
+    private var debugContext: SamouraiDebugContext {
+        SamouraiDebugContextFactory.make(for: currentSection, appState: appState, store: store)
+    }
+
+    private func logDebugContextIfNeeded() {
+        guard appState.isDebugEnabled, appState.debugKeepFullHistory else { return }
+        let context = debugContext
+        let signature = context.signature
+        if signature == AppShellDebugLogTracker.shared.lastSignature { return }
+        AppShellDebugLogTracker.shared.lastSignature = signature
+        store.appendDebugLog(filePath: appState.debugFilePath, entry: context.formattedLogEntry())
+    }
+
     private func ensureDefaultProjectSelection() {
         guard let firstProjectID = store.projects.first?.id else {
             appState.setPrimaryProject(nil)
@@ -384,6 +421,48 @@ private struct ConfigurationWorkspaceView: View {
                 }
 
                 SamouraiSectionCard(
+                    title: "Debug",
+                    subtitle: "Diagnostic des vues, entités, énumérations et données mobilisées par la fenêtre courante."
+                ) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle(isOn: $appState.isDebugEnabled) {
+                            Label("Mode debug activé", systemImage: "ladybug")
+                        }
+
+                        Toggle(isOn: $appState.debugKeepFullHistory) {
+                            Label("Garder tout l'historique dans un fichier", systemImage: "tray.and.arrow.down")
+                        }
+                        .disabled(appState.isDebugEnabled == false)
+                        .opacity(appState.isDebugEnabled ? 1 : 0.5)
+
+                        if appState.isDebugEnabled, appState.debugKeepFullHistory {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Chemin du fichier de debug")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 10) {
+                                    TextField("Chemin", text: $appState.debugFilePath)
+                                        .textFieldStyle(.roundedBorder)
+                                        .lineLimit(1)
+                                    Button("Choisir…") {
+                                        if let newPath = promptForDebugFilePath(current: appState.debugFilePath) {
+                                            appState.debugFilePath = newPath
+                                        }
+                                    }
+                                    Button("Réinitialiser") {
+                                        appState.debugFilePath = AppState.debugDefaultFilePath
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                                Text("Valeur par défaut : \(AppState.debugDefaultFilePath)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                }
+
+                SamouraiSectionCard(
                     title: "Données",
                     subtitle: "Suppression irréversible de l'ensemble des données de l'instance."
                 ) {
@@ -410,6 +489,22 @@ private struct ConfigurationWorkspaceView: View {
         } message: {
             Text("Toutes les données de l'application seront perdues. Cette action est irréversible. Effectuez une sauvegarde préalable via le module Sauvegardes si vous souhaitez pouvoir les récupérer.")
         }
+    }
+
+    private func promptForDebugFilePath(current: String) -> String? {
+        let panel = NSSavePanel()
+        panel.title = "Emplacement du fichier de debug"
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.allowedContentTypes = [.plainText, .data]
+        panel.nameFieldStringValue = (current as NSString).lastPathComponent
+        let directoryPath = ((current as NSString).expandingTildeInPath as NSString).deletingLastPathComponent
+        if directoryPath.isEmpty == false {
+            panel.directoryURL = URL(fileURLWithPath: directoryPath, isDirectory: true)
+        }
+        let response = panel.runModal()
+        guard response == .OK, let url = panel.url else { return nil }
+        return url.path
     }
 
     private var fontSizeLabel: String {

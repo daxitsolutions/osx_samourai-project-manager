@@ -196,6 +196,102 @@ struct SamouraiStatusPill: View {
     }
 }
 
+struct SamouraiDebugPanel: View {
+    @Environment(SamouraiTypography.self) private var typography
+
+    let context: SamouraiDebugContext
+    let isHistoryEnabled: Bool
+    let historyFilePath: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "ladybug.fill")
+                    .foregroundStyle(Color.orange)
+                Text("Debug — \(context.section.title)")
+                    .font(typography.headline)
+                Spacer()
+                if isHistoryEnabled, let historyFilePath {
+                    Label(historyFilePath, systemImage: "square.and.arrow.down")
+                        .labelStyle(.titleAndIcon)
+                        .font(typography.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(historyFilePath)
+                }
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(minimum: 160), alignment: .topLeading),
+                    GridItem(.flexible(minimum: 160), alignment: .topLeading),
+                    GridItem(.flexible(minimum: 160), alignment: .topLeading),
+                    GridItem(.flexible(minimum: 200), alignment: .topLeading)
+                ],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                debugColumn(title: "Vues", items: context.views, systemImage: "rectangle.3.group")
+                debugColumn(title: "Entités", items: context.entities, systemImage: "cube.box")
+                debugColumn(title: "Énumérations", items: context.enumerations, systemImage: "list.bullet.rectangle")
+                debugColumn(title: "Données", items: context.data, systemImage: "chart.bar.doc.horizontal")
+            }
+
+            if let action = context.action, action.isEmpty == false {
+                HStack(spacing: 6) {
+                    Image(systemName: "bolt.fill").foregroundStyle(Color.orange)
+                    Text("Action en cours :")
+                        .font(typography.captionEmphasized)
+                    Text(action)
+                        .font(typography.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.orange.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+        )
+        .padding(.horizontal, SamouraiLayout.pagePadding)
+        .padding(.vertical, 10)
+        .background(SamouraiSurface.panelStrong)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(SamouraiSurface.borderStrong)
+                .frame(height: 1)
+        }
+    }
+
+    @ViewBuilder
+    private func debugColumn(title: String, items: [String], systemImage: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: systemImage)
+                .font(typography.captionEmphasized)
+                .foregroundStyle(.secondary)
+            if items.isEmpty {
+                Text("—")
+                    .font(typography.caption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ForEach(items, id: \.self) { item in
+                    Text(item)
+                        .font(typography.caption.monospaced())
+                        .textSelection(.enabled)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+            }
+        }
+    }
+}
+
 extension View {
     func samouraiCardSurface() -> some View {
         self

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 enum ActionStatus: String, Codable, CaseIterable, Identifiable {
     case todo
@@ -81,6 +82,29 @@ enum ActionPriority: String, Codable, CaseIterable, Identifiable {
 
     var tintName: String {
         colorToken.rawValue
+    }
+
+    var severityLevel: Int {
+        sortWeight
+    }
+
+    init?(severityLevel: Int) {
+        switch severityLevel {
+        case 1: self = .trivial
+        case 2: self = .minor
+        case 3: self = .major
+        case 4: self = .critical
+        default: return nil
+        }
+    }
+
+    var severityColor: Color {
+        switch self {
+        case .trivial:  Color(.sRGB, red: 136/255, green: 136/255, blue: 136/255, opacity: 1)
+        case .minor:    Color(.sRGB, red: 0/255,   green: 175/255, blue: 95/255,  opacity: 1)
+        case .major:    Color(.sRGB, red: 245/255, green: 166/255, blue: 35/255,  opacity: 1)
+        case .critical: Color(.sRGB, red: 232/255, green: 65/255,  blue: 65/255,  opacity: 1)
+        }
     }
 }
 

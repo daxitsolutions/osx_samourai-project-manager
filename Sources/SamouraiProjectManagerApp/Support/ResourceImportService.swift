@@ -94,6 +94,7 @@ enum ResourceImportService {
         let dataRows = Array(rows.dropFirst())
         reporter.setTotal(dataRows.count)
         reporter.setProcessed(0)
+        reporter.setImported(0)
 
         var drafts: [ResourceImportDraft] = []
         drafts.reserveCapacity(dataRows.count)
@@ -105,9 +106,7 @@ enum ResourceImportService {
                 drafts.append(draft)
             }
 
-            if (index + 1) % 25 == 0 || index == dataRows.count - 1 {
-                reporter.setProcessed(index + 1)
-            }
+            reporter.setProcessed(index + 1)
         }
 
         return drafts

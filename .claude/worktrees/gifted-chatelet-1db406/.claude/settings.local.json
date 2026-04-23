@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/Dax/Documents/GitHub/osx_samourai-project-manager/.claude/worktrees/**)",
+      "Read(//Users/Dax/Documents/GitHub/osx_samourai-project-manager/**)",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager worktree list)",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager branch)"
+    ]
+  }
+}

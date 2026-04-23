@@ -21,7 +21,6 @@ struct ResourceWorkspaceView: View {
     @State private var isShowingFileImporter = false
     @State private var importFeedbackMessage: String?
     @State private var isImporting = false
-    @State private var importProgressTracker: ImportProgressTracker?
     @State private var isShowingFileExporter = false
     @State private var exportDocument: ResourceExportDocument?
     @State private var exportFilename = "ressources"
@@ -277,15 +276,6 @@ struct ResourceWorkspaceView: View {
                     applyImportReview()
                 }
             )
-        }
-        .sheet(item: $importProgressTracker) { tracker in
-            SamouraiImportProgressSheet(
-                tracker: tracker,
-                onCancel: {
-                    tracker.cancel()
-                }
-            )
-            .interactiveDismissDisabled()
         }
         .sheet(isPresented: $isShowingColumnConfiguration) {
             ResourceColumnConfigurationSheet(
@@ -1057,7 +1047,7 @@ struct ResourceWorkspaceView: View {
             title: "Import des ressources",
             fileName: fileURL.lastPathComponent
         )
-        importProgressTracker = tracker
+        appState.showImportProgress(tracker)
         isImporting = true
 
         let currentStore = store
@@ -1068,7 +1058,7 @@ struct ResourceWorkspaceView: View {
                     fileURL.stopAccessingSecurityScopedResource()
                 }
                 isImporting = false
-                importProgressTracker = nil
+                appState.clearImportProgress(tracker)
             }
 
             let reporter = ImportProgressReporter.forwarding(to: tracker)
@@ -1110,7 +1100,7 @@ struct ResourceWorkspaceView: View {
     private func applyImportReview() {
         let decisions = importReviewItems
         let tracker = ImportProgressTracker(title: "Intégration des ressources")
-        importProgressTracker = tracker
+        appState.showImportProgress(tracker)
         isImporting = true
         isShowingImportReview = false
 
@@ -1118,7 +1108,7 @@ struct ResourceWorkspaceView: View {
         tracker.task = Task { @MainActor in
             defer {
                 isImporting = false
-                importProgressTracker = nil
+                appState.clearImportProgress(tracker)
             }
 
             let reporter = ImportProgressReporter.forwarding(to: tracker)

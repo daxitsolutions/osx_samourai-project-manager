@@ -69,6 +69,8 @@ final class AppState {
         }
     }
 
+    var activeImportTracker: ImportProgressTracker?
+
     var dynamicTypeSize: DynamicTypeSize {
         switch Int(fontSizeOffset.rounded()) {
         case ..<(-1): return .xSmall
@@ -151,6 +153,16 @@ final class AppState {
     func setPrimaryProject(_ projectID: UUID?) {
         primaryProjectID = projectID
         selectedProjectID = projectID
+    }
+
+    func showImportProgress(_ tracker: ImportProgressTracker) {
+        activeImportTracker = tracker
+    }
+
+    func clearImportProgress(_ tracker: ImportProgressTracker) {
+        if activeImportTracker?.id == tracker.id {
+            activeImportTracker = nil
+        }
     }
 
     func resolvedPrimaryProjectID(in store: SamouraiStore) -> UUID? {

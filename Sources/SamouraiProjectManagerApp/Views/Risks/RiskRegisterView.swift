@@ -9,7 +9,6 @@ struct RiskRegisterView: View {
     @State private var riskEditorContext: RiskRegistryEditorContext?
     @State private var importFeedbackMessage: String?
     @State private var isImporting = false
-    @State private var importProgressTracker: ImportProgressTracker?
     @State private var searchText = ""
     @State private var selectedRiskIDs: Set<UUID> = []
     @State private var isShowingDeleteConfirmation = false
@@ -254,15 +253,6 @@ struct RiskRegisterView: View {
         } message: {
             Text(importFeedbackMessage ?? "")
         }
-        .sheet(item: $importProgressTracker) { tracker in
-            SamouraiImportProgressSheet(
-                tracker: tracker,
-                onCancel: {
-                    tracker.cancel()
-                }
-            )
-            .interactiveDismissDisabled()
-        }
         .onChange(of: selectedRiskIDs) { _, newSelection in
             appState.selectedRiskID = newSelection.singleSelection
         }
@@ -292,7 +282,7 @@ struct RiskRegisterView: View {
             title: "Import des risques",
             fileName: fileURL.lastPathComponent
         )
-        importProgressTracker = tracker
+        appState.showImportProgress(tracker)
         isImporting = true
 
         let currentStore = store
@@ -303,7 +293,7 @@ struct RiskRegisterView: View {
                     fileURL.stopAccessingSecurityScopedResource()
                 }
                 isImporting = false
-                importProgressTracker = nil
+                appState.clearImportProgress(tracker)
             }
 
             let reporter = ImportProgressReporter.forwarding(to: tracker)

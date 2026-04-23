@@ -2095,6 +2095,7 @@ final class SamouraiStore {
         reporter.setStage(.importing)
         reporter.setTotal(drafts.count)
         reporter.setProcessed(0)
+        reporter.setImported(0)
 
         var importedCount = 0
         var updatedCount = 0
@@ -2116,8 +2117,9 @@ final class SamouraiStore {
                 skippedCount += 1
             }
 
-            if (index + 1) % 25 == 0 || index == drafts.count - 1 {
-                reporter.setProcessed(index + 1)
+            reporter.setProcessed(index + 1)
+            reporter.setImported(importedCount + updatedCount)
+            if (index + 1) % 10 == 0 || index == drafts.count - 1 {
                 await Task.yield()
             }
         }
@@ -2774,6 +2776,7 @@ final class SamouraiStore {
         reporter.setStage(.analyzing)
         reporter.setTotal(drafts.count)
         reporter.setProcessed(0)
+        reporter.setImported(0)
 
         var reviewItems: [ResourceImportReviewItem] = []
         reviewItems.reserveCapacity(drafts.count)
@@ -2782,8 +2785,8 @@ final class SamouraiStore {
             try Task.checkCancellation()
             reviewItems.append(makeResourceImportReviewItem(for: draft))
 
-            if (index + 1) % 25 == 0 || index == drafts.count - 1 {
-                reporter.setProcessed(index + 1)
+            reporter.setProcessed(index + 1)
+            if (index + 1) % 10 == 0 || index == drafts.count - 1 {
                 await Task.yield()
             }
         }
@@ -2799,6 +2802,7 @@ final class SamouraiStore {
         reporter.setStage(.importing)
         reporter.setTotal(reviewItems.count)
         reporter.setProcessed(0)
+        reporter.setImported(0)
 
         let decisionsByID = Dictionary(uniqueKeysWithValues: decisions.map { ($0.reviewItemID, $0.shouldApply) })
         var importedCount = 0
@@ -2840,8 +2844,9 @@ final class SamouraiStore {
                 skippedCount += 1
             }
 
-            if (index + 1) % 25 == 0 || index == reviewItems.count - 1 {
-                reporter.setProcessed(index + 1)
+            reporter.setProcessed(index + 1)
+            reporter.setImported(importedCount + updatedCount)
+            if (index + 1) % 10 == 0 || index == reviewItems.count - 1 {
                 await Task.yield()
             }
         }

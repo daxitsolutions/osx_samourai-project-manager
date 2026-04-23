@@ -108,6 +108,22 @@ struct AppShellView: View {
         } message: {
             Text(backupFeedbackMessage ?? "")
         }
+        .sheet(item: Binding(
+            get: { appState.activeImportTracker },
+            set: { tracker in
+                if tracker == nil, let activeTracker = appState.activeImportTracker {
+                    appState.clearImportProgress(activeTracker)
+                }
+            }
+        )) { tracker in
+            SamouraiImportProgressSheet(
+                tracker: tracker,
+                onCancel: {
+                    tracker.cancel()
+                }
+            )
+            .interactiveDismissDisabled()
+        }
     }
 
     private var sidebarView: some View {

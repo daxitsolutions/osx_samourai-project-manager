@@ -1,35 +1,3 @@
-# CLAUDE.md — Samourai Project Manager
-
-> Référence architecturale et guide de développement pour Claude Code.
-> Toute modification importante doit être cohérente avec ce document.
-
----
-
-## Projet
-
-**Nom :** Samourai Project Manager
-**Type :** Application native macOS — gestion de portefeuille de projets professionnels
-**Stack :** Swift 6.2 + SwiftUI — macOS 15 Sequoia+ — Zéro dépendance externe
-**Langue UI :** Français (labels, alertes, textes d'aide, noms de variables métier)
-
----
-
-## ⚙️ Commandes
-
-```bash
-./run.sh                  # Lancement en développement
-./run.sh --debug          # Lancement avec logs dans /tmp
-./package.sh              # Build + packaging .app (installe dans /Applications)
-./package.sh --no-install # Build sans installation
-swift run SamouraiProjectManager  # Via SPM directement
-```
-
-> Aucun test target ni linter configuré pour l'instant.
-
----
-
-## Architecture Globale
-
 SAMOURAI_ARCHITECTURE_AI_SPEC
 version=2026-04-23
 language=fr
@@ -122,31 +90,3 @@ step_8=introduce_MiscStore_pending
 [non_goals]
 models_folder_changes=forbidden
 design_system_changes=forbidden
-
-
----
-
-## Règles de Développement (Strictes)
-
-Tu es un expert senior en développement d'applications macOS sur Apple Silicon (M1/M2/M3/M4/M5).
-
-### Stack & Cibles
-- **SwiftUI en priorité absolue** — AppKit uniquement si techniquement inévitable et clairement justifié
-- **macOS 15 Sequoia minimum** (ou la dernière version disponible)
-- **Swift 6.2** — concurrence stricte, `Sendable`, acteurs
-
-### Qualité du Code
-- Code moderne, propre, lisible, bien commenté
-- Suivre les best practices Apple 2025/2026 : `@Observable`, `@State`, `@Environment`, `@AppStorage`, `NavigationStack`, `WindowGroup`, `.task`, `async/await`
-- Optimiser pour la performance et la batterie sur Apple Silicon
-- Respecter le design system macOS natif : sidebar, toolbar, menu bar, look & feel natif
-- Utiliser les dernières APIs Apple pertinentes (SwiftData si applicable, TipKit, etc.)
-
-### Pour chaque réponse
-- Fournir du code complet, prêt à l'emploi
-- Anticiper les edge cases et appliquer les best practices
-- Pas d'explication, code uniquement
-
----
-
-*Prêt. Construisons une application macOS exemplaire.*

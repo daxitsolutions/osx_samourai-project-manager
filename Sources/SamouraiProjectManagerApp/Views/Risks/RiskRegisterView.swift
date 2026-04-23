@@ -172,23 +172,13 @@ struct RiskRegisterView: View {
                             .pickerStyle(.menu)
                         }
 
-                        TableColumn("Statut", value: \.statusSortKey) { entry in
-                            TextField(
-                                "Statut",
-                                text: Binding(
-                                    get: { entry.risk.riskStatus ?? "" },
-                                    set: {
-                                        store.updateRiskQuick(
-                                            riskID: entry.risk.id,
-                                            title: entry.risk.displayTitle,
-                                            owner: entry.risk.displayOwner,
-                                            severity: entry.risk.severity,
-                                            status: $0
-                                        )
-                                    }
-                                )
+                        TableColumn("Statut", value: \.statusSortWeight) { entry in
+                            RiskStatusMenu(
+                                status: RiskStatus.from(rawString: entry.risk.riskStatus) ?? .toDo,
+                                onChange: { newStatus in
+                                    store.updateRiskStatus(riskID: entry.risk.id, status: newStatus)
+                                }
                             )
-                            .textFieldStyle(.plain)
                         }
 
                         TableColumn("Score", value: \.scoreSortValue) { entry in
@@ -392,8 +382,65 @@ private extension RiskEntry {
     var projectsSortKey: String { risk.projectNames ?? projectName }
     var ownerSortKey: String { risk.displayOwner }
     var severitySortWeight: Int { risk.severity.sortWeight }
-    var statusSortKey: String { risk.displayStatus }
+    var statusSortWeight: Int {
+        (RiskStatus.from(rawString: risk.riskStatus) ?? .toDo).sortWeight
+    }
     var scoreSortValue: Double { risk.score0to10 ?? -1 }
+}
+
+struct RiskStatusBadge: View {
+    let status: RiskStatus
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(status.tintColor)
+                .frame(width: 8, height: 8)
+            Text(status.label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(status.tintColor)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule().fill(status.tintColor.opacity(0.12))
+        )
+        .overlay(
+            Capsule().stroke(status.tintColor.opacity(0.35), lineWidth: 0.5)
+        )
+    }
+}
+
+struct RiskStatusMenu: View {
+    let status: RiskStatus
+    let onChange: (RiskStatus) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(RiskStatus.allCases) { option in
+                Button {
+                    if option != status { onChange(option) }
+                } label: {
+                    HStack {
+                        Circle()
+                            .fill(option.tintColor)
+                            .frame(width: 10, height: 10)
+                        Text(option.label)
+                        if option == status {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            RiskStatusBadge(status: status)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
 }
 
 private struct ManualRiskEditorSheet: View {
@@ -409,9 +456,11 @@ private struct ManualRiskEditorSheet: View {
     @State private var mitigation: String
     @State private var owner: String
     @State private var severity: RiskSeverity
+    @State private var status: RiskStatus
     @State private var dueDate: Date
     @State private var initialSnapshot: String?
     @State private var isShowingDismissConfirmation = false
+    @State private var newCommentText: String = ""
 
     init(entry: RiskEntry?, suggestedProjectID: UUID?) {
         self.entry = entry
@@ -421,6 +470,7 @@ private struct ManualRiskEditorSheet: View {
         _mitigation = State(initialValue: entry?.risk.mitigation ?? "")
         _owner = State(initialValue: entry?.risk.displayOwner ?? "")
         _severity = State(initialValue: entry?.risk.severity ?? .medium)
+        _status = State(initialValue: RiskStatus.from(rawString: entry?.risk.riskStatus) ?? .toDo)
         _dueDate = State(initialValue: entry?.risk.dueDate ?? .now)
     }
 
@@ -452,7 +502,23 @@ private struct ManualRiskEditorSheet: View {
                     }
                 }
 
+                Picker("Statut", selection: $status) {
+                    ForEach(RiskStatus.allCases) { s in
+                        HStack {
+                            Circle()
+                                .fill(s.tintColor)
+                                .frame(width: 10, height: 10)
+                            Text(s.label)
+                        }
+                        .tag(s)
+                    }
+                }
+
                 DatePicker("Date d'action cible", selection: $dueDate, displayedComponents: .date)
+
+                if let entry {
+                    historySection(for: entry.risk.id)
+                }
             }
             .formStyle(.grouped)
             .navigationTitle(entry == nil ? "Nouveau risque" : "Modifier le risque")
@@ -497,6 +563,62 @@ private struct ManualRiskEditorSheet: View {
         }
     }
 
+    @ViewBuilder
+    private func historySection(for riskID: UUID) -> some View {
+        let currentRisk = store.risks.first(where: { $0.risk.id == riskID })?.risk
+        let entries = currentRisk?.historyEntriesChronological ?? []
+
+        Section("Historique") {
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Ajouter un commentaire", text: $newCommentText, axis: .vertical)
+                    .lineLimit(2...4)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Spacer()
+                    Button("Ajouter au journal") {
+                        let trimmed = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard trimmed.isEmpty == false else { return }
+                        store.addRiskComment(riskID: riskID, text: trimmed)
+                        newCommentText = ""
+                    }
+                    .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+
+            if entries.isEmpty {
+                Text("Aucune entrée d'historique pour le moment.")
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+            } else {
+                ForEach(entries) { entry in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: entry.kind.symbolName)
+                            .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
+                            .frame(width: 18)
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.text)
+                                .font(.callout)
+                            HStack(spacing: 6) {
+                                Text(entry.kind.label)
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                                Text("•")
+                                    .foregroundStyle(.tertiary)
+                                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
     private var formIsInvalid: Bool {
         (entry == nil && projectID == nil)
             || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -511,6 +633,7 @@ private struct ManualRiskEditorSheet: View {
             mitigation,
             owner,
             severity.rawValue,
+            status.rawValue,
             String(dueDate.timeIntervalSinceReferenceDate)
         ].joined(separator: "|")
     }
@@ -546,7 +669,8 @@ private struct ManualRiskEditorSheet: View {
                 mitigation: cleanedMitigation,
                 owner: cleanedOwner,
                 severity: severity,
-                dueDate: dueDate
+                dueDate: dueDate,
+                status: status
             )
             appState.openRisk(entry.risk.id)
         } else {
@@ -557,7 +681,8 @@ private struct ManualRiskEditorSheet: View {
                 mitigation: cleanedMitigation,
                 owner: cleanedOwner,
                 severity: severity,
-                dueDate: dueDate
+                dueDate: dueDate,
+                status: status
             )
             appState.selectedSection = .risks
         }

@@ -35,6 +35,98 @@ enum RiskSeverity: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum RiskStatus: String, Codable, CaseIterable, Identifiable {
+    case toDo = "À faire"
+    case inProgress = "En cours"
+    case done = "Terminé"
+    case cancelled = "Annulé"
+    case transformedToIncident = "Transformé en Incidence"
+
+    var id: String { rawValue }
+
+    var label: String { rawValue }
+
+    var hexColor: String {
+        switch self {
+        case .toDo:
+            "#8A5CF5"
+        case .inProgress:
+            "#2C7BE5"
+        case .done:
+            "#00AF5F"
+        case .cancelled:
+            "#888888"
+        case .transformedToIncident:
+            "#F5A623"
+        }
+    }
+
+    var sortWeight: Int {
+        switch self {
+        case .toDo:
+            1
+        case .inProgress:
+            2
+        case .done:
+            3
+        case .cancelled:
+            4
+        case .transformedToIncident:
+            5
+        }
+    }
+
+    static func from(rawString: String?) -> RiskStatus? {
+        guard let trimmed = rawString?.trimmingCharacters(in: .whitespacesAndNewlines),
+              trimmed.isEmpty == false else { return nil }
+        return RiskStatus(rawValue: trimmed)
+    }
+}
+
+enum RiskHistoryEntryKind: String, Codable, CaseIterable, Identifiable {
+    case automatic
+    case manual
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .automatic:
+            "Modification automatique"
+        case .manual:
+            "Commentaire"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .automatic:
+            "gearshape"
+        case .manual:
+            "text.bubble"
+        }
+    }
+}
+
+struct RiskHistoryEntry: Identifiable, Codable, Hashable {
+    var id: UUID
+    var kind: RiskHistoryEntryKind
+    var date: Date
+    var text: String
+
+    init(
+        id: UUID = UUID(),
+        kind: RiskHistoryEntryKind,
+        date: Date = .now,
+        text: String
+    ) {
+        self.id = id
+        self.kind = kind
+        self.date = date
+        self.text = text
+    }
+}
+
 struct Risk: Identifiable, Codable, Hashable {
     var id: UUID
     var title: String
@@ -66,6 +158,7 @@ struct Risk: Identifiable, Codable, Hashable {
     var escalationLevel: String?
     var riskStatus: String?
     var score0to10: Double?
+    var history: [RiskHistoryEntry]?
 
     init(
         id: UUID = UUID(),
@@ -97,7 +190,8 @@ struct Risk: Identifiable, Codable, Hashable {
         impactSecurityIT: String? = nil,
         escalationLevel: String? = nil,
         riskStatus: String? = nil,
-        score0to10: Double? = nil
+        score0to10: Double? = nil,
+        history: [RiskHistoryEntry]? = nil
     ) {
         self.id = id
         self.title = title
@@ -129,6 +223,7 @@ struct Risk: Identifiable, Codable, Hashable {
         self.escalationLevel = escalationLevel
         self.riskStatus = riskStatus
         self.score0to10 = score0to10
+        self.history = history
     }
 }
 
@@ -151,5 +246,13 @@ extension Risk {
     var displayStatus: String {
         let value = riskStatus?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return value.isEmpty ? "Non renseigné" : value
+    }
+
+    var historyEntries: [RiskHistoryEntry] {
+        history ?? []
+    }
+
+    var historyEntriesChronological: [RiskHistoryEntry] {
+        historyEntries.sorted { $0.date < $1.date }
     }
 }

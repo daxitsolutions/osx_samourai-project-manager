@@ -1939,7 +1939,8 @@ final class SamouraiStore {
         mitigation: String,
         owner: String,
         severity: RiskSeverity,
-        dueDate: Date?
+        dueDate: Date?,
+        status: RiskStatus = .toDo
     ) {
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
 
@@ -1952,12 +1953,45 @@ final class SamouraiStore {
             projectNames: projects[index].name,
             assignedTo: owner,
             riskTitle: title,
-            counterMeasure: mitigation
+            counterMeasure: mitigation,
+            riskStatus: status.rawValue
         )
 
         projects[index].risks.append(risk)
         projects[index].updatedAt = .now
         projects = sortProjects(projects)
+        persist()
+    }
+
+    func updateRiskStatus(riskID: UUID, status: RiskStatus) {
+        for projectIndex in projects.indices {
+            guard let riskIndex = projects[projectIndex].risks.firstIndex(where: { $0.id == riskID }) else { continue }
+            let previousStatus = projects[projectIndex].risks[riskIndex].displayStatus
+            projects[projectIndex].risks[riskIndex].riskStatus = status.rawValue
+            projects[projectIndex].risks[riskIndex].lastModifiedAt = .now
+            appendRiskHistoryEntry(
+                riskIndex: riskIndex,
+                projectIndex: projectIndex,
+                kind: .automatic,
+                text: "Statut modifié : \(previousStatus) → \(status.label)"
+            )
+            projects[projectIndex].updatedAt = .now
+            projects = sortProjects(projects)
+            persist()
+            return
+        }
+
+        guard let riskIndex = unassignedRisks.firstIndex(where: { $0.id == riskID }) else { return }
+        let previousStatus = unassignedRisks[riskIndex].displayStatus
+        unassignedRisks[riskIndex].riskStatus = status.rawValue
+        unassignedRisks[riskIndex].lastModifiedAt = .now
+        appendRiskHistoryEntry(
+            riskIndex: riskIndex,
+            projectIndex: nil,
+            kind: .automatic,
+            text: "Statut modifié : \(previousStatus) → \(status.label)"
+        )
+        unassignedRisks = sortStandaloneRisks(unassignedRisks)
         persist()
     }
 
@@ -1967,7 +2001,8 @@ final class SamouraiStore {
         mitigation: String,
         owner: String,
         severity: RiskSeverity,
-        dueDate: Date?
+        dueDate: Date?,
+        status: RiskStatus? = nil
     ) {
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedMitigation = mitigation.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1975,6 +2010,7 @@ final class SamouraiStore {
 
         for projectIndex in projects.indices {
             guard let riskIndex = projects[projectIndex].risks.firstIndex(where: { $0.id == riskID }) else { continue }
+            let previous = projects[projectIndex].risks[riskIndex]
 
             if cleanedTitle.isEmpty == false {
                 projects[projectIndex].risks[riskIndex].title = cleanedTitle
@@ -1988,7 +2024,22 @@ final class SamouraiStore {
             }
             projects[projectIndex].risks[riskIndex].severity = severity
             projects[projectIndex].risks[riskIndex].dueDate = dueDate
+            if let status {
+                projects[projectIndex].risks[riskIndex].riskStatus = status.rawValue
+            }
             projects[projectIndex].risks[riskIndex].lastModifiedAt = .now
+            let changeMessages = riskChangeMessages(
+                previous: previous,
+                current: projects[projectIndex].risks[riskIndex]
+            )
+            for message in changeMessages {
+                appendRiskHistoryEntry(
+                    riskIndex: riskIndex,
+                    projectIndex: projectIndex,
+                    kind: .automatic,
+                    text: message
+                )
+            }
             projects[projectIndex].updatedAt = .now
             projects = sortProjects(projects)
             persist()
@@ -1996,6 +2047,7 @@ final class SamouraiStore {
         }
 
         guard let riskIndex = unassignedRisks.firstIndex(where: { $0.id == riskID }) else { return }
+        let previous = unassignedRisks[riskIndex]
 
         if cleanedTitle.isEmpty == false {
             unassignedRisks[riskIndex].title = cleanedTitle
@@ -2009,7 +2061,22 @@ final class SamouraiStore {
         }
         unassignedRisks[riskIndex].severity = severity
         unassignedRisks[riskIndex].dueDate = dueDate
+        if let status {
+            unassignedRisks[riskIndex].riskStatus = status.rawValue
+        }
         unassignedRisks[riskIndex].lastModifiedAt = .now
+        let changeMessages = riskChangeMessages(
+            previous: previous,
+            current: unassignedRisks[riskIndex]
+        )
+        for message in changeMessages {
+            appendRiskHistoryEntry(
+                riskIndex: riskIndex,
+                projectIndex: nil,
+                kind: .automatic,
+                text: message
+            )
+        }
         unassignedRisks = sortStandaloneRisks(unassignedRisks)
         persist()
     }
@@ -2027,6 +2094,7 @@ final class SamouraiStore {
 
         for projectIndex in projects.indices {
             guard let riskIndex = projects[projectIndex].risks.firstIndex(where: { $0.id == riskID }) else { continue }
+            let previous = projects[projectIndex].risks[riskIndex]
 
             if cleanedTitle.isEmpty == false {
                 projects[projectIndex].risks[riskIndex].title = cleanedTitle
@@ -2039,6 +2107,18 @@ final class SamouraiStore {
             projects[projectIndex].risks[riskIndex].severity = severity
             projects[projectIndex].risks[riskIndex].riskStatus = cleanedStatus
             projects[projectIndex].risks[riskIndex].lastModifiedAt = .now
+            let changeMessages = riskChangeMessages(
+                previous: previous,
+                current: projects[projectIndex].risks[riskIndex]
+            )
+            for message in changeMessages {
+                appendRiskHistoryEntry(
+                    riskIndex: riskIndex,
+                    projectIndex: projectIndex,
+                    kind: .automatic,
+                    text: message
+                )
+            }
             projects[projectIndex].updatedAt = .now
 
             projects = sortProjects(projects)
@@ -2047,6 +2127,7 @@ final class SamouraiStore {
         }
 
         guard let riskIndex = unassignedRisks.firstIndex(where: { $0.id == riskID }) else { return }
+        let previous = unassignedRisks[riskIndex]
 
         if cleanedTitle.isEmpty == false {
             unassignedRisks[riskIndex].title = cleanedTitle
@@ -2059,8 +2140,116 @@ final class SamouraiStore {
         unassignedRisks[riskIndex].severity = severity
         unassignedRisks[riskIndex].riskStatus = cleanedStatus
         unassignedRisks[riskIndex].lastModifiedAt = .now
+        let changeMessages = riskChangeMessages(
+            previous: previous,
+            current: unassignedRisks[riskIndex]
+        )
+        for message in changeMessages {
+            appendRiskHistoryEntry(
+                riskIndex: riskIndex,
+                projectIndex: nil,
+                kind: .automatic,
+                text: message
+            )
+        }
         unassignedRisks = sortStandaloneRisks(unassignedRisks)
         persist()
+    }
+
+    @discardableResult
+    func addRiskComment(riskID: UUID, text: String) -> Bool {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.isEmpty == false else { return false }
+
+        for projectIndex in projects.indices {
+            guard let riskIndex = projects[projectIndex].risks.firstIndex(where: { $0.id == riskID }) else { continue }
+            appendRiskHistoryEntry(
+                riskIndex: riskIndex,
+                projectIndex: projectIndex,
+                kind: .manual,
+                text: cleaned
+            )
+            projects[projectIndex].risks[riskIndex].lastModifiedAt = .now
+            projects[projectIndex].updatedAt = .now
+            projects = sortProjects(projects)
+            persist()
+            return true
+        }
+
+        guard let riskIndex = unassignedRisks.firstIndex(where: { $0.id == riskID }) else { return false }
+        appendRiskHistoryEntry(
+            riskIndex: riskIndex,
+            projectIndex: nil,
+            kind: .manual,
+            text: cleaned
+        )
+        unassignedRisks[riskIndex].lastModifiedAt = .now
+        unassignedRisks = sortStandaloneRisks(unassignedRisks)
+        persist()
+        return true
+    }
+
+    private func appendRiskHistoryEntry(
+        riskIndex: Int,
+        projectIndex: Int?,
+        kind: RiskHistoryEntryKind,
+        text: String,
+        date: Date = .now
+    ) {
+        let entry = RiskHistoryEntry(kind: kind, date: date, text: text)
+        if let projectIndex {
+            var history = projects[projectIndex].risks[riskIndex].history ?? []
+            history.append(entry)
+            projects[projectIndex].risks[riskIndex].history = history
+        } else {
+            var history = unassignedRisks[riskIndex].history ?? []
+            history.append(entry)
+            unassignedRisks[riskIndex].history = history
+        }
+    }
+
+    private func riskChangeMessages(previous: Risk, current: Risk) -> [String] {
+        var messages: [String] = []
+
+        let previousTitle = previous.displayTitle
+        let currentTitle = current.displayTitle
+        if previousTitle != currentTitle {
+            messages.append("Titre modifié : « \(previousTitle) » → « \(currentTitle) »")
+        }
+
+        let previousOwner = previous.displayOwner
+        let currentOwner = current.displayOwner
+        if previousOwner != currentOwner {
+            messages.append("Responsable modifié : \(previousOwner) → \(currentOwner)")
+        }
+
+        let previousMitigation = previous.displayMitigation
+        let currentMitigation = current.displayMitigation
+        if previousMitigation != currentMitigation {
+            messages.append("Mitigation modifiée")
+        }
+
+        if previous.severity != current.severity {
+            messages.append("Sévérité modifiée : \(previous.severity.label) → \(current.severity.label)")
+        }
+
+        let previousStatus = previous.displayStatus
+        let currentStatus = current.displayStatus
+        if previousStatus != currentStatus {
+            messages.append("Statut modifié : \(previousStatus) → \(currentStatus)")
+        }
+
+        if previous.dueDate != current.dueDate {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "fr_FR")
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            let previousLabel = previous.dueDate.map(formatter.string(from:)) ?? "non renseignée"
+            let currentLabel = current.dueDate.map(formatter.string(from:)) ?? "non renseignée"
+            messages.append("Date d'action cible modifiée : \(previousLabel) → \(currentLabel)")
+        }
+
+        return messages
     }
 
     func deleteRisk(riskID: UUID) {

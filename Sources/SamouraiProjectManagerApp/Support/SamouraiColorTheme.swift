@@ -222,6 +222,12 @@ extension RiskSeverity {
     }
 }
 
+extension RiskStatus {
+    var tintColor: Color {
+        Color(hex: hexColor)
+    }
+}
+
 extension EventPriority {
     var colorToken: SamouraiColorToken {
         switch self {

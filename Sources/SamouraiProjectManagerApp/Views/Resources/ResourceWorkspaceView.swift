@@ -19,6 +19,7 @@ struct ResourceWorkspaceView: View {
     @State private var editorContext: ResourceEditorContext?
     @State private var resourcePendingDeletion: Resource?
     @State private var isShowingFileImporter = false
+    @State private var isShowingDirectoryPicker = false
     @State private var importFeedbackMessage: String?
     @State private var isImporting = false
     @State private var isShowingFileExporter = false
@@ -51,7 +52,7 @@ struct ResourceWorkspaceView: View {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Annuaire des ressources")
+                        Text(workspaceTitle)
                             .font(.title2.weight(.semibold))
                         Text("\(filteredResources.count) / \(searchBaseResources.count) ressource(s) affichée(s)")
                             .foregroundStyle(.secondary)
@@ -120,19 +121,29 @@ struct ResourceWorkspaceView: View {
                     }
                     .disabled(isImporting || scopedResources.isEmpty)
 
-                    Button {
-                        isShowingFileImporter = true
-                    } label: {
-                        Label("Importer", systemImage: "square.and.arrow.down")
-                    }
-                    .disabled(isImporting)
+                    if scopeMode == .globalDirectory {
+                        Button {
+                            isShowingFileImporter = true
+                        } label: {
+                            Label("Importer", systemImage: "square.and.arrow.down")
+                        }
+                        .disabled(isImporting)
 
-                    Button {
-                        editorContext = .create
-                    } label: {
-                        Label("Nouvelle", systemImage: "plus")
+                        Button {
+                            editorContext = .create
+                        } label: {
+                            Label("Nouvelle", systemImage: "plus")
+                        }
+                        .disabled(isImporting)
+                    } else if scopedProjectID != nil {
+                        Button {
+                            isShowingDirectoryPicker = true
+                        } label: {
+                            Label("Ajouter depuis l'annuaire", systemImage: "person.crop.circle.badge.plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isImporting)
                     }
-                    .disabled(isImporting)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -206,7 +217,7 @@ struct ResourceWorkspaceView: View {
                         ContentUnavailableView(
                             "Aucune ressource",
                             systemImage: "person.3",
-                            description: Text("Importe ou crée les ressources du référentiel pour les réutiliser dans les projets.")
+                            description: Text(emptyStateDescription)
                         )
                     } else if filteredResources.isEmpty {
                         ContentUnavailableView(
@@ -264,6 +275,14 @@ struct ResourceWorkspaceView: View {
             allowsMultipleSelection: false
         ) { result in
             handleImportSelection(result)
+        }
+        .sheet(isPresented: $isShowingDirectoryPicker) {
+            if let projectID = scopedProjectID {
+                ResourceDirectoryPickerSheet(
+                    projectID: projectID,
+                    projectName: scopedProjectName ?? ""
+                )
+            }
         }
         .sheet(isPresented: $isShowingImportReview) {
             ResourceImportReviewSheet(
@@ -381,6 +400,18 @@ struct ResourceWorkspaceView: View {
         scopedProjectID.flatMap { store.project(with: $0)?.name }
     }
 
+    private var workspaceTitle: String {
+        switch scopeMode {
+        case .globalDirectory:
+            return "Annuaire des ressources"
+        case .contextualProject:
+            if let scopedProjectName {
+                return "Ressources — \(scopedProjectName)"
+            }
+            return "Ressources du projet"
+        }
+    }
+
     private var resourceProfilingReport: ResourceProfilingReport {
         store.resourceProfiling(for: scopedProjectID)
     }
@@ -487,9 +518,18 @@ struct ResourceWorkspaceView: View {
     private var assignmentContextNote: String? {
         guard let scopedProjectName else { return nil }
         if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Affichage centré sur les ressources déjà affectées à \(scopedProjectName). Lance une recherche pour explorer tout l'annuaire et ajouter une ressource existante."
+            return "Affichage centré sur les ressources affectées à \(scopedProjectName). Utilise « Ajouter depuis l'annuaire » pour sélectionner une ressource existante du référentiel global."
         }
         return "Recherche annuaire globale active pour \(scopedProjectName). Les ressources non encore affectées peuvent être ajoutées directement au projet."
+    }
+
+    private var emptyStateDescription: String {
+        switch scopeMode {
+        case .globalDirectory:
+            return "Importe ou crée les ressources du référentiel pour les réutiliser dans les projets."
+        case .contextualProject:
+            return "Aucune ressource n'est encore affectée à ce projet. Utilise « Ajouter depuis l'annuaire » pour sélectionner une ressource existante du référentiel global."
+        }
     }
 
     private var canAssignSelectedResourceToScopedProject: Bool {

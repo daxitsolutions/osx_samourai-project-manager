@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -259,26 +260,62 @@ enum ActionFlowFilter: String, CaseIterable, Identifiable {
 }
 
 actor SamouraiPersistence {
+    static let appDirectoryName = "SamouraiProjectManager"
+    static let primaryFileName = "projects.json"
+
     private let fileManager = FileManager.default
     private let backupRetentionCount = 120
-    private let encoder: JSONEncoder = {
+
+    nonisolated static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         return encoder
-    }()
-    private let decoder: JSONDecoder = {
+    }
+
+    nonisolated static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
-    }()
-
-    private var fileURL: URL {
-        let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let appDirectory = baseURL.appending(path: "SamouraiProjectManager", directoryHint: .isDirectory)
-        return appDirectory.appending(path: "projects.json")
     }
+
+    /// Emplacement principal de sauvegarde : dossier Documents de l'utilisateur.
+    /// Ce dossier est synchronisé automatiquement par iCloud Drive lorsque
+    /// « Bureau & Documents » est activé dans les réglages iCloud de macOS.
+    nonisolated static var primaryFileURL: URL {
+        let baseURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return baseURL
+            .appending(path: appDirectoryName, directoryHint: .isDirectory)
+            .appending(path: primaryFileName)
+    }
+
+    /// Ancien emplacement (`~/Library/Application Support/...`) conservé uniquement
+    /// pour la migration automatique au premier démarrage sur cette version.
+    nonisolated static var legacyFileURL: URL {
+        let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return baseURL
+            .appending(path: appDirectoryName, directoryHint: .isDirectory)
+            .appending(path: primaryFileName)
+    }
+
+    /// Sauvegarde synchrone utilisée à la fermeture de l'application pour garantir
+    /// l'écriture complète des données avant la terminaison du processus.
+    nonisolated static func saveSynchronously(_ database: SamouraiDatabase) throws {
+        let url = primaryFileURL
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let data = try makeEncoder().encode(database)
+        try data.write(to: url, options: [.atomic])
+    }
+
+    private let encoder: JSONEncoder = SamouraiPersistence.makeEncoder()
+    private let decoder: JSONDecoder = SamouraiPersistence.makeDecoder()
+
+    private var fileURL: URL { Self.primaryFileURL }
 
     private var backupDirectoryURL: URL {
         fileURL
@@ -288,6 +325,10 @@ actor SamouraiPersistence {
 
     func load() throws -> SamouraiDatabase {
         let url = fileURL
+        if fileManager.fileExists(atPath: url.path()) == false {
+            migrateLegacyFileIfNeeded(to: url)
+        }
+
         guard fileManager.fileExists(atPath: url.path()) else {
             return .empty
         }
@@ -307,6 +348,21 @@ actor SamouraiPersistence {
         let data = try encoder.encode(database)
         try data.write(to: url, options: [.atomic])
         try writeAutoBackup(data)
+    }
+
+    private func migrateLegacyFileIfNeeded(to destinationURL: URL) {
+        let legacyURL = Self.legacyFileURL
+        guard fileManager.fileExists(atPath: legacyURL.path()) else { return }
+        do {
+            try fileManager.createDirectory(
+                at: destinationURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try fileManager.copyItem(at: legacyURL, to: destinationURL)
+        } catch {
+            // Migration best-effort : en cas d'échec on laisse le legacy intact
+            // et l'application démarrera sur une base vide puis recréera un fichier neuf.
+        }
     }
 
     private func writeAutoBackup(_ data: Data) throws {
@@ -377,6 +433,31 @@ final class SamouraiStore {
     private(set) var governanceReports: [GovernanceReportRecord] = []
     private(set) var hasLoaded = false
     var lastErrorMessage: String?
+
+    init() {
+        // Le store vit toute la durée de l'application ; l'observateur est libéré
+        // implicitement à la fin du processus, pas besoin de le conserver pour `removeObserver`.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.flushSynchronously()
+            }
+        }
+    }
+
+    /// Écriture synchrone de l'état courant avant la terminaison de l'application.
+    /// Garantit qu'aucune mutation en attente dans les `Task` d'arrière-plan n'est perdue.
+    func flushSynchronously() {
+        guard hasLoaded else { return }
+        do {
+            try SamouraiPersistence.saveSynchronously(makeDatabase())
+        } catch {
+            lastErrorMessage = "Sauvegarde finale impossible : \(error.localizedDescription)"
+        }
+    }
 
     func appendDebugLog(filePath: String, entry: String) {
         let expanded = (filePath as NSString).expandingTildeInPath

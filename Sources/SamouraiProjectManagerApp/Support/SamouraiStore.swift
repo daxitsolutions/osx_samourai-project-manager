@@ -258,29 +258,6 @@ enum ActionFlowFilter: String, CaseIterable, Identifiable {
     }
 }
 
-private struct NormalizedResourceFields {
-    let fullName: String
-    let jobTitle: String
-    let department: String
-    let nom: String?
-    let parentDescription: String?
-    let primaryResourceRole: String?
-    let resourceRoles: String?
-    let organizationalResource: String?
-    let competence1: String?
-    let resourceCalendar: String?
-    let resourceStartDate: Date?
-    let resourceFinishDate: Date?
-    let responsableOperationnel: String?
-    let responsableInterne: String?
-    let localisation: String?
-    let typeDeRessource: String?
-    let journeesTempsPartiel: String?
-    let engagement: ResourceEngagement
-    let status: ResourceStatus
-    let allocationPercent: Int
-}
-
 actor SamouraiPersistence {
     private let fileManager = FileManager.default
     private let backupRetentionCount = 120
@@ -384,8 +361,13 @@ final class SamouraiStore {
         return decoder
     }()
 
+    private let resourceStore = ResourceStore()
+
     private(set) var projects: [Project] = []
-    private(set) var resources: [Resource] = []
+    private(set) var resources: [Resource] {
+        get { resourceStore.resources }
+        set { resourceStore.replaceResources(newValue) }
+    }
     private(set) var unassignedRisks: [Risk] = []
     private(set) var activities: [ProjectActivity] = []
     private(set) var events: [ProjectEvent] = []
@@ -539,7 +521,7 @@ final class SamouraiStore {
     }
 
     func resource(with id: UUID) -> Resource? {
-        resources.first { $0.id == id }
+        resourceStore.resource(with: id)
     }
 
     func risk(with id: UUID) -> Risk? {
@@ -677,37 +659,11 @@ final class SamouraiStore {
     }
 
     func resources(for projectID: UUID) -> [Resource] {
-        resources
-            .filter { $0.assignedProjectIDs.contains(projectID) }
-            .sorted { lhs, rhs in
-                let lhsFavorite = lhs.isFavorite(in: projectID)
-                let rhsFavorite = rhs.isFavorite(in: projectID)
-                if lhsFavorite != rhsFavorite {
-                    return lhsFavorite && rhsFavorite == false
-                }
-                return lhs.fullName.localizedStandardCompare(rhs.fullName) == .orderedAscending
-            }
+        resourceStore.resources(for: projectID)
     }
 
     func resourceProfiling(for projectID: UUID?) -> ResourceProfilingReport {
-        let scopedResources: [Resource]
-        if let projectID {
-            scopedResources = resources(for: projectID)
-        } else {
-            scopedResources = resources
-        }
-
-        let coverage = CriticalProjectRole.allCases.map { role in
-            let assigned = scopedResources
-                .filter { $0.criticalRoles.contains(role) }
-                .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
-            return ResourceRoleCoverage(role: role, assignedResources: assigned)
-        }
-
-        return ResourceProfilingReport(
-            requiredRoles: CriticalProjectRole.allCases,
-            roleCoverage: coverage
-        )
+        resourceStore.resourceProfiling(for: projectID)
     }
 
     func addResourceEvaluation(
@@ -719,65 +675,29 @@ final class SamouraiStore {
         criterionScores: [ResourceCriterionScore],
         evaluatedAt: Date = .now
     ) {
-        guard let resourceIndex = resources.firstIndex(where: { $0.id == resourceID }) else { return }
-        let cleanedMilestone = milestone.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanedEvaluator = evaluator.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard cleanedComment.isEmpty == false else { return }
-
         let scopedProjectID = sanitizedProjectID(projectID)
-        let scopedPhase = scopedProjectID.flatMap { project(with: $0)?.phase }
-        let evaluation = ResourcePerformanceEvaluation(
-            evaluatedAt: evaluatedAt,
-            milestone: cleanedMilestone.isEmpty ? "Point de contrôle" : cleanedMilestone,
-            evaluator: cleanedEvaluator.isEmpty ? "Chef de Projet" : cleanedEvaluator,
-            projectID: scopedProjectID,
-            projectPhase: scopedPhase,
-            criterionScores: normalizedCriterionScores(criterionScores),
-            comment: cleanedComment
+        let scopedProjectPhase = scopedProjectID.flatMap { project(with: $0)?.phase }
+        let didUpdate = resourceStore.addResourceEvaluation(
+            resourceID: resourceID,
+            scopedProjectID: scopedProjectID,
+            scopedProjectPhase: scopedProjectPhase,
+            milestone: milestone,
+            evaluator: evaluator,
+            comment: comment,
+            criterionScores: criterionScores,
+            evaluatedAt: evaluatedAt
         )
-
-        resources[resourceIndex].performanceEvaluations.append(evaluation)
-        resources[resourceIndex].performanceEvaluations.sort { $0.evaluatedAt < $1.evaluatedAt }
-        resources[resourceIndex].updatedAt = .now
-        resources = sortResources(resources)
-        persist()
+        if didUpdate {
+            persist()
+        }
     }
 
     func performanceSnapshot(for resourceID: UUID, scopedProjectID: UUID?) -> ResourcePerformanceSnapshot? {
-        guard let resource = resource(with: resourceID) else { return nil }
-        return makePerformanceSnapshot(for: resource, scopedProjectID: scopedProjectID)
+        resourceStore.performanceSnapshot(for: resourceID, scopedProjectID: scopedProjectID)
     }
 
     func comparativePerformance(for projectID: UUID?) -> [ResourcePerformanceSnapshot] {
-        let scopedResources: [Resource]
-        if let projectID {
-            scopedResources = resources(for: projectID)
-        } else {
-            scopedResources = resources
-        }
-
-        return scopedResources
-            .map { makePerformanceSnapshot(for: $0, scopedProjectID: projectID) }
-            .sorted { lhs, rhs in
-                let lhsRisk = lhs.alerts.isEmpty ? 0 : 1
-                let rhsRisk = rhs.alerts.isEmpty ? 0 : 1
-                if lhsRisk != rhsRisk { return lhsRisk > rhsRisk }
-
-                switch (lhs.latestScore, rhs.latestScore) {
-                case let (.some(left), .some(right)):
-                    if left == right {
-                        return lhs.resourceName.localizedStandardCompare(rhs.resourceName) == .orderedAscending
-                    }
-                    return left < right
-                case (.none, .some):
-                    return false
-                case (.some, .none):
-                    return true
-                case (.none, .none):
-                    return lhs.resourceName.localizedStandardCompare(rhs.resourceName) == .orderedAscending
-                }
-            }
+        resourceStore.comparativePerformance(for: projectID)
     }
 
     func governanceReport(
@@ -2551,7 +2471,7 @@ final class SamouraiStore {
         assignedProjectIDs: [UUID],
         notes: String
     ) -> UUID {
-        let normalized = normalizedResourceFields(
+        let resourceID = resourceStore.addResource(
             nom: nom,
             parentDescription: parentDescription,
             primaryResourceRole: primaryResourceRole,
@@ -2565,40 +2485,14 @@ final class SamouraiStore {
             responsableInterne: responsableInterne,
             localisation: localisation,
             typeDeRessource: typeDeRessource,
-            journeesTempsPartiel: journeesTempsPartiel
-        )
-
-        let resource = Resource(
-            fullName: normalized.fullName,
-            jobTitle: normalized.jobTitle,
-            department: normalized.department,
-            nom: normalized.nom,
-            parentDescription: normalized.parentDescription,
-            primaryResourceRole: normalized.primaryResourceRole,
-            resourceRoles: normalized.resourceRoles,
-            organizationalResource: normalized.organizationalResource,
-            competence1: normalized.competence1,
-            resourceCalendar: normalized.resourceCalendar,
-            resourceStartDate: normalized.resourceStartDate,
-            resourceFinishDate: normalized.resourceFinishDate,
-            responsableOperationnel: normalized.responsableOperationnel,
-            responsableInterne: normalized.responsableInterne,
-            localisation: normalized.localisation,
-            typeDeRessource: normalized.typeDeRessource,
-            journeesTempsPartiel: normalized.journeesTempsPartiel,
+            journeesTempsPartiel: journeesTempsPartiel,
             email: email,
             phone: phone,
-            engagement: normalized.engagement,
-            status: normalized.status,
-            allocationPercent: normalized.allocationPercent,
             assignedProjectIDs: assignedProjectIDs,
             notes: notes
         )
-
-        resources.append(resource)
-        resources = sortResources(resources)
         persist()
-        return resource.id
+        return resourceID
     }
 
     func updateResource(
@@ -2622,9 +2516,8 @@ final class SamouraiStore {
         assignedProjectIDs: [UUID],
         notes: String
     ) {
-        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return }
-
-        let normalized = normalizedResourceFields(
+        let didUpdate = resourceStore.updateResource(
+            resourceID: resourceID,
             nom: nom,
             parentDescription: parentDescription,
             primaryResourceRole: primaryResourceRole,
@@ -2638,37 +2531,15 @@ final class SamouraiStore {
             responsableInterne: responsableInterne,
             localisation: localisation,
             typeDeRessource: typeDeRessource,
-            journeesTempsPartiel: journeesTempsPartiel
+            journeesTempsPartiel: journeesTempsPartiel,
+            email: email,
+            phone: phone,
+            assignedProjectIDs: assignedProjectIDs,
+            notes: notes
         )
-
-        resources[index].fullName = normalized.fullName
-        resources[index].jobTitle = normalized.jobTitle
-        resources[index].department = normalized.department
-        resources[index].nom = normalized.nom
-        resources[index].parentDescription = normalized.parentDescription
-        resources[index].primaryResourceRole = normalized.primaryResourceRole
-        resources[index].resourceRoles = normalized.resourceRoles
-        resources[index].organizationalResource = normalized.organizationalResource
-        resources[index].competence1 = normalized.competence1
-        resources[index].resourceCalendar = normalized.resourceCalendar
-        resources[index].resourceStartDate = normalized.resourceStartDate
-        resources[index].resourceFinishDate = normalized.resourceFinishDate
-        resources[index].responsableOperationnel = normalized.responsableOperationnel
-        resources[index].responsableInterne = normalized.responsableInterne
-        resources[index].localisation = normalized.localisation
-        resources[index].typeDeRessource = normalized.typeDeRessource
-        resources[index].journeesTempsPartiel = normalized.journeesTempsPartiel
-        resources[index].email = email
-        resources[index].phone = phone
-        resources[index].engagement = normalized.engagement
-        resources[index].status = normalized.status
-        resources[index].allocationPercent = normalized.allocationPercent
-        resources[index].assignedProjectIDs = assignedProjectIDs
-        resources[index].favoriteProjectIDs = resources[index].favoriteProjectIDs.filter { assignedProjectIDs.contains($0) }
-        resources[index].notes = notes
-        resources[index].updatedAt = .now
-        resources = sortResources(resources)
-        persist()
+        if didUpdate {
+            persist()
+        }
     }
 
     func updateResourceQuick(
@@ -2682,77 +2553,54 @@ final class SamouraiStore {
         status: ResourceStatus,
         engagement: ResourceEngagement
     ) {
-        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return }
-
-        let cleanedNom = cleanedOptionalString(nom) ?? resources[index].fullName
-        let cleanedParentDescription = cleanedOptionalString(parentDescription)
-        let cleanedPrimaryRole = cleanedOptionalString(primaryResourceRole)
-
-        resources[index].fullName = cleanedNom
-        resources[index].nom = cleanedNom
-
-        if let cleanedParentDescription {
-            resources[index].parentDescription = cleanedParentDescription
-            resources[index].department = cleanedParentDescription
+        let didUpdate = resourceStore.updateResourceQuick(
+            resourceID: resourceID,
+            nom: nom,
+            parentDescription: parentDescription,
+            primaryResourceRole: primaryResourceRole,
+            email: email,
+            phone: phone,
+            allocationPercent: allocationPercent,
+            status: status,
+            engagement: engagement
+        )
+        if didUpdate {
+            persist()
         }
-
-        if let cleanedPrimaryRole {
-            resources[index].primaryResourceRole = cleanedPrimaryRole
-            resources[index].jobTitle = cleanedPrimaryRole
-        }
-
-        resources[index].email = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        resources[index].phone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
-        resources[index].allocationPercent = min(max(allocationPercent, 0), 100)
-        resources[index].status = status
-        resources[index].engagement = engagement
-        resources[index].updatedAt = .now
-
-        resources = sortResources(resources)
-        persist()
     }
 
     func assignResource(resourceID: UUID, to projectID: UUID) {
-        guard projects.contains(where: { $0.id == projectID }) else { return }
-        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return }
-        guard resources[index].assignedProjectIDs.contains(projectID) == false else { return }
-
-        resources[index].assignedProjectIDs.append(projectID)
-        resources[index].updatedAt = .now
-        resources = sortResources(resources)
-        persist()
+        let didUpdate = resourceStore.assignResource(
+            resourceID: resourceID,
+            to: projectID,
+            validProjectIDs: Set(projects.map(\.id))
+        )
+        if didUpdate {
+            persist()
+        }
     }
 
     func toggleFavoriteResource(resourceID: UUID, in projectID: UUID) {
-        guard projects.contains(where: { $0.id == projectID }) else { return }
-        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return }
-        guard resources[index].assignedProjectIDs.contains(projectID) else { return }
-
-        if resources[index].favoriteProjectIDs.contains(projectID) {
-            resources[index].favoriteProjectIDs.removeAll { $0 == projectID }
-        } else {
-            resources[index].favoriteProjectIDs.append(projectID)
+        let didUpdate = resourceStore.toggleFavoriteResource(
+            resourceID: resourceID,
+            in: projectID,
+            validProjectIDs: Set(projects.map(\.id))
+        )
+        if didUpdate {
+            persist()
         }
-
-        resources[index].updatedAt = .now
-        resources = sortResources(resources)
-        persist()
     }
 
     func unassignResource(resourceID: UUID, from projectID: UUID) {
-        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return }
-        let previousAssignments = resources[index].assignedProjectIDs
-        resources[index].assignedProjectIDs.removeAll { $0 == projectID }
-        guard resources[index].assignedProjectIDs != previousAssignments else { return }
-
-        resources[index].favoriteProjectIDs.removeAll { $0 == projectID }
-        resources[index].updatedAt = .now
-        resources = sortResources(resources)
-        persist()
+        let didUpdate = resourceStore.unassignResource(resourceID: resourceID, from: projectID)
+        if didUpdate {
+            persist()
+        }
     }
 
     func deleteResource(resourceID: UUID) {
-        resources.removeAll { $0.id == resourceID }
+        let didDelete = resourceStore.deleteResource(resourceID: resourceID)
+        guard didDelete else { return }
         decisions = decisions.map { decision in
             var updatedDecision = decision
             updatedDecision.impactedResourceIDs.removeAll { $0 == resourceID }
@@ -2762,36 +2610,16 @@ final class SamouraiStore {
     }
 
     func importResources(_ drafts: [ResourceImportDraft]) -> ResourceImportResult {
-        let reviewItems = prepareResourceImportReview(drafts)
-        let decisions = reviewItems.map {
-            ResourceImportDecision(reviewItemID: $0.id, shouldApply: $0.action == .create || $0.action == .update)
-        }
-        return applyResourceImportReview(reviewItems, decisions: decisions)
+        let result = resourceStore.importResources(drafts)
+        persist()
+        return result
     }
 
     func prepareResourceImportReviewAsync(
         _ drafts: [ResourceImportDraft],
         reporter: ImportProgressReporter
     ) async throws -> [ResourceImportReviewItem] {
-        reporter.setStage(.analyzing)
-        reporter.setTotal(drafts.count)
-        reporter.setProcessed(0)
-        reporter.setImported(0)
-
-        var reviewItems: [ResourceImportReviewItem] = []
-        reviewItems.reserveCapacity(drafts.count)
-
-        for (index, draft) in drafts.enumerated() {
-            try Task.checkCancellation()
-            reviewItems.append(makeResourceImportReviewItem(for: draft))
-
-            reporter.setProcessed(index + 1)
-            if (index + 1) % 10 == 0 || index == drafts.count - 1 {
-                await Task.yield()
-            }
-        }
-
-        return reviewItems.sorted { $0.sourceRowNumber < $1.sourceRowNumber }
+        try await resourceStore.prepareResourceImportReviewAsync(drafts, reporter: reporter)
     }
 
     func applyResourceImportReviewAsync(
@@ -2799,391 +2627,23 @@ final class SamouraiStore {
         decisions: [ResourceImportDecision],
         reporter: ImportProgressReporter
     ) async throws -> ResourceImportResult {
-        reporter.setStage(.importing)
-        reporter.setTotal(reviewItems.count)
-        reporter.setProcessed(0)
-        reporter.setImported(0)
-
-        let decisionsByID = Dictionary(uniqueKeysWithValues: decisions.map { ($0.reviewItemID, $0.shouldApply) })
-        var importedCount = 0
-        var updatedCount = 0
-        var skippedCount = 0
-        var firstImportedOrUpdatedResourceID: UUID?
-
-        for (index, item) in reviewItems.enumerated() {
-            try Task.checkCancellation()
-
-            let shouldApply = decisionsByID[item.id] ?? false
-
-            switch item.action {
-            case .create:
-                guard shouldApply, let createdResource = item.proposedResource else {
-                    skippedCount += 1
-                    break
-                }
-                resources.append(createdResource)
-                importedCount += 1
-                if firstImportedOrUpdatedResourceID == nil {
-                    firstImportedOrUpdatedResourceID = createdResource.id
-                }
-            case .update:
-                guard shouldApply, let updatedResource = item.proposedResource else {
-                    skippedCount += 1
-                    break
-                }
-                guard let resourceIndex = resources.firstIndex(where: { $0.id == updatedResource.id }) else {
-                    skippedCount += 1
-                    break
-                }
-                resources[resourceIndex] = updatedResource
-                updatedCount += 1
-                if firstImportedOrUpdatedResourceID == nil {
-                    firstImportedOrUpdatedResourceID = updatedResource.id
-                }
-            case .noChange, .skipped:
-                skippedCount += 1
-            }
-
-            reporter.setProcessed(index + 1)
-            reporter.setImported(importedCount + updatedCount)
-            if (index + 1) % 10 == 0 || index == reviewItems.count - 1 {
-                await Task.yield()
-            }
-        }
-
-        reporter.setStage(.finalizing)
-        resources = sortResources(resources)
-        persist()
-
-        return ResourceImportResult(
-            importedCount: importedCount,
-            updatedCount: updatedCount,
-            skippedCount: skippedCount,
-            firstImportedOrUpdatedResourceID: firstImportedOrUpdatedResourceID
+        let result = try await resourceStore.applyResourceImportReviewAsync(
+            reviewItems,
+            decisions: decisions,
+            reporter: reporter
         )
+        persist()
+        return result
     }
 
     func prepareResourceImportReview(_ drafts: [ResourceImportDraft]) -> [ResourceImportReviewItem] {
-        let reviewItems = drafts.map { makeResourceImportReviewItem(for: $0) }
-        return reviewItems.sorted { $0.sourceRowNumber < $1.sourceRowNumber }
-    }
-
-    private func makeResourceImportReviewItem(for draft: ResourceImportDraft) -> ResourceImportReviewItem {
-        let trimmedNotes = draft.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedEmail = cleanedOptionalString(draft.email)
-        let normalizedPhone = cleanedOptionalString(draft.phone)
-        let normalized = normalizedResourceFields(
-            nom: draft.nom,
-            parentDescription: draft.parentDescription,
-            primaryResourceRole: draft.primaryResourceRole,
-            resourceRoles: draft.resourceRoles,
-            organizationalResource: draft.organizationalResource,
-            competence1: draft.competence1,
-            resourceCalendar: draft.resourceCalendar,
-            resourceStartDate: draft.resourceStartDate,
-            resourceFinishDate: draft.resourceFinishDate,
-            responsableOperationnel: draft.responsableOperationnel,
-            responsableInterne: draft.responsableInterne,
-            localisation: draft.localisation,
-            typeDeRessource: draft.typeDeRessource,
-            journeesTempsPartiel: draft.journeesTempsPartiel
-        )
-
-        guard normalized.fullName.isEmpty == false else {
-            return ResourceImportReviewItem(
-                sourceRowNumber: draft.sourceRowNumber,
-                action: .skipped,
-                resourceID: nil,
-                displayName: "(ligne sans nom)",
-                changes: [],
-                proposedResource: nil,
-                isExistingResource: false
-            )
-        }
-
-        let normalizedKey = resourceMatchingKey(
-            fullName: normalized.fullName,
-            firstName: draft.prenom,
-            lastName: draft.nomDeFamille,
-            email: normalizedEmail
-        )
-
-        if let index = resources.firstIndex(where: {
-            resourceMatchingKey(
-                fullName: $0.fullName,
-                firstName: nil,
-                lastName: nil,
-                email: cleanedOptionalString($0.email)
-            ) == normalizedKey
-        }) {
-            let existingResource = resources[index]
-            let updateResult = mergeExistingResource(
-                existingResource,
-                draft: draft,
-                normalized: normalized,
-                trimmedNotes: trimmedNotes,
-                normalizedEmail: normalizedEmail,
-                normalizedPhone: normalizedPhone
-            )
-
-            return ResourceImportReviewItem(
-                sourceRowNumber: draft.sourceRowNumber,
-                action: updateResult.changes.isEmpty ? .noChange : .update,
-                resourceID: existingResource.id,
-                displayName: existingResource.displayName,
-                changes: updateResult.changes,
-                proposedResource: updateResult.mergedResource,
-                isExistingResource: true
-            )
-        }
-
-        let createdResource = Resource(
-            fullName: normalized.fullName,
-            jobTitle: normalized.jobTitle,
-            department: normalized.department,
-            nom: normalized.nom,
-            parentDescription: normalized.parentDescription,
-            primaryResourceRole: normalized.primaryResourceRole,
-            resourceRoles: normalized.resourceRoles,
-            organizationalResource: normalized.organizationalResource,
-            competence1: normalized.competence1,
-            resourceCalendar: normalized.resourceCalendar,
-            resourceStartDate: normalized.resourceStartDate,
-            resourceFinishDate: normalized.resourceFinishDate,
-            responsableOperationnel: normalized.responsableOperationnel,
-            responsableInterne: normalized.responsableInterne,
-            localisation: normalized.localisation,
-            typeDeRessource: normalized.typeDeRessource,
-            journeesTempsPartiel: normalized.journeesTempsPartiel,
-            email: normalizedEmail ?? "",
-            phone: normalizedPhone ?? "",
-            engagement: normalized.engagement,
-            status: normalized.status,
-            allocationPercent: normalized.allocationPercent,
-            assignedProjectIDs: [],
-            notes: trimmedNotes
-        )
-
-        return ResourceImportReviewItem(
-            sourceRowNumber: draft.sourceRowNumber,
-            action: .create,
-            resourceID: createdResource.id,
-            displayName: createdResource.displayName,
-            changes: creationFieldChanges(for: createdResource),
-            proposedResource: createdResource,
-            isExistingResource: false
-        )
+        resourceStore.prepareResourceImportReview(drafts)
     }
 
     func applyResourceImportReview(_ reviewItems: [ResourceImportReviewItem], decisions: [ResourceImportDecision]) -> ResourceImportResult {
-        let decisionsByID = Dictionary(uniqueKeysWithValues: decisions.map { ($0.reviewItemID, $0.shouldApply) })
-        var importedCount = 0
-        var updatedCount = 0
-        var skippedCount = 0
-        var firstImportedOrUpdatedResourceID: UUID?
-
-        for item in reviewItems {
-            let shouldApply = decisionsByID[item.id] ?? false
-
-            switch item.action {
-            case .create:
-                guard shouldApply, let createdResource = item.proposedResource else {
-                    skippedCount += 1
-                    continue
-                }
-
-                resources.append(createdResource)
-                importedCount += 1
-                if firstImportedOrUpdatedResourceID == nil {
-                    firstImportedOrUpdatedResourceID = createdResource.id
-                }
-            case .update:
-                guard shouldApply, let updatedResource = item.proposedResource else {
-                    skippedCount += 1
-                    continue
-                }
-
-                guard let index = resources.firstIndex(where: { $0.id == updatedResource.id }) else {
-                    skippedCount += 1
-                    continue
-                }
-
-                resources[index] = updatedResource
-                updatedCount += 1
-                if firstImportedOrUpdatedResourceID == nil {
-                    firstImportedOrUpdatedResourceID = updatedResource.id
-                }
-            case .noChange, .skipped:
-                skippedCount += 1
-            }
-        }
-
-        resources = sortResources(resources)
+        let result = resourceStore.applyResourceImportReview(reviewItems, decisions: decisions)
         persist()
-
-        return ResourceImportResult(
-            importedCount: importedCount,
-            updatedCount: updatedCount,
-            skippedCount: skippedCount,
-            firstImportedOrUpdatedResourceID: firstImportedOrUpdatedResourceID
-        )
-    }
-
-    private struct MergeExistingResourceResult {
-        let mergedResource: Resource
-        let changes: [ResourceImportFieldChange]
-    }
-
-    private func mergeExistingResource(
-        _ existingResource: Resource,
-        draft: ResourceImportDraft,
-        normalized: NormalizedResourceFields,
-        trimmedNotes: String,
-        normalizedEmail: String?,
-        normalizedPhone: String?
-    ) -> MergeExistingResourceResult {
-        var merged = existingResource
-        var changes: [ResourceImportFieldChange] = []
-
-        func applyStringValue(_ newValue: String?, label: String, keyPath: WritableKeyPath<Resource, String>) {
-            guard let newValue else { return }
-            let currentValue = merged[keyPath: keyPath]
-            guard currentValue != newValue else { return }
-            changes.append(ResourceImportFieldChange(fieldLabel: label, oldValue: currentValue, newValue: newValue))
-            merged[keyPath: keyPath] = newValue
-        }
-
-        func applyOptionalStringValue(_ newValue: String?, label: String, keyPath: WritableKeyPath<Resource, String?>) {
-            guard let newValue else { return }
-            let currentValue = merged[keyPath: keyPath]
-            guard currentValue != newValue else { return }
-            changes.append(ResourceImportFieldChange(fieldLabel: label, oldValue: currentValue ?? "-", newValue: newValue))
-            merged[keyPath: keyPath] = newValue
-        }
-
-        func applyOptionalDateValue(_ newValue: Date?, label: String, keyPath: WritableKeyPath<Resource, Date?>) {
-            guard let newValue else { return }
-            let currentValue = merged[keyPath: keyPath]
-            guard currentValue != newValue else { return }
-            changes.append(
-                ResourceImportFieldChange(
-                    fieldLabel: label,
-                    oldValue: currentValue?.formatted(date: .abbreviated, time: .omitted) ?? "-",
-                    newValue: newValue.formatted(date: .abbreviated, time: .omitted)
-                )
-            )
-            merged[keyPath: keyPath] = newValue
-        }
-
-        applyStringValue(normalized.fullName.isEmpty ? nil : normalized.fullName, label: "Nom", keyPath: \.fullName)
-        applyStringValue(normalized.jobTitle.isEmpty ? nil : normalized.jobTitle, label: "Job Title", keyPath: \.jobTitle)
-        applyStringValue(normalized.department.isEmpty ? nil : normalized.department, label: "Département", keyPath: \.department)
-        applyOptionalStringValue(normalized.nom, label: "Nom (source)", keyPath: \.nom)
-        applyOptionalStringValue(normalized.parentDescription, label: "Parent Description", keyPath: \.parentDescription)
-        applyOptionalStringValue(normalized.primaryResourceRole, label: "Primary Resource Role", keyPath: \.primaryResourceRole)
-        applyOptionalStringValue(normalized.resourceRoles, label: "Resource Roles", keyPath: \.resourceRoles)
-        applyOptionalStringValue(normalized.organizationalResource, label: "Organizational Resource", keyPath: \.organizationalResource)
-        applyOptionalStringValue(normalized.competence1, label: "Compétence 1", keyPath: \.competence1)
-        applyOptionalStringValue(normalized.resourceCalendar, label: "Resource Calendar", keyPath: \.resourceCalendar)
-        applyOptionalDateValue(normalized.resourceStartDate, label: "Resource Start Date", keyPath: \.resourceStartDate)
-        applyOptionalDateValue(normalized.resourceFinishDate, label: "Resource Finish Date", keyPath: \.resourceFinishDate)
-        applyOptionalStringValue(normalized.responsableOperationnel, label: "Responsable Opérationnel", keyPath: \.responsableOperationnel)
-        applyOptionalStringValue(normalized.responsableInterne, label: "Responsable Interne", keyPath: \.responsableInterne)
-        applyOptionalStringValue(normalized.localisation, label: "Localisation", keyPath: \.localisation)
-        applyOptionalStringValue(normalized.typeDeRessource, label: "Type de Ressource", keyPath: \.typeDeRessource)
-        applyOptionalStringValue(normalized.journeesTempsPartiel, label: "Journée(s) temps partiel", keyPath: \.journeesTempsPartiel)
-        applyStringValue(normalizedEmail, label: "E-mail", keyPath: \.email)
-        applyStringValue(normalizedPhone, label: "Téléphone", keyPath: \.phone)
-
-        if draft.typeDeRessource?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
-           merged.engagement != normalized.engagement {
-            changes.append(
-                ResourceImportFieldChange(
-                    fieldLabel: "Engagement",
-                    oldValue: merged.engagement.label,
-                    newValue: normalized.engagement.label
-                )
-            )
-            merged.engagement = normalized.engagement
-        }
-
-        let hasPartTimeDays = draft.journeesTempsPartiel?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        let hasFinishDate = draft.resourceFinishDate != nil
-
-        if hasPartTimeDays, merged.allocationPercent != normalized.allocationPercent {
-            changes.append(
-                ResourceImportFieldChange(
-                    fieldLabel: "Allocation (%)",
-                    oldValue: "\(merged.allocationPercent)",
-                    newValue: "\(normalized.allocationPercent)"
-                )
-            )
-            merged.allocationPercent = normalized.allocationPercent
-        }
-
-        if hasPartTimeDays || hasFinishDate {
-            if merged.status != normalized.status {
-                changes.append(
-                    ResourceImportFieldChange(
-                        fieldLabel: "Statut",
-                        oldValue: merged.status.label,
-                        newValue: normalized.status.label
-                    )
-                )
-                merged.status = normalized.status
-            }
-        }
-
-        if trimmedNotes.isEmpty == false, merged.notes != trimmedNotes {
-            changes.append(
-                ResourceImportFieldChange(
-                    fieldLabel: "Notes",
-                    oldValue: merged.notes.isEmpty ? "-" : merged.notes,
-                    newValue: trimmedNotes
-                )
-            )
-            merged.notes = trimmedNotes
-        }
-
-        if changes.isEmpty == false {
-            merged.updatedAt = .now
-        }
-
-        return MergeExistingResourceResult(mergedResource: merged, changes: changes)
-    }
-
-    private func creationFieldChanges(for resource: Resource) -> [ResourceImportFieldChange] {
-        var changes: [ResourceImportFieldChange] = []
-
-        func appendIfValue(_ value: String, label: String) {
-            guard value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else { return }
-            changes.append(ResourceImportFieldChange(fieldLabel: label, oldValue: "-", newValue: value))
-        }
-
-        appendIfValue(resource.displayName, label: "Nom")
-        appendIfValue(resource.parentDescription ?? "", label: "Parent Description")
-        appendIfValue(resource.primaryResourceRole ?? "", label: "Primary Resource Role")
-        appendIfValue(resource.resourceRoles ?? "", label: "Resource Roles")
-        appendIfValue(resource.organizationalResource ?? "", label: "Organizational Resource")
-        appendIfValue(resource.competence1 ?? "", label: "Compétence 1")
-        appendIfValue(resource.resourceCalendar ?? "", label: "Resource Calendar")
-        appendIfValue(resource.resourceStartDate?.formatted(date: .abbreviated, time: .omitted) ?? "", label: "Resource Start Date")
-        appendIfValue(resource.resourceFinishDate?.formatted(date: .abbreviated, time: .omitted) ?? "", label: "Resource Finish Date")
-        appendIfValue(resource.responsableOperationnel ?? "", label: "Responsable Opérationnel")
-        appendIfValue(resource.responsableInterne ?? "", label: "Responsable Interne")
-        appendIfValue(resource.localisation ?? "", label: "Localisation")
-        appendIfValue(resource.typeDeRessource ?? "", label: "Type de Ressource")
-        appendIfValue(resource.journeesTempsPartiel ?? "", label: "Journée(s) temps partiel")
-        appendIfValue(resource.engagement.label, label: "Engagement")
-        appendIfValue(resource.status.label, label: "Statut")
-        appendIfValue("\(resource.allocationPercent)", label: "Allocation (%)")
-        appendIfValue(resource.notes, label: "Notes")
-
-        if changes.isEmpty {
-            changes.append(ResourceImportFieldChange(fieldLabel: "Création", oldValue: "-", newValue: "Nouvelle ressource"))
-        }
-
-        return changes
+        return result
     }
 
     private func persist() {
@@ -3981,245 +3441,11 @@ final class SamouraiStore {
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
-    private func normalizedCriterionScores(_ scores: [ResourceCriterionScore]) -> [ResourceCriterionScore] {
-        let scoreByCriterion = Dictionary(uniqueKeysWithValues: scores.map { ($0.criterion, $0.score) })
-        return ResourceEvaluationCriterion.allCases.map { criterion in
-            ResourceCriterionScore(
-                criterion: criterion,
-                score: scoreByCriterion[criterion] ?? .satisfaisant
-            )
-        }
-    }
-
-    private func scopedEvaluations(for resource: Resource, projectID: UUID?) -> [ResourcePerformanceEvaluation] {
-        let sorted = resource.performanceEvaluations.sorted { $0.evaluatedAt < $1.evaluatedAt }
-        guard let projectID else { return sorted }
-        return sorted.filter { $0.projectID == nil || $0.projectID == projectID }
-    }
-
-    private func makePerformanceSnapshot(for resource: Resource, scopedProjectID: UUID?) -> ResourcePerformanceSnapshot {
-        let allScoped = scopedEvaluations(for: resource, projectID: scopedProjectID)
-        let latest = allScoped.last
-        let trend = trendForEvaluations(allScoped)
-        let groupAverage = groupAverageLatestScore(scopedProjectID: scopedProjectID, excluding: resource.id)
-        let alerts = alertsForEvaluations(allScoped, trend: trend, groupAverage: groupAverage)
-
-        return ResourcePerformanceSnapshot(
-            resourceID: resource.id,
-            resourceName: resource.displayName,
-            latestScore: latest?.weightedScore,
-            trend: trend,
-            alerts: alerts
-        )
-    }
-
-    private func groupAverageLatestScore(scopedProjectID: UUID?, excluding resourceID: UUID) -> Double? {
-        let scoped: [Resource]
-        if let scopedProjectID {
-            scoped = resources(for: scopedProjectID)
-        } else {
-            scoped = resources
-        }
-
-        let values = scoped
-            .filter { $0.id != resourceID }
-            .compactMap { resource -> Double? in
-                scopedEvaluations(for: resource, projectID: scopedProjectID).last?.weightedScore
-            }
-        guard values.isEmpty == false else { return nil }
-        let sum = values.reduce(0, +)
-        return sum / Double(values.count)
-    }
-
-    private func trendForEvaluations(_ evaluations: [ResourcePerformanceEvaluation]) -> ResourcePerformanceTrend {
-        let recent = Array(evaluations.suffix(3))
-        guard recent.count >= 2 else { return .stable }
-        guard let first = recent.first?.weightedScore, let last = recent.last?.weightedScore else { return .stable }
-        let delta = last - first
-        if delta <= -0.6 { return .degrading }
-        if delta >= 0.6 { return .improving }
-        return .stable
-    }
-
-    private func alertsForEvaluations(
-        _ evaluations: [ResourcePerformanceEvaluation],
-        trend: ResourcePerformanceTrend,
-        groupAverage: Double?
-    ) -> [ResourcePerformanceAlert] {
-        guard evaluations.isEmpty == false else { return [] }
-
-        var alerts: [ResourcePerformanceAlert] = []
-        if trend == .degrading {
-            alerts.append(
-                ResourcePerformanceAlert(
-                    kind: .sustainedDegradation,
-                    message: "La trajectoire des 3 derniers points de contrôle est en baisse."
-                )
-            )
-        }
-
-        if let latest = evaluations.last?.weightedScore, let groupAverage, latest <= groupAverage - 1.0 {
-            alerts.append(
-                ResourcePerformanceAlert(
-                    kind: .belowGroupAverage,
-                    message: "La note (\(String(format: "%.2f", latest))/5) est significativement sous la moyenne du groupe (\(String(format: "%.2f", groupAverage))/5)."
-                )
-            )
-        }
-
-        return alerts
-    }
-
-    private func resourceMatchingKey(fullName: String, firstName: String?, lastName: String?, email: String?) -> String {
-        if let normalizedEmail = cleanedOptionalString(email)?
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           normalizedEmail.isEmpty == false {
-            return "email|\(normalizedEmail)"
-        }
-
-        let identityPair = explicitNamePair(
-            fullName: fullName,
-            firstName: cleanedOptionalString(firstName),
-            lastName: cleanedOptionalString(lastName)
-        )
-
-        return "name|\(identityPair.first)|\(identityPair.last)"
-    }
-
-    private func explicitNamePair(fullName: String, firstName: String?, lastName: String?) -> (first: String, last: String) {
-        let normalizedFirstName = normalizedNameToken(firstName)
-        let normalizedLastName = normalizedNameToken(lastName)
-
-        if normalizedFirstName.isEmpty == false || normalizedLastName.isEmpty == false {
-            return (normalizedFirstName, normalizedLastName)
-        }
-
-        let tokens = fullName
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .split(whereSeparator: \.isWhitespace)
-            .map(String.init)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.isEmpty == false }
-
-        guard tokens.isEmpty == false else { return ("", "") }
-        if tokens.count == 1 {
-            return ("", tokens[0])
-        }
-
-        return (tokens.dropLast().joined(separator: " "), tokens.last ?? "")
-    }
-
-    private func normalizedNameToken(_ value: String?) -> String {
-        value?
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    }
-
-    private func normalizedResourceFields(
-        nom: String?,
-        parentDescription: String?,
-        primaryResourceRole: String?,
-        resourceRoles: String?,
-        organizationalResource: String?,
-        competence1: String? = nil,
-        resourceCalendar: String? = nil,
-        resourceStartDate: Date? = nil,
-        resourceFinishDate: Date? = nil,
-        responsableOperationnel: String? = nil,
-        responsableInterne: String? = nil,
-        localisation: String? = nil,
-        typeDeRessource: String? = nil,
-        journeesTempsPartiel: String? = nil
-    ) -> NormalizedResourceFields {
-        let normalizedNom = cleanedOptionalString(nom)
-        let normalizedParentDescription = cleanedOptionalString(parentDescription)
-        let normalizedPrimaryRole = cleanedOptionalString(primaryResourceRole)
-        let normalizedRoles = cleanedOptionalString(resourceRoles)
-        let normalizedOrganizationalResource = cleanedOptionalString(organizationalResource)
-        let normalizedCompetence = cleanedOptionalString(competence1)
-        let normalizedCalendar = cleanedOptionalString(resourceCalendar)
-        let normalizedOperationalManager = cleanedOptionalString(responsableOperationnel)
-        let normalizedInternalManager = cleanedOptionalString(responsableInterne)
-        let normalizedLocation = cleanedOptionalString(localisation)
-        let normalizedResourceType = cleanedOptionalString(typeDeRessource)
-        let normalizedPartTimeDays = cleanedOptionalString(journeesTempsPartiel)
-
-        return NormalizedResourceFields(
-            fullName: normalizedNom ?? "",
-            jobTitle: normalizedPrimaryRole ?? normalizedRoles ?? "",
-            department: normalizedParentDescription ?? normalizedOrganizationalResource ?? "",
-            nom: normalizedNom,
-            parentDescription: normalizedParentDescription,
-            primaryResourceRole: normalizedPrimaryRole,
-            resourceRoles: normalizedRoles,
-            organizationalResource: normalizedOrganizationalResource,
-            competence1: normalizedCompetence,
-            resourceCalendar: normalizedCalendar,
-            resourceStartDate: resourceStartDate,
-            resourceFinishDate: resourceFinishDate,
-            responsableOperationnel: normalizedOperationalManager,
-            responsableInterne: normalizedInternalManager,
-            localisation: normalizedLocation,
-            typeDeRessource: normalizedResourceType,
-            journeesTempsPartiel: normalizedPartTimeDays,
-            engagement: resourceEngagement(from: normalizedResourceType),
-            status: resourceStatus(resourceFinishDate: resourceFinishDate, journeesTempsPartiel: normalizedPartTimeDays),
-            allocationPercent: resourceAllocationPercent(from: normalizedPartTimeDays)
-        )
-    }
-
     private func cleanedOptionalString(_ value: String?) -> String? {
         guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), trimmed.isEmpty == false else {
             return nil
         }
         return trimmed
-    }
-
-    private func resourceEngagement(from typeDeRessource: String?) -> ResourceEngagement {
-        let normalized = (typeDeRessource ?? "")
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-
-        if normalized.contains("freelance") || normalized.contains("contractor") {
-            return .freelancer
-        }
-
-        if normalized.contains("prestataire") || normalized.contains("consult") || normalized.contains("external") {
-            return .externalConsultant
-        }
-
-        return .internalEmployee
-    }
-
-    private func resourceStatus(resourceFinishDate: Date?, journeesTempsPartiel: String?) -> ResourceStatus {
-        if let resourceFinishDate, resourceFinishDate < Calendar.current.startOfDay(for: .now) {
-            return .offboarded
-        }
-
-        if resourceAllocationPercent(from: journeesTempsPartiel) < 100 {
-            return .partiallyAvailable
-        }
-
-        return .active
-    }
-
-    private func resourceAllocationPercent(from journeesTempsPartiel: String?) -> Int {
-        let cleaned = (journeesTempsPartiel ?? "")
-            .replacingOccurrences(of: ",", with: ".")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "%", with: "")
-
-        guard let numericValue = Double(cleaned), numericValue.isFinite else {
-            return 100
-        }
-
-        if numericValue > 5 {
-            return min(max(Int(numericValue.rounded()), 0), 100)
-        }
-
-        let allocation = ((5.0 - numericValue) / 5.0) * 100.0
-        let rounded = Int((allocation / 5.0).rounded() * 5.0)
-        return min(max(rounded, 0), 100)
     }
 
     private func sortStandaloneRisks(_ risks: [Risk]) -> [Risk] {

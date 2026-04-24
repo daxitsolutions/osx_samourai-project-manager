@@ -11,6 +11,7 @@ struct RiskRegisterView: View {
     @State private var isImporting = false
     @State private var searchText = ""
     @State private var selectedRiskIDs: Set<UUID> = []
+    @State private var expandedRiskIDs: Set<UUID> = []
     @State private var isShowingDeleteConfirmation = false
     @State private var isShowingFileExporter = false
     @State private var exportDocument: EntityCSVDocument?
@@ -18,6 +19,16 @@ struct RiskRegisterView: View {
     @State private var sortOrder: [KeyPathComparator<RiskEntry>] = [
         .init(\.severitySortWeight, order: .reverse)
     ]
+
+    private enum Col {
+        static let id: CGFloat = 55
+        static let project: CGFloat = 110
+        static let owner: CGFloat = 100
+        static let severity: CGFloat = 88
+        static let status: CGFloat = 148
+        static let score: CGFloat = 48
+        static let expand: CGFloat = 26
+    }
 
     var body: some View {
         @Bindable var appState = appState
@@ -101,91 +112,23 @@ struct RiskRegisterView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredRisks, selection: $selectedRiskIDs, sortOrder: $sortOrder) {
-                        TableColumn("ID", value: \.externalIDSortKey) { entry in
-                            Text(entry.risk.externalID ?? "-")
+                    VStack(spacing: 0) {
+                        riskTableHeader
+                        Divider()
+                        List(filteredRisks, selection: $selectedRiskIDs) { entry in
+                            riskRow(for: entry)
+                                .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                                .listRowSeparator(.visible)
                         }
-
-                        TableColumn("Titre", value: \.titleSortKey) { entry in
-                            TextField(
-                                "Titre",
-                                text: Binding(
-                                    get: { entry.risk.displayTitle },
-                                    set: {
-                                        store.updateRiskQuick(
-                                            riskID: entry.risk.id,
-                                            title: $0,
-                                            owner: entry.risk.displayOwner,
-                                            severity: entry.risk.severity,
-                                            status: entry.risk.riskStatus ?? ""
-                                        )
-                                    }
-                                )
-                            )
-                            .textFieldStyle(.plain)
+                        .listStyle(.inset)
+                        .focusable()
+                        .onKeyPress(.space) {
+                            guard let id = selectedRiskIDs.singleSelection else { return .ignored }
+                            withAnimation(.easeInOut(duration: 0.18)) { toggleExpansion(id) }
+                            return .handled
                         }
-
-                        TableColumn("Projet(s)", value: \.projectsSortKey) { entry in
-                            Text(entry.risk.projectNames ?? entry.projectName)
-                        }
-
-                        TableColumn("Assigné à", value: \.ownerSortKey) { entry in
-                            TextField(
-                                "Owner",
-                                text: Binding(
-                                    get: { entry.risk.displayOwner },
-                                    set: {
-                                        store.updateRiskQuick(
-                                            riskID: entry.risk.id,
-                                            title: entry.risk.displayTitle,
-                                            owner: $0,
-                                            severity: entry.risk.severity,
-                                            status: entry.risk.riskStatus ?? ""
-                                        )
-                                    }
-                                )
-                            )
-                            .textFieldStyle(.plain)
-                        }
-
-                        TableColumn("Sévérité", value: \.severitySortWeight) { entry in
-                            Picker(
-                                "Sévérité",
-                                selection: Binding(
-                                    get: { entry.risk.severity },
-                                    set: {
-                                        store.updateRiskQuick(
-                                            riskID: entry.risk.id,
-                                            title: entry.risk.displayTitle,
-                                            owner: entry.risk.displayOwner,
-                                            severity: $0,
-                                            status: entry.risk.riskStatus ?? ""
-                                        )
-                                    }
-                                )
-                            ) {
-                                ForEach(RiskSeverity.allCases) { severity in
-                                    Text(severity.label).tag(severity)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-
-                        TableColumn("Statut", value: \.statusSortWeight) { entry in
-                            RiskStatusMenu(
-                                status: RiskStatus.from(rawString: entry.risk.riskStatus) ?? .toDo,
-                                onChange: { newStatus in
-                                    store.updateRiskStatus(riskID: entry.risk.id, status: newStatus)
-                                }
-                            )
-                        }
-
-                        TableColumn("Score", value: \.scoreSortValue) { entry in
-                            Text(scoreLabel(for: entry.risk.score0to10))
-                        }
+                        .scrollIndicators(.visible)
                     }
-                    .scrollIndicators(.visible)
                 }
             }
             .frame(minWidth: 620, idealWidth: 760)
@@ -255,9 +198,157 @@ struct RiskRegisterView: View {
         .onChange(of: store.risks.map(\.risk.id)) { _, ids in
             let existing = Set(ids)
             selectedRiskIDs = selectedRiskIDs.intersection(existing)
+            expandedRiskIDs = expandedRiskIDs.intersection(existing)
             appState.selectedRiskID = selectedRiskIDs.singleSelection
         }
         .padding(0)
+    }
+
+    // MARK: - Table header
+
+    @ViewBuilder
+    private var riskTableHeader: some View {
+        HStack(spacing: 8) {
+            RiskSortHeader(label: "ID", comparator: .init(\.externalIDSortKey), sortOrder: $sortOrder)
+                .frame(width: Col.id, alignment: .leading)
+            RiskSortHeader(label: "Titre", comparator: .init(\.titleSortKey), sortOrder: $sortOrder)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            RiskSortHeader(label: "Projet(s)", comparator: .init(\.projectsSortKey), sortOrder: $sortOrder)
+                .frame(width: Col.project, alignment: .leading)
+            RiskSortHeader(label: "Assigné à", comparator: .init(\.ownerSortKey), sortOrder: $sortOrder)
+                .frame(width: Col.owner, alignment: .leading)
+            RiskSortHeader(label: "Sévérité", comparator: .init(\.severitySortWeight, order: .reverse), sortOrder: $sortOrder)
+                .frame(width: Col.severity, alignment: .leading)
+            RiskSortHeader(label: "Statut", comparator: .init(\.statusSortWeight), sortOrder: $sortOrder)
+                .frame(width: Col.status, alignment: .leading)
+            RiskSortHeader(label: "Score", comparator: .init(\.scoreSortValue, order: .reverse), sortOrder: $sortOrder)
+                .frame(width: Col.score, alignment: .trailing)
+            Spacer().frame(width: Col.expand)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    // MARK: - Table rows
+
+    @ViewBuilder
+    private func riskRow(for entry: RiskEntry) -> some View {
+        let isExpanded = expandedRiskIDs.contains(entry.risk.id)
+
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Text(entry.risk.externalID ?? "-")
+                    .frame(width: Col.id, alignment: .leading)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                TextField(
+                    "Titre",
+                    text: Binding(
+                        get: { entry.risk.displayTitle },
+                        set: {
+                            store.updateRiskQuick(
+                                riskID: entry.risk.id,
+                                title: $0,
+                                owner: entry.risk.displayOwner,
+                                severity: entry.risk.severity,
+                                status: entry.risk.riskStatus ?? ""
+                            )
+                        }
+                    )
+                )
+                .textFieldStyle(.plain)
+                .frame(maxWidth: .infinity)
+
+                Text(entry.risk.projectNames ?? entry.projectName)
+                    .frame(width: Col.project, alignment: .leading)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                TextField(
+                    "Owner",
+                    text: Binding(
+                        get: { entry.risk.displayOwner },
+                        set: {
+                            store.updateRiskQuick(
+                                riskID: entry.risk.id,
+                                title: entry.risk.displayTitle,
+                                owner: $0,
+                                severity: entry.risk.severity,
+                                status: entry.risk.riskStatus ?? ""
+                            )
+                        }
+                    )
+                )
+                .textFieldStyle(.plain)
+                .frame(width: Col.owner)
+
+                Picker(
+                    "Sévérité",
+                    selection: Binding(
+                        get: { entry.risk.severity },
+                        set: {
+                            store.updateRiskQuick(
+                                riskID: entry.risk.id,
+                                title: entry.risk.displayTitle,
+                                owner: entry.risk.displayOwner,
+                                severity: $0,
+                                status: entry.risk.riskStatus ?? ""
+                            )
+                        }
+                    )
+                ) {
+                    ForEach(RiskSeverity.allCases) { severity in
+                        Text(severity.label).tag(severity)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: Col.severity)
+
+                RiskStatusMenu(
+                    status: RiskStatus.from(rawString: entry.risk.riskStatus) ?? .toDo,
+                    onChange: { newStatus in
+                        store.updateRiskStatus(riskID: entry.risk.id, status: newStatus)
+                    }
+                )
+                .frame(width: Col.status, alignment: .leading)
+
+                Text(scoreLabel(for: entry.risk.score0to10))
+                    .frame(width: Col.score, alignment: .trailing)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { toggleExpansion(entry.risk.id) }
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down.circle.fill" : "chevron.right.circle")
+                        .foregroundStyle(isExpanded ? Color.accentColor : Color.secondary)
+                        .font(.system(size: 13))
+                }
+                .buttonStyle(.plain)
+                .frame(width: Col.expand)
+            }
+            .frame(height: 36)
+
+            if isExpanded {
+                RiskHistoryInlinePanel(riskID: entry.risk.id)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity
+                    ))
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func toggleExpansion(_ id: UUID) {
+        if expandedRiskIDs.contains(id) {
+            expandedRiskIDs.remove(id)
+        } else {
+            expandedRiskIDs.insert(id)
+        }
     }
 
     private func handleImportSelection(_ result: Result<[URL], Error>) {
@@ -376,6 +467,94 @@ struct RiskRegisterView: View {
     }
 }
 
+// MARK: - Sort header
+
+private struct RiskSortHeader: View {
+    let label: String
+    let comparator: KeyPathComparator<RiskEntry>
+    @Binding var sortOrder: [KeyPathComparator<RiskEntry>]
+
+    private var isActive: Bool {
+        sortOrder.first?.keyPath == comparator.keyPath
+    }
+
+    var body: some View {
+        Button {
+            if isActive, var first = sortOrder.first {
+                first.order = first.order == .forward ? .reverse : .forward
+                sortOrder = [first]
+            } else {
+                sortOrder = [comparator]
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text(label)
+                    .font(.caption.weight(.medium))
+                if isActive {
+                    Image(systemName: sortOrder.first?.order == .forward ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                }
+            }
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Inline history panel
+
+private struct RiskHistoryInlinePanel: View {
+    @Environment(SamouraiStore.self) private var store
+    let riskID: UUID
+
+    var body: some View {
+        let entries = store.risks.first(where: { $0.risk.id == riskID })?.risk.historyEntriesChronological ?? []
+
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
+                .padding(.top, 4)
+
+            if entries.isEmpty {
+                Text("Aucune entrée d'historique pour ce risque.")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 4)
+            } else {
+                ForEach(entries) { entry in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: entry.kind.symbolName)
+                            .font(.caption)
+                            .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
+                            .frame(width: 14)
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(entry.text)
+                                .font(.callout)
+                            HStack(spacing: 4) {
+                                Text(entry.kind.label)
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                                Text("·")
+                                    .foregroundStyle(.tertiary)
+                                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 3)
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 10)
+    }
+}
+
+// MARK: - RiskEntry sort extensions
+
 private extension RiskEntry {
     var externalIDSortKey: String { risk.externalID ?? "" }
     var titleSortKey: String { risk.displayTitle }
@@ -387,6 +566,8 @@ private extension RiskEntry {
     }
     var scoreSortValue: Double { risk.score0to10 ?? -1 }
 }
+
+// MARK: - Status badge & menu
 
 struct RiskStatusBadge: View {
     let status: RiskStatus
@@ -442,6 +623,8 @@ struct RiskStatusMenu: View {
         .fixedSize()
     }
 }
+
+// MARK: - Risk editor sheet
 
 private struct ManualRiskEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -689,6 +872,8 @@ private struct ManualRiskEditorSheet: View {
         dismiss()
     }
 }
+
+// MARK: - Editor context
 
 private enum RiskRegistryEditorContext: Identifiable {
     case create

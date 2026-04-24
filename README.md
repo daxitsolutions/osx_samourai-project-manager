@@ -1,360 +1,209 @@
-# Samourai Project Manager (macOS)
+# Samourai Project Manager
 
-Application macOS native (SwiftUI) pour piloter un portefeuille projet avec une approche orientée gouvernance, exécution et traçabilité.
+Application macOS native en SwiftUI pour piloter un portefeuille de projets avec une logique de gouvernance, de delivery et de traçabilité.
 
-Ce README décrit **les fonctionnalités réellement présentes dans le code** au 18 avril 2026.
+Le projet centralise dans une seule interface :
 
-## Sommaire
+- le suivi des projets et de leur santé
+- la planification macro et les actions PM
+- les ressources et leurs affectations
+- les risques, livrables, événements et décisions
+- les réunions, comptes-rendus et synthèses de gouvernance
+- les sauvegardes et restaurations locales
 
-1. [Positionnement](#positionnement)
-2. [Fonctionnalités par module](#fonctionnalités-par-module)
-3. [Imports / Exports / Sauvegardes](#imports--exports--sauvegardes)
-4. [Règles métier et comportements clés](#règles-métier-et-comportements-clés)
-5. [Architecture technique](#architecture-technique)
-6. [Installation et exécution](#installation-et-exécution)
-7. [Formats de données supportés](#formats-de-données-supportés)
-8. [Données de démonstration](#données-de-démonstration)
-9. [Limites actuelles](#limites-actuelles)
+## Vue d'ensemble
 
-## Positionnement
+Samourai Project Manager est pensé comme un cockpit de pilotage projet sur macOS, sans backend ni dépendances externes.
 
-Samourai Project Manager permet de centraliser dans une seule application desktop :
+L'application s'appuie sur :
 
-- la gestion de projets et de leur santé
-- la capacité ressources et leurs affectations
-- le registre des risques et des livrables
-- les événements de contexte projet
-- la liste d’actions opérationnelles du PM
-- les réunions (avec transcript et résumé IA saisi)
-- les décisions formelles (avec historique de révisions et commentaires)
+- une interface SwiftUI native
+- un stockage local JSON
+- des imports métier pour ressources et risques
+- une portée par projet principal pour naviguer plus vite dans le quotidien d'un PM/PMO
+- des exports ciblés pour reporting, ressources et sauvegardes
 
-## Fonctionnalités par module
+## Fonctionnalités principales
 
-### 1) Pilotage (Dashboard)
+### Pilotage et portefeuille
 
-- Vue cockpit avec indicateurs consolidés :
-  - nombre de projets actifs
-  - nombre de projets sous tension
-  - nombre de risques critiques
-  - ratio de livrables sécurisés
-- Liste des projets sous contrôle avec accès direct au détail projet.
-- Liste des tensions à arbitrer (risques high/critical).
-- Liste des prochains livrables non clôturés.
-- Prise en compte du **Projet Principal** (filtrage contextuel global).
+- Dashboard de synthèse sur le projet actif
+- liste des projets avec création, édition et suivi de santé
+- métriques d'avancement, risques critiques et livrables à surveiller
+- sélection persistante d'un projet principal pour filtrer les vues transverses
 
-### 2) Projets
+### Planning et exécution
 
-- Gestion portefeuille projet (liste + détail).
-- Création d’un projet avec :
-  - nom, résumé, sponsor, chef de projet
-  - phase
-  - santé
-  - mode de delivery
-  - dates de démarrage/cible
-- Édition rapide en liste :
-  - renommage projet
-  - changement de santé (vert/ambre/rouge)
-- Vue détail projet :
-  - en-tête de gouvernance (sponsor, pilote, phase, mode, dates)
-  - métriques d’avancement (livrables, risques ouverts, risques critiques)
-  - ressources affectées (navigation vers module Ressources)
-  - registre risques projet
-  - registre livrables projet
-  - plan projet (activités macro)
-
-#### Activités projet (Project Plan)
-
-- Création / modification / suppression d’activités.
-- Saisie de :
-  - titre
-  - début estimé
-  - fin estimée (jalon)
-  - fin réelle (optionnelle)
-- Lien activité ↔ actions PM (association/désassociation multiple).
-- Calcul d’avancement macro par activité (progression basée sur actions liées terminées).
-
-### 3) Ressources
-
-- Référentiel RH complet (CRUD).
-- Deux modes d’affichage :
-  - grille (cartes)
-  - tableau (colonnes configurables)
-- Recherche multicritère (diacritiques/casse ignorées), incluant recherche domaine email avec préfixe `@`.
-- Détail ressource avec :
-  - identité
-  - rôle / département
-  - engagement
-  - statut
-  - allocation (%)
-  - contacts
-  - notes
-  - projets assignés
-- Édition rapide inline en mode tableau (nom, rôle, département, allocation, email, téléphone, statut, engagement).
-- Navigation clavier sur cellules inline (enchaînement de colonnes/lignes).
-- Sélection multiple de ressources pour export ciblé.
-- Configuration des colonnes visibles en tableau :
-  - activation/désactivation
-  - preset par défaut
-  - “tout afficher”
-  - limitation d’affichage simultané à 9 colonnes pour lisibilité.
-
-### 4) Risques
-
-- Registre global des risques (projet + sans projet).
-- Création manuelle d’un risque avec rattachement projet.
-- Édition rapide dans le tableau :
-  - titre
-  - assigné à
-  - sévérité
-  - statut
-- Import massif de risques (`.xlsx`, `.csv`, `.tsv`, `.txt tabulé`).
-- Fiche détail risque enrichie (attributs étendus importés) :
-  - identifiants
-  - origine
-  - probabilité
-  - impacts (scope, budget, planning, ressources, transition, sécurité IT)
-  - contre-mesures et suivi
-  - score 0–10
-
-### 5) Livrables
-
-- Vue transverse de tous les livrables du portefeuille.
-- Création manuelle d’un livrable (avec sélection projet).
-- Édition rapide :
-  - titre
-  - owner
-- Marquage fait/non fait.
-- Navigation vers projet source.
-
-### 6) Événements
-
-- Registre des événements projet (journal centralisé).
-- Création / modification / suppression d’événements.
-- Données gérées :
-  - titre
-  - description
-  - source
-  - priorité
-  - date/heure
-  - projet lié (optionnel)
-  - ressources associées (multi-sélection)
-- Recherche plein texte (titre, détails, source, projet, ressources).
-- Édition rapide en tableau (titre/priorité).
-- Détail événement avec métadonnées de création/modification.
-
-### 7) Actions PM
-
-- Liste d’actions opérationnelles du chef de projet.
-- Création / modification / suppression d’action.
-- Données gérées :
-  - titre
-  - description détaillée
-  - priorité
-  - date d’échéance
-  - flux (`incomingLeMans` / `pushedAutomatic`)
-  - projet lié (optionnel)
-  - activité liée (optionnelle)
-- Recherche multicritère.
-- Filtre par flux.
-- Marquage terminée / réouverture.
-- Édition rapide en tableau : titre, priorité, activité.
-
-### 8) Réunions
-
-- Registre des réunions (CRUD).
-- Données gérées :
-  - titre
-  - projet lié (optionnel)
-  - date/heure
-  - durée
-  - mode (physique / virtuel)
-  - organisateur, participants
-  - lieu/lien
-  - notes
-  - transcript brut
-  - compte-rendu synthétique IA (saisi)
-- Validation forte : transcript et résumé IA obligatoires.
-- Recherche plein texte (incluant transcript/résumé/participants).
-- **Glisser-déposer** pour préremplissage réunion :
-  - fichier `.ics`
-  - fichier texte (`.txt`, `.md`, etc.)
-  - texte brut déposé
-- Parsing ICS :
-  - titre, description, organisateur, lieu
-  - date de début/fin et durée
-  - inférence mode virtuel/physique
-
-### 9) Décisions
-
-- Registre des décisions de gouvernance (CRUD).
-- Numérotation séquentielle automatique (`D-1`, `D-2`, ...).
-- Données gérées :
-  - titre
-  - description
-  - statut décision
-  - projet lié (optionnel)
-  - réunions liées (multi)
-  - événements liés (multi)
-  - ressources impactées (multi)
-- Historique de révisions automatique à chaque modification :
-  - numéro de révision
-  - résumé du changement
-  - snapshot titre/détails
-  - statut à l’instant T
-- Commentaires chronologiques par décision (auteur + corps).
-- Recherche incluant titre/détails/statut/commentaires/révisions/liaisons.
-
-## Imports / Exports / Sauvegardes
+- plan projet avec activités macro
+- rattachement des actions PM aux activités
+- suivi de progression à partir des actions terminées
+- vue Actions PM avec priorités, échéances, filtres et recherche
 
 ### Ressources
 
-- Import depuis : `.xlsx`, `.csv`, `.tsv`, `.txt` tabulé.
-- Mapping de colonnes métier (fr/en selon alias supportés).
-- Prévisualisation “revue d’import” ligne par ligne :
-  - création
-  - écrasement
-  - inchangé
-  - ignoré
-- Validation utilisateur avant application des mises à jour.
-- Détection des ressources existantes via clé normalisée `Nom + Job Title`.
-- Export XLSX :
-  - toutes les ressources
-  - ou uniquement la sélection
+- annuaire ressources global
+- vues grille et tableau
+- édition inline sur plusieurs colonnes
+- recherche multicritère, y compris par domaine email avec `@`
+- import de ressources depuis `.xlsx`, `.csv`, `.tsv` ou texte tabulé
+- export Excel de la vue complète ou d'une sélection
 
-### Risques
+### Risques et livrables
 
-- Import depuis : `.xlsx`, `.csv`, `.tsv`, `.txt` tabulé.
-- Déduplication/merge via clé de rapprochement (`ID externe` sinon titre normalisé).
-- Rattachement automatique à un projet si le nom projet importé matche un projet existant.
-- Stockage “sans projet” quand rattachement impossible.
+- registre global des risques, avec ou sans projet associé
+- import massif des risques depuis fichiers tabulaires ou Excel
+- édition rapide des champs clés
+- vue transverse des livrables du portefeuille
+- suivi simple de complétion des livrables
 
-### Sauvegarde / restauration globale
+### Événements, réunions et décisions
 
-- Export backup complet de la base applicative (format JSON enveloppé).
-- Restauration depuis backup avec contrôle :
-  - identifiant de format
-  - version de schéma
-  - cohérence structurelle (IDs uniques, liens valides)
-- Restauration couvrant :
-  - projets
-  - ressources
-  - risques
-  - activités
-  - événements
-  - actions
-  - réunions
-  - décisions
+- journal d'événements projet
+- registre des réunions avec transcript et résumé saisi
+- glisser-déposer de fichiers `.ics` ou texte pour préremplir une réunion
+- registre des décisions avec historique de révision et commentaires
+- liens entre décisions, réunions, événements et ressources impactées
 
-## Règles métier et comportements clés
+### Reporting et sauvegardes
 
-- **Projet Principal** persistant (UserDefaults) : permet de filtrer transversalement les sections.
-- Persistance locale automatique après modifications.
-- Tri métier systématique :
-  - projets par date cible
-  - actions ouvertes d’abord, puis échéance/priorité
-  - événements/réunions récents d’abord
-  - risques par sévérité
-- Nettoyage/sanitation des références à la lecture/restauration :
-  - suppression des liens cassés (projet/ressource/réunion/événement)
-  - cohérence activité/action
-  - durée réunion minimum 1 minute
-- Mise à jour des décisions impactées lors suppression ressource/réunion/événement.
-- Données texte normalisées (trim, comparaison insensible casse/accents) pour recherche et matching import.
+- génération de synthèses de gouvernance
+- archivage des rapports produits
+- export des rapports en `.md`, `.txt` et `.pdf`
+- export d'un backup complet de l'application
+- restauration depuis `.samourai-backup` ou `.json`
 
-## Architecture technique
+### Configuration et debug
 
-- Stack : Swift 6.2 + SwiftUI + Observation (`@Observable`).
-- Cible : macOS 15+.
-- Organisation :
-  - `Views/` : UI par domaine
-  - `Models/` : entités métier
-  - `Support/` : store, persistence, import/export
-  - `App/` : bootstrap app + état UI global
-- Stockage : JSON local dans `Application Support/SamouraiProjectManager/projects.json`.
-- Aucune dépendance externe SPM actuellement.
+- réglage de la taille de texte
+- panneau debug contextuel
+- historisation optionnelle des traces dans un fichier texte
+- suppression complète des données depuis l'application
 
-## Installation et exécution
+## Stack technique
+
+- Swift 6.2
+- SwiftUI
+- Observation avec `@Observable`
+- cible macOS 15+
+- aucune dépendance externe SPM
+
+## Structure du dépôt
+
+- `Package.swift` : définition du package Swift
+- `Sources/SamouraiProjectManagerApp/App` : point d'entrée et état global d'interface
+- `Sources/SamouraiProjectManagerApp/Views` : vues SwiftUI par domaine métier
+- `Sources/SamouraiProjectManagerApp/Models` : modèles métier
+- `Sources/SamouraiProjectManagerApp/Support` : store, persistance, import/export, seed de démonstration
+- `run.sh` : build + lancement GUI local
+- `package.sh` : création du bundle `.app`
+
+## Lancer l'application
 
 ### Prérequis
 
-- macOS 15+
-- Xcode / toolchain Swift 6.2
+- macOS 15 ou plus récent
+- Xcode ou une toolchain Swift 6.2 installée
 
-### Lancer en développement
-
-```bash
-mkdir -p .build/clang-cache .build/swift-cache
-CLANG_MODULE_CACHE_PATH=$PWD/.build/clang-cache \
-SWIFT_MODULECACHE_PATH=$PWD/.build/swift-cache \
-swift run SamouraiProjectManager
-```
-
-### Script de lancement GUI
+### Lancement recommandé
 
 ```bash
 ./run.sh
 ```
 
-Options :
+Le script :
+
+- compile l'application en debug
+- ferme les anciennes instances si besoin
+- lance l'interface graphique
+- tente de redonner le focus à la fenêtre
+
+### Lancement avec logs détaillés
 
 ```bash
 ./run.sh --debug
 ```
 
-Le script :
+En mode debug, les logs sont écrits dans `/tmp` avec un nom du type `SamouraiProjectManager-run-YYYYMMDD-HHMMSS.log`.
 
-- compile le projet
-- tue les anciennes instances détectées
-- lance l’application GUI
-- tente de donner le focus à la fenêtre
-- journalise les logs dans `/tmp` (mode debug détaillé)
+### Build manuel
 
-### Packaging `.app`
+```bash
+swift build
+swift run SamouraiProjectManager
+```
+
+## Générer une application `.app`
 
 ```bash
 ./package.sh
 ```
 
-Le script :
+Ce script :
 
-- build en `release`
-- crée `SamouraiProjectManager.app`
-- génère un `Info.plist`
-- signe en ad-hoc local si possible
-- installe dans `/Applications` (avec `sudo` si nécessaire)
+- build le projet en `release`
+- génère `SamouraiProjectManager.app`
+- crée le `Info.plist`
+- applique une signature ad-hoc locale si possible
+- installe le bundle dans `/Applications`
 
-Sans installation automatique :
+Pour générer le bundle sans installation automatique :
 
 ```bash
 ./package.sh --no-install
 ```
 
-## Formats de données supportés
+## Données et persistance
 
-- Import ressources : `.xlsx`, `.csv`, `.tsv`, `.txt` (tabulé)
-- Export ressources : `.xlsx`
-- Import risques : `.xlsx`, `.csv`, `.tsv`, `.txt` (tabulé)
-- Backup/restauration : `.samourai-backup` (ou `.json`)
-- Drag & drop réunions : `.ics`, texte brut
+Les données de travail sont stockées localement dans :
+
+```text
+~/Documents/SamouraiProjectManager/projects.json
+```
+
+L'application crée aussi des sauvegardes automatiques dans :
+
+```text
+~/Documents/SamouraiProjectManager/auto-backups/
+```
+
+Notes utiles :
+
+- l'ancien emplacement `~/Library/Application Support/...` est migré automatiquement si un fichier legacy existe
+- la sauvegarde finale est forcée à la fermeture de l'application
+- les données sont nettoyées à la lecture pour éviter de conserver des références cassées
 
 ## Données de démonstration
 
-Au premier lancement (base vide), l’application seed automatiquement :
+Lors du premier lancement sur une base vide, l'application initialise automatiquement :
 
 - 2 projets de démonstration
-- risques et livrables associés
+- plusieurs risques et livrables associés
 - 3 ressources exemple
 
-Objectif : permettre une prise en main immédiate sans configuration préalable.
+Cela permet de prendre l'outil en main immédiatement.
+
+## Formats gérés
+
+- import ressources : `.xlsx`, `.csv`, `.tsv`, `.txt`
+- export ressources : `.xlsx`
+- import risques : `.xlsx`, `.csv`, `.tsv`, `.txt`
+- export reporting : `.md`, `.txt`, `.pdf`
+- backup / restauration : `.samourai-backup`, `.json`
+- préremplissage réunions par glisser-déposer : `.ics`, texte brut
 
 ## Limites actuelles
 
-- Pas de synchro cloud/multi-utilisateur : stockage local uniquement.
-- Pas d’authentification/gestion de rôles.
-- Pas d’API externe intégrée (calendrier, ticketing, etc.) ; import manuel uniquement.
-- Le “résumé IA” des réunions est un champ saisi, sans génération IA embarquée côté code.
-- Aucun moteur de reporting PDF/Excel pour les autres modules (hors export ressources).
+- application locale uniquement, sans mode multi-utilisateur
+- pas d'authentification ni gestion de rôles
+- pas d'intégration native avec des outils externes de ticketing ou de calendrier
+- pas de génération IA embarquée pour les résumés de réunion, seulement un champ de saisie
+- pas de backend ou d'API distante
 
----
+## Positionnement du projet
 
-Si tu veux, je peux enchaîner avec une version "README orienté utilisateur final" (plus courte, sans détails techniques) et garder ce README comme référence produit/technique.
+Ce dépôt contient une application de pilotage très orientée usage interne PM/PMO, avec une préférence claire pour :
+
+- la lisibilité opérationnelle
+- le stockage simple et robuste
+- des workflows desktop rapides
+- une gouvernance explicite plutôt qu'une couche d'automatisation opaque

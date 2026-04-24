@@ -3,7 +3,10 @@
     "allow": [
       "Bash(swift build *)",
       "Bash(find /Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources -name \"*.swift\" -type f -exec grep -l \"\\\\.capsule\\\\|\\\\.pill\\\\|\\\\.badge\\\\|tintColor\" {} \\\\;)",
-      "Bash(find /Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources -name \"*Risk*.swift\" -exec basename {} \\\\;)"
+      "Bash(find /Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources -name \"*Risk*.swift\" -exec basename {} \\\\;)",
+      "Bash(gh issue *)",
+      "WebFetch(domain:github.com)",
+      "Bash(find /Users/Dax/Documents/GitHub/osx_samourai-project-manager -type f \\\\\\( -name \"*.swift\" \\\\\\) -exec grep -l \"Risk\" {} \\\\;)"
     ]
   }
 }

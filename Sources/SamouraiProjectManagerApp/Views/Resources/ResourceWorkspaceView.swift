@@ -1181,6 +1181,8 @@ private struct ResourceProfilingSummaryCard: View {
     let report: ResourceProfilingReport
     let scopeLabel: String
 
+    @AppStorage("resources.profilingSummaryExpanded") private var isExpanded = false
+
     private let columns = [
         GridItem(.adaptive(minimum: 300, maximum: 420), spacing: 8)
     ]
@@ -1200,6 +1202,17 @@ private struct ResourceProfilingSummaryCard: View {
 
                 Text("Profil complet à \(report.completionPercent)%")
                     .font(.subheadline.weight(.semibold))
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    Image(systemName: isExpanded ? "minus.circle" : "plus.circle")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(isExpanded ? "Réduire les profils standard" : "Afficher les profils standard")
             }
 
             ProgressView(value: report.completionRatio)
@@ -1213,11 +1226,14 @@ private struct ResourceProfilingSummaryCard: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                ForEach(report.roleCoverage) { coverage in
-                    ResourceRoleCoverageRow(coverage: coverage)
+            if isExpanded {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                    ForEach(report.roleCoverage) { coverage in
+                        ResourceRoleCoverageRow(coverage: coverage)
+                    }
+                    .scrollIndicators(.visible)
                 }
-                .scrollIndicators(.visible)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(12)
@@ -1274,6 +1290,8 @@ private struct ResourceComparativePerformanceCard: View {
     let snapshots: [ResourcePerformanceSnapshot]
     let onEvaluate: (UUID) -> Void
 
+    @AppStorage("resources.comparativePerformanceExpanded") private var isExpanded = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -1284,31 +1302,47 @@ private struct ResourceComparativePerformanceCard: View {
                 Text("\(atRiskCount) profil(s) à risque")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    Image(systemName: isExpanded ? "minus.circle" : "plus.circle")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(isExpanded ? "Réduire la synthèse" : "Afficher la synthèse comparative")
             }
 
-            if snapshots.isEmpty {
-                Text("Aucune ressource disponible.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(Array(snapshots.prefix(6)), id: \.resourceID) { snapshot in
-                    HStack(spacing: 10) {
-                        Text(snapshot.alerts.isEmpty ? "✅" : "⚠️")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(snapshot.resourceName)
-                                .font(.subheadline.weight(.semibold))
-                            Text(performanceSubtitle(for: snapshot))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+            if isExpanded {
+                Group {
+                    if snapshots.isEmpty {
+                        Text("Aucune ressource disponible.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(Array(snapshots.prefix(6)), id: \.resourceID) { snapshot in
+                            HStack(spacing: 10) {
+                                Text(snapshot.alerts.isEmpty ? "✅" : "⚠️")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(snapshot.resourceName)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(performanceSubtitle(for: snapshot))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button("Évaluer") {
+                                    onEvaluate(snapshot.resourceID)
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            .padding(.vertical, 2)
                         }
-                        Spacer()
-                        Button("Évaluer") {
-                            onEvaluate(snapshot.resourceID)
-                        }
-                        .buttonStyle(.borderless)
                     }
-                    .padding(.vertical, 2)
                 }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(12)

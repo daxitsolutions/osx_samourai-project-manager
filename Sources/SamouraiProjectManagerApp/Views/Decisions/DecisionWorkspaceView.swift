@@ -101,90 +101,102 @@ struct DecisionWorkspaceView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Table(filteredDecisions, selection: $selectedDecisionIDs, sortOrder: $sortOrder) {
-                        TableColumn("Ref", value: \.sequenceNumber) { decision in
-                            Text("D-\(decision.sequenceNumber)")
-                                .monospacedDigit()
-                        }
-                        .width(min: 70, ideal: 80)
-
-                        TableColumn("Statut", value: \.statusSortKey) { decision in
-                            Picker(
-                                "Statut",
-                                selection: Binding(
-                                    get: { decision.status },
-                                    set: {
-                                        store.updateDecision(
-                                            decisionID: decision.id,
-                                            title: decision.title,
-                                            details: decision.details,
-                                            status: $0,
-                                            projectID: decision.projectID,
-                                            meetingIDs: decision.meetingIDs,
-                                            eventIDs: decision.eventIDs,
-                                            impactedResourceIDs: decision.impactedResourceIDs,
-                                            changeSummary: "Mise à jour rapide du statut"
-                                        )
-                                    }
-                                )
-                            ) {
-                                ForEach(DecisionStatus.allCases) { status in
-                                    Text(status.shortLabel).tag(status)
+                        TableColumnForEach(activeTableColumns) { column in
+                            switch column {
+                            case .reference:
+                                TableColumn(column.label, value: \.sequenceNumber) { decision in
+                                    Text("D-\(decision.sequenceNumber)")
+                                        .monospacedDigit()
                                 }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .width(min: 130, ideal: 160)
+                                .width(min: 70, ideal: 80)
 
-                        TableColumn("Décision", value: \.displayTitle) { decision in
-                            TextField(
-                                "Décision",
-                                text: Binding(
-                                    get: { decision.title },
-                                    set: {
-                                        store.updateDecision(
-                                            decisionID: decision.id,
-                                            title: $0,
-                                            details: decision.details,
-                                            status: decision.status,
-                                            projectID: decision.projectID,
-                                            meetingIDs: decision.meetingIDs,
-                                            eventIDs: decision.eventIDs,
-                                            impactedResourceIDs: decision.impactedResourceIDs,
-                                            changeSummary: "Mise à jour rapide du titre"
+                            case .status:
+                                TableColumn(column.label, value: \.statusSortKey) { decision in
+                                    Picker(
+                                        "Statut",
+                                        selection: Binding(
+                                            get: { decision.status },
+                                            set: {
+                                                store.updateDecision(
+                                                    decisionID: decision.id,
+                                                    title: decision.title,
+                                                    details: decision.details,
+                                                    status: $0,
+                                                    projectID: decision.projectID,
+                                                    meetingIDs: decision.meetingIDs,
+                                                    eventIDs: decision.eventIDs,
+                                                    impactedResourceIDs: decision.impactedResourceIDs,
+                                                    changeSummary: "Mise à jour rapide du statut"
+                                                )
+                                            }
                                         )
+                                    ) {
+                                        ForEach(DecisionStatus.allCases) { status in
+                                            Text(status.shortLabel).tag(status)
+                                        }
                                     }
-                                )
-                            )
-                            .textFieldStyle(.plain)
-                            .fontWeight(.medium)
-                        }
-                        .width(min: 240, ideal: 340)
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                }
+                                .width(min: 130, ideal: 160)
 
-                        TableColumn("Projet", value: \.projectIDSortKey) { decision in
-                            Text(store.projectName(for: decision.projectID))
-                        }
-                        .width(min: 150, ideal: 220)
+                            case .title:
+                                TableColumn(column.label, value: \.displayTitle) { decision in
+                                    TextField(
+                                        "Décision",
+                                        text: Binding(
+                                            get: { decision.title },
+                                            set: {
+                                                store.updateDecision(
+                                                    decisionID: decision.id,
+                                                    title: $0,
+                                                    details: decision.details,
+                                                    status: decision.status,
+                                                    projectID: decision.projectID,
+                                                    meetingIDs: decision.meetingIDs,
+                                                    eventIDs: decision.eventIDs,
+                                                    impactedResourceIDs: decision.impactedResourceIDs,
+                                                    changeSummary: "Mise à jour rapide du titre"
+                                                )
+                                            }
+                                        )
+                                    )
+                                    .textFieldStyle(.plain)
+                                    .fontWeight(.medium)
+                                }
+                                .width(min: 240, ideal: 340)
 
-                        TableColumn("Réunions liées", value: \.meetingCount) { decision in
-                            Text("\(decision.meetingIDs.count)")
-                        }
-                        .width(min: 90, ideal: 110)
+                            case .project:
+                                TableColumn(column.label, value: \.projectIDSortKey) { decision in
+                                    Text(store.projectName(for: decision.projectID))
+                                }
+                                .width(min: 150, ideal: 220)
 
-                        TableColumn("Événements liés", value: \.eventCount) { decision in
-                            Text("\(decision.eventIDs.count)")
-                        }
-                        .width(min: 100, ideal: 120)
+                            case .meetings:
+                                TableColumn(column.label, value: \.meetingCount) { decision in
+                                    Text("\(decision.meetingIDs.count)")
+                                }
+                                .width(min: 90, ideal: 110)
 
-                        TableColumn("Révisions", value: \.revisionCount) { decision in
-                            Text("\(decision.history.count)")
-                        }
-                        .width(min: 90, ideal: 110)
+                            case .events:
+                                TableColumn(column.label, value: \.eventCount) { decision in
+                                    Text("\(decision.eventIDs.count)")
+                                }
+                                .width(min: 100, ideal: 120)
 
-                        TableColumn("Commentaires", value: \.commentCount) { decision in
-                            Text("\(decision.comments.count)")
+                            case .revisions:
+                                TableColumn(column.label, value: \.revisionCount) { decision in
+                                    Text("\(decision.history.count)")
+                                }
+                                .width(min: 90, ideal: 110)
+
+                            case .comments:
+                                TableColumn(column.label, value: \.commentCount) { decision in
+                                    Text("\(decision.comments.count)")
+                                }
+                                .width(min: 110, ideal: 130)
+                            }
                         }
-                        .width(min: 110, ideal: 130)
                     }
                     .scrollIndicators(.visible)
                 }
@@ -253,6 +265,12 @@ struct DecisionWorkspaceView: View {
             selectedDecisionIDs = selectedDecisionIDs.intersection(existingIDs)
             appState.selectedDecisionID = selectedDecisionIDs.singleSelection
         }
+    }
+
+    private var activeTableColumns: [DecisionTableColumn] {
+        appState
+            .orderedVisibleTableColumnIDs(for: .decisions)
+            .compactMap(DecisionTableColumn.init(rawValue:))
     }
 
     private var filteredDecisions: [ProjectDecision] {
@@ -727,5 +745,22 @@ private enum DecisionEditorContext: Identifiable {
         case .edit(let decisionID):
             store.decision(with: decisionID)
         }
+    }
+}
+
+private enum DecisionTableColumn: String, CaseIterable, Identifiable, Hashable {
+    case reference
+    case status
+    case title
+    case project
+    case meetings
+    case events
+    case revisions
+    case comments
+
+    var id: String { rawValue }
+
+    var label: String {
+        AppTableID.decisions.columnTitle(for: rawValue)
     }
 }

@@ -106,138 +106,7 @@ struct ActionWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredActions, selection: $selectedActionIDs, sortOrder: $sortOrder) {
-                        TableColumn("") { action in
-                            Toggle(
-                                "Terminée",
-                                isOn: Binding(
-                                    get: { action.isDone },
-                                    set: { store.markActionDone(actionID: action.id, isDone: $0) }
-                                )
-                            )
-                            .labelsHidden()
-                            .toggleStyle(.checkbox)
-                        }
-                        .width(34)
-
-                        TableColumn("Statut", value: \.statusSortKey) { action in
-                            Picker(
-                                "Statut",
-                                selection: Binding(
-                                    get: { action.status },
-                                    set: { store.updateActionStatus(actionID: action.id, status: $0) }
-                                )
-                            ) {
-                                ForEach(ActionStatus.allCases) { status in
-                                    HStack(spacing: 6) {
-                                        Circle()
-                                            .fill(status.tintColor)
-                                            .frame(width: 8, height: 8)
-                                        Text(status.label)
-                                    }
-                                    .tag(status)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .width(min: 130, ideal: 145)
-
-                        TableColumn("Flux", value: \.flowSortKey) { action in
-                            Label(action.flow.label, systemImage: action.flow.systemImage)
-                        }
-                        .width(min: 160, ideal: 170)
-
-                        TableColumn("Priorité", value: \.prioritySortWeight) { action in
-                            Picker(
-                                "Priorité",
-                                selection: Binding(
-                                    get: { action.priority },
-                                    set: {
-                                        store.updateAction(
-                                            actionID: action.id,
-                                            title: action.title,
-                                            details: action.details,
-                                            priority: $0,
-                                            dueDate: action.dueDate,
-                                            flow: action.flow,
-                                            projectID: action.projectID
-                                        )
-                                    }
-                                )
-                            ) {
-                                ForEach(ActionPriority.allCases) { priority in
-                                    Text(priority.label).tag(priority)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .width(min: 110, ideal: 120)
-
-                        TableColumn("Titre", value: \.displayTitle) { action in
-                            TextField(
-                                "Titre",
-                                text: Binding(
-                                    get: { action.title },
-                                    set: {
-                                        store.updateAction(
-                                            actionID: action.id,
-                                            title: $0,
-                                            details: action.details,
-                                            priority: action.priority,
-                                            dueDate: action.dueDate,
-                                            flow: action.flow,
-                                            projectID: action.projectID
-                                        )
-                                    }
-                                )
-                            )
-                            .textFieldStyle(.plain)
-                            .fontWeight(.medium)
-                        }
-                        .width(min: 220, ideal: 360)
-
-                        TableColumn("Activité", value: \.activityIDSortKey) { action in
-                            if let projectID = action.projectID {
-                                Picker(
-                                    "Activité",
-                                    selection: Binding(
-                                        get: { action.activityID },
-                                        set: { store.assignActionToActivity(actionID: action.id, activityID: $0) }
-                                    )
-                                ) {
-                                    Text("Aucune").tag(Optional<UUID>.none)
-                                    ForEach(store.activities(for: projectID)) { activity in
-                                        Text(activity.displayTitle).tag(Optional(activity.id))
-                                    }
-                                }
-                                .labelsHidden()
-                                .pickerStyle(.menu)
-                            } else {
-                                Text("-")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .width(min: 150, ideal: 220)
-
-                        TableColumn("Projet", value: \.projectIDSortKey) { action in
-                            Text(store.projectName(for: action.projectID))
-                        }
-                        .width(min: 150, ideal: 220)
-
-                        TableColumn("Échéance", value: \.dueDate) { action in
-                            Text(action.dueDate.formatted(date: .abbreviated, time: .omitted))
-                        }
-                        .width(min: 120, ideal: 130)
-
-                        TableColumn("Créée le", value: \.createdAt) { action in
-                            Text(action.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                .foregroundStyle(.secondary)
-                        }
-                        .width(min: 150, ideal: 170)
-                    }
-                    .scrollIndicators(.visible)
+                    actionsTable
                 }
             }
             .frame(minWidth: 760, idealWidth: 900)
@@ -296,6 +165,193 @@ struct ActionWorkspaceView: View {
             selectedActionIDs = selectedActionIDs.intersection(existingIDs)
             appState.selectedActionID = selectedActionIDs.singleSelection
         }
+    }
+
+    private var actionsTable: some View {
+        Table(filteredActions, selection: $selectedActionIDs, sortOrder: $sortOrder) {
+            TableColumnForEach(activeTableColumns) { column in
+                actionTableColumn(column)
+            }
+        }
+        .scrollIndicators(.visible)
+    }
+
+    @TableColumnBuilder<ProjectAction, KeyPathComparator<ProjectAction>>
+    private func actionTableColumn(_ column: ActionTableColumn) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+        switch column {
+        case .done:
+            actionDoneColumn()
+        case .status:
+            actionStatusColumn(label: column.label)
+        case .flow:
+            actionFlowColumn(label: column.label)
+        case .priority:
+            actionPriorityColumn(label: column.label)
+        case .title:
+            actionTitleColumn(label: column.label)
+        case .activity:
+            actionActivityColumn(label: column.label)
+        case .project:
+            actionProjectColumn(label: column.label)
+        case .dueDate:
+            actionDueDateColumn(label: column.label)
+        case .createdAt:
+            actionCreatedAtColumn(label: column.label)
+        }
+    }
+
+    private func actionDoneColumn() -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+        TableColumn("", value: \.isDoneSortKey) { action in
+            Toggle(
+                "Terminée",
+                isOn: Binding(
+                    get: { action.isDone },
+                    set: { store.markActionDone(actionID: action.id, isDone: $0) }
+                )
+            )
+            .labelsHidden()
+            .toggleStyle(.checkbox)
+        }
+        .width(34)
+    }
+
+    private func actionStatusColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+        TableColumn(label, value: \.statusSortKey) { action in
+            Picker(
+                "Statut",
+                selection: Binding(
+                    get: { action.status },
+                    set: { store.updateActionStatus(actionID: action.id, status: $0) }
+                )
+            ) {
+                ForEach(ActionStatus.allCases) { status in
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(status.tintColor)
+                            .frame(width: 8, height: 8)
+                        Text(status.label)
+                    }
+                    .tag(status)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+        }
+        .width(min: 130, ideal: 145)
+    }
+
+    private func actionFlowColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+        TableColumn(label, value: \.flowSortKey) { action in
+            Label(action.flow.label, systemImage: action.flow.systemImage)
+        }
+        .width(min: 160, ideal: 170)
+    }
+
+    private func actionPriorityColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+        TableColumn(label, value: \.prioritySortWeight) { action in
+            Picker(
+                "Priorité",
+                selection: Binding(
+                    get: { action.priority },
+                    set: {
+                        store.updateAction(
+                            actionID: action.id,
+                            title: action.title,
+                            details: action.details,
+                            priority: $0,
+                            dueDate: action.dueDate,
+                            flow: action.flow,
+                            projectID: action.projectID
+                        )
+                    }
+                )
+            ) {
+                ForEach(ActionPriority.allCases) { priority in
+                    Text(priority.label).tag(priority)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+        }
+        .width(min: 110, ideal: 120)
+    }
+
+    private func actionTitleColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+        TableColumn(label, value: \.displayTitle) { action in
+            TextField(
+                "Titre",
+                text: Binding(
+                    get: { action.title },
+                    set: {
+                        store.updateAction(
+                            actionID: action.id,
+                            title: $0,
+                            details: action.details,
+                            priority: action.priority,
+                            dueDate: action.dueDate,
+                            flow: action.flow,
+                            projectID: action.projectID
+                        )
+                    }
+                )
+            )
+            .textFieldStyle(.plain)
+            .fontWeight(.medium)
+        }
+        .width(min: 220, ideal: 360)
+    }
+
+    private func actionActivityColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+        TableColumn(label, value: \.activityIDSortKey) { action in
+            if let projectID = action.projectID {
+                Picker(
+                    "Activité",
+                    selection: Binding(
+                        get: { action.activityID },
+                        set: { store.assignActionToActivity(actionID: action.id, activityID: $0) }
+                    )
+                ) {
+                    Text("Aucune").tag(Optional<UUID>.none)
+                    ForEach(store.activities(for: projectID)) { activity in
+                        Text(activity.displayTitle).tag(Optional(activity.id))
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+            } else {
+                Text("-")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .width(min: 150, ideal: 220)
+    }
+
+    private func actionProjectColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+        TableColumn(label, value: \.projectIDSortKey) { action in
+            Text(store.projectName(for: action.projectID))
+        }
+        .width(min: 150, ideal: 220)
+    }
+
+    private func actionDueDateColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+        TableColumn(label, value: \.dueDate) { action in
+            Text(action.dueDate.formatted(date: .abbreviated, time: .omitted))
+        }
+        .width(min: 120, ideal: 130)
+    }
+
+    private func actionCreatedAtColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+        TableColumn(label, value: \.createdAt) { action in
+            Text(action.createdAt.formatted(date: .abbreviated, time: .shortened))
+                .foregroundStyle(.secondary)
+        }
+        .width(min: 150, ideal: 170)
+    }
+
+    private var activeTableColumns: [ActionTableColumn] {
+        appState
+            .orderedVisibleTableColumnIDs(for: .actions)
+            .compactMap(ActionTableColumn.init(rawValue:))
     }
 
     private var filteredActions: [ProjectAction] {
@@ -391,6 +447,7 @@ struct ActionWorkspaceView: View {
 }
 
 private extension ProjectAction {
+    var isDoneSortKey: Int { isDone ? 1 : 0 }
     var flowSortKey: String { flow.rawValue }
     var prioritySortWeight: Int { priority.sortWeight }
     var statusSortKey: String { status.rawValue }
@@ -674,5 +731,23 @@ private enum ActionEditorContext: Identifiable {
         case .edit(let actionID):
             store.action(with: actionID)
         }
+    }
+}
+
+private enum ActionTableColumn: String, CaseIterable, Identifiable, Hashable {
+    case done
+    case status
+    case flow
+    case priority
+    case title
+    case activity
+    case project
+    case dueDate
+    case createdAt
+
+    var id: String { rawValue }
+
+    var label: String {
+        AppTableID.actions.columnTitle(for: rawValue)
     }
 }

@@ -108,86 +108,96 @@ struct MeetingWorkspaceView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Table(filteredMeetings, selection: $selectedMeetingIDs, sortOrder: $sortOrder) {
-                        TableColumn("Date", value: \.meetingAt) { meeting in
-                            Text(meeting.meetingAt.formatted(date: .abbreviated, time: .shortened))
-                        }
-                        .width(min: 165, ideal: 190)
-
-                        TableColumn("Réunion", value: \.displayTitle) { meeting in
-                            TextField(
-                                "Réunion",
-                                text: Binding(
-                                    get: { meeting.title },
-                                    set: {
-                                        store.updateMeeting(
-                                            meetingID: meeting.id,
-                                            title: $0,
-                                            projectID: meeting.projectID,
-                                            meetingAt: meeting.meetingAt,
-                                            durationMinutes: meeting.durationMinutes,
-                                            mode: meeting.mode,
-                                            organizer: meeting.organizer,
-                                            participants: meeting.participants,
-                                            locationOrLink: meeting.locationOrLink,
-                                            notes: meeting.notes,
-                                            transcript: meeting.transcript,
-                                            aiSummary: meeting.aiSummary
-                                        )
-                                    }
-                                )
-                            )
-                            .textFieldStyle(.plain)
-                            .fontWeight(.medium)
-                        }
-                        .width(min: 220, ideal: 320)
-
-                        TableColumn("Projet", value: \.projectIDSortKey) { meeting in
-                            Text(store.projectName(for: meeting.projectID))
-                        }
-                        .width(min: 150, ideal: 220)
-
-                        TableColumn("Mode", value: \.modeSortKey) { meeting in
-                            Picker(
-                                "Mode",
-                                selection: Binding(
-                                    get: { meeting.mode },
-                                    set: {
-                                        store.updateMeeting(
-                                            meetingID: meeting.id,
-                                            title: meeting.title,
-                                            projectID: meeting.projectID,
-                                            meetingAt: meeting.meetingAt,
-                                            durationMinutes: meeting.durationMinutes,
-                                            mode: $0,
-                                            organizer: meeting.organizer,
-                                            participants: meeting.participants,
-                                            locationOrLink: meeting.locationOrLink,
-                                            notes: meeting.notes,
-                                            transcript: meeting.transcript,
-                                            aiSummary: meeting.aiSummary
-                                        )
-                                    }
-                                )
-                            ) {
-                                ForEach(MeetingMode.allCases) { mode in
-                                    Text(mode.label).tag(mode)
+                        TableColumnForEach(activeTableColumns) { column in
+                            switch column {
+                            case .meetingAt:
+                                TableColumn(column.label, value: \.meetingAt) { meeting in
+                                    Text(meeting.meetingAt.formatted(date: .abbreviated, time: .shortened))
                                 }
+                                .width(min: 165, ideal: 190)
+
+                            case .title:
+                                TableColumn(column.label, value: \.displayTitle) { meeting in
+                                    TextField(
+                                        "Réunion",
+                                        text: Binding(
+                                            get: { meeting.title },
+                                            set: {
+                                                store.updateMeeting(
+                                                    meetingID: meeting.id,
+                                                    title: $0,
+                                                    projectID: meeting.projectID,
+                                                    meetingAt: meeting.meetingAt,
+                                                    durationMinutes: meeting.durationMinutes,
+                                                    mode: meeting.mode,
+                                                    organizer: meeting.organizer,
+                                                    participants: meeting.participants,
+                                                    locationOrLink: meeting.locationOrLink,
+                                                    notes: meeting.notes,
+                                                    transcript: meeting.transcript,
+                                                    aiSummary: meeting.aiSummary
+                                                )
+                                            }
+                                        )
+                                    )
+                                    .textFieldStyle(.plain)
+                                    .fontWeight(.medium)
+                                }
+                                .width(min: 220, ideal: 320)
+
+                            case .project:
+                                TableColumn(column.label, value: \.projectIDSortKey) { meeting in
+                                    Text(store.projectName(for: meeting.projectID))
+                                }
+                                .width(min: 150, ideal: 220)
+
+                            case .mode:
+                                TableColumn(column.label, value: \.modeSortKey) { meeting in
+                                    Picker(
+                                        "Mode",
+                                        selection: Binding(
+                                            get: { meeting.mode },
+                                            set: {
+                                                store.updateMeeting(
+                                                    meetingID: meeting.id,
+                                                    title: meeting.title,
+                                                    projectID: meeting.projectID,
+                                                    meetingAt: meeting.meetingAt,
+                                                    durationMinutes: meeting.durationMinutes,
+                                                    mode: $0,
+                                                    organizer: meeting.organizer,
+                                                    participants: meeting.participants,
+                                                    locationOrLink: meeting.locationOrLink,
+                                                    notes: meeting.notes,
+                                                    transcript: meeting.transcript,
+                                                    aiSummary: meeting.aiSummary
+                                                )
+                                            }
+                                        )
+                                    ) {
+                                        ForEach(MeetingMode.allCases) { mode in
+                                            Text(mode.label).tag(mode)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                }
+                                .width(min: 120, ideal: 140)
+
+                            case .duration:
+                                TableColumn(column.label, value: \.durationMinutes) { meeting in
+                                    Text("\(meeting.durationMinutes) min")
+                                }
+                                .width(min: 90, ideal: 110)
+
+                            case .aiSummary:
+                                TableColumn(column.label, value: \.aiSummary) { meeting in
+                                    Text(meeting.aiSummary)
+                                        .lineLimit(2)
+                                }
+                                .width(min: 260, ideal: 420)
                             }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
                         }
-                        .width(min: 120, ideal: 140)
-
-                        TableColumn("Durée", value: \.durationMinutes) { meeting in
-                            Text("\(meeting.durationMinutes) min")
-                        }
-                        .width(min: 90, ideal: 110)
-
-                        TableColumn("Résumé IA", value: \.aiSummary) { meeting in
-                            Text(meeting.aiSummary)
-                                .lineLimit(2)
-                        }
-                        .width(min: 260, ideal: 420)
                     }
                     .scrollIndicators(.visible)
                 }
@@ -287,6 +297,12 @@ struct MeetingWorkspaceView: View {
             editorContext = .create(prefill)
             return true
         } isTargeted: { isDropTargetedByText = $0 }
+    }
+
+    private var activeTableColumns: [MeetingTableColumn] {
+        appState
+            .orderedVisibleTableColumnIDs(for: .meetings)
+            .compactMap(MeetingTableColumn.init(rawValue:))
     }
 
     private var filteredMeetings: [ProjectMeeting] {
@@ -664,6 +680,21 @@ private enum MeetingEditorContext: Identifiable {
         case .edit:
             nil
         }
+    }
+}
+
+private enum MeetingTableColumn: String, CaseIterable, Identifiable, Hashable {
+    case meetingAt
+    case title
+    case project
+    case mode
+    case duration
+    case aiSummary
+
+    var id: String { rawValue }
+
+    var label: String {
+        AppTableID.meetings.columnTitle(for: rawValue)
     }
 }
 

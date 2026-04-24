@@ -14,7 +14,6 @@ struct ResourceWorkspaceView: View {
     let scopeMode: ResourceWorkspaceScopeMode
 
     @AppStorage("resources.displayMode") private var displayModeRawValue = ResourceDisplayMode.grid.rawValue
-    @AppStorage("resources.visibleColumns") private var visibleColumnsRawValue = ResourceTableColumn.defaultVisibleRawValue
 
     @State private var editorContext: ResourceEditorContext?
     @State private var resourcePendingDeletion: Resource?
@@ -30,7 +29,6 @@ struct ResourceWorkspaceView: View {
     @State private var selectedResourceIDs: Set<UUID> = []
     @State private var importReviewItems: [ResourceImportReviewDecision] = []
     @State private var isShowingImportReview = false
-    @State private var isShowingColumnConfiguration = false
     @State private var inlineDrafts: [UUID: ResourceInlineDraft] = [:]
     @State private var inlineEditFeedbackMessage: String?
     @State private var evaluationContext: ResourceEvaluationContext?
@@ -193,11 +191,11 @@ struct ResourceWorkspaceView: View {
                         .frame(width: 220)
 
                         Button {
-                            isShowingColumnConfiguration = true
+                            appState.selectedSection = .configuration
                         } label: {
                             Label("Colonnes", systemImage: "slider.horizontal.3")
                         }
-                        .help("Personnaliser les colonnes visibles")
+                        .help("Configurer les colonnes dans le volet Configuration")
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 4)
@@ -294,12 +292,6 @@ struct ResourceWorkspaceView: View {
                 onApply: {
                     applyImportReview()
                 }
-            )
-        }
-        .sheet(isPresented: $isShowingColumnConfiguration) {
-            ResourceColumnConfigurationSheet(
-                visibleColumns: visibleColumnsBinding,
-                onClose: { isShowingColumnConfiguration = false }
             )
         }
         .fileExporter(
@@ -434,17 +426,12 @@ struct ResourceWorkspaceView: View {
         )
     }
 
-    private var visibleColumnsBinding: Binding<Set<ResourceTableColumn>> {
-        Binding(
-            get: { visibleTableColumns },
-            set: { newValue in
-                visibleColumnsRawValue = ResourceTableColumn.encodeVisibleColumns(newValue)
-            }
-        )
-    }
-
     private var visibleTableColumns: Set<ResourceTableColumn> {
-        ResourceTableColumn.decodeVisibleColumns(visibleColumnsRawValue)
+        Set(
+            appState
+                .visibleTableColumnIDs(for: .resources)
+                .compactMap(ResourceTableColumn.init(rawValue:))
+        )
     }
 
     private func isColumnVisible(_ column: ResourceTableColumn) -> Bool {
@@ -452,8 +439,9 @@ struct ResourceWorkspaceView: View {
     }
 
     private var activeTableColumns: [ResourceTableColumn] {
-        let ordered = ResourceTableColumn.allCases.filter { visibleTableColumns.contains($0) }
-        return Array(ordered.prefix(9))
+        appState
+            .orderedVisibleTableColumnIDs(for: .resources)
+            .compactMap(ResourceTableColumn.init(rawValue:))
     }
 
     private var searchBaseResources: [Resource] {
@@ -587,13 +575,6 @@ struct ResourceWorkspaceView: View {
             .scrollIndicators(.visible)
         case .table:
             VStack(alignment: .leading, spacing: 6) {
-                if visibleTableColumns.count > activeTableColumns.count {
-                    Text("Affichage limité à 9 colonnes simultanées pour garder la table lisible.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 16)
-                }
-
                 Table(filteredResources, selection: selectedResourceID, sortOrder: $sortOrder) {
                     TableColumn("") { resource in
                         HStack(spacing: 8) {
@@ -1508,97 +1489,6 @@ private enum ResourceTableColumn: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    static let defaultVisibleColumns: Set<ResourceTableColumn> = [
-        .name,
-        .primaryResourceRole,
-        .parentDescription,
-        .projects,
-        .allocationPercent,
-        .status,
-        .engagement,
-        .email,
-        .phone
-    ]
-
-    static var defaultVisibleRawValue: String {
-        encodeVisibleColumns(defaultVisibleColumns)
-    }
-
-    static func decodeVisibleColumns(_ rawValue: String) -> Set<ResourceTableColumn> {
-        let tokens = rawValue
-            .split(separator: ",")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-        let columns = Set(tokens.compactMap(ResourceTableColumn.init(rawValue:)))
-        return columns.isEmpty ? defaultVisibleColumns : columns
-    }
-
-    static func encodeVisibleColumns(_ columns: Set<ResourceTableColumn>) -> String {
-        let normalized = columns.isEmpty ? defaultVisibleColumns : columns
-        return normalized
-            .sorted { $0.rawValue < $1.rawValue }
-            .map(\.rawValue)
-            .joined(separator: ",")
-    }
-}
-
-private struct ResourceColumnConfigurationSheet: View {
-    @Binding var visibleColumns: Set<ResourceTableColumn>
-    let onClose: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Active ou désactive les colonnes à afficher dans la vue tableau.")
-                    .foregroundStyle(.secondary)
-
-                List {
-                    ForEach(ResourceTableColumn.allCases) { column in
-                        Toggle(
-                            column.label,
-                            isOn: Binding(
-                                get: { visibleColumns.contains(column) },
-                                set: { isEnabled in
-                                    if isEnabled {
-                                        visibleColumns.insert(column)
-                                    } else {
-                                        visibleColumns.remove(column)
-                                        if visibleColumns.isEmpty {
-                                            visibleColumns = ResourceTableColumn.defaultVisibleColumns
-                                        }
-                                    }
-                                }
-                            )
-                        )
-                        .toggleStyle(.switch)
-                    }
-                }
-                .listStyle(.inset)
-                .scrollIndicators(.visible)
-            }
-            .padding(16)
-            .navigationTitle("Colonnes Ressources")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button("Fermer") {
-                        onClose()
-                    }
-                }
-
-                ToolbarItem(placement: .automatic) {
-                    Button("Par défaut") {
-                        visibleColumns = ResourceTableColumn.defaultVisibleColumns
-                    }
-                }
-
-                ToolbarItem(placement: .automatic) {
-                    Button("Tout afficher") {
-                        visibleColumns = Set(ResourceTableColumn.allCases)
-                    }
-                }
-            }
-        }
-        .frame(minWidth: 440, minHeight: 560)
-    }
 }
 
 private struct ResourceImportReviewDecision: Identifiable {

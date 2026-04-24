@@ -9,6 +9,7 @@ struct ConfigurationWorkspaceView: View {
     let primaryProjectName: String?
 
     @State private var isShowingDeleteConfirmation = false
+    @State private var selectedTableID: AppTableID = .actions
 
     var body: some View {
         @Bindable var appState = appState
@@ -50,6 +51,13 @@ struct ConfigurationWorkspaceView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                }
+
+                SamouraiSectionCard(
+                    title: "Tableaux",
+                    subtitle: "Colonnes visibles et ordre d'affichage pour les tableaux de l'application."
+                ) {
+                    TableColumnConfigurationPanel(selectedTableID: $selectedTableID)
                 }
 
                 SamouraiSectionCard(
@@ -149,5 +157,146 @@ struct ConfigurationWorkspaceView: View {
         case 3: return "Énorme"
         default: return "Maximum"
         }
+    }
+}
+
+private struct TableColumnConfigurationPanel: View {
+    @Environment(AppState.self) private var appState
+
+    @Binding var selectedTableID: AppTableID
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Picker("Tableau", selection: $selectedTableID) {
+                ForEach(AppTableID.allCases) { tableID in
+                    Label(tableID.title, systemImage: tableID.systemImage)
+                        .tag(tableID)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(maxWidth: 360, alignment: .leading)
+
+            HStack(spacing: 10) {
+                Label(selectedTableID.title, systemImage: selectedTableID.systemImage)
+                    .font(.headline)
+                Text(selectedTableID.subtitle)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(visibleColumnCount) / \(orderedColumns.count)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            List {
+                ForEach(Array(orderedColumns.enumerated()), id: \.element.id) { index, column in
+                    TableColumnConfigurationRow(
+                        column: column,
+                        isVisible: visibleColumnIDs.contains(column.id),
+                        canHide: visibleColumnCount > 1 || visibleColumnIDs.contains(column.id) == false,
+                        canMoveUp: index > 0,
+                        canMoveDown: index < orderedColumns.count - 1,
+                        onToggleVisibility: { isVisible in
+                            appState.setTableColumnVisibility(
+                                tableID: selectedTableID,
+                                columnID: column.id,
+                                isVisible: isVisible
+                            )
+                        },
+                        onMoveUp: {
+                            appState.moveTableColumn(tableID: selectedTableID, columnID: column.id, offset: -1)
+                        },
+                        onMoveDown: {
+                            appState.moveTableColumn(tableID: selectedTableID, columnID: column.id, offset: 1)
+                        }
+                    )
+                }
+            }
+            .listStyle(.inset)
+            .frame(minHeight: 260, maxHeight: 360)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(SamouraiSurface.border, lineWidth: 1)
+            }
+
+            HStack {
+                Spacer()
+                Button {
+                    appState.resetTableColumnConfiguration(tableID: selectedTableID)
+                } label: {
+                    Label("Réinitialiser", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    appState.showAllTableColumns(tableID: selectedTableID)
+                } label: {
+                    Label("Tout afficher", systemImage: "eye")
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    private var configuration: TableColumnConfiguration {
+        appState.tableColumnConfiguration(for: selectedTableID)
+    }
+
+    private var orderedColumns: [AppTableColumnDescriptor] {
+        selectedTableID.orderedColumnDescriptors(for: configuration)
+    }
+
+    private var visibleColumnIDs: Set<String> {
+        Set(configuration.visibleColumnIDs)
+    }
+
+    private var visibleColumnCount: Int {
+        visibleColumnIDs.count
+    }
+}
+
+private struct TableColumnConfigurationRow: View {
+    let column: AppTableColumnDescriptor
+    let isVisible: Bool
+    let canHide: Bool
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let onToggleVisibility: (Bool) -> Void
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Toggle(
+                column.title,
+                isOn: Binding(
+                    get: { isVisible },
+                    set: { newValue in
+                        onToggleVisibility(newValue)
+                    }
+                )
+            )
+            .toggleStyle(.switch)
+            .disabled(isVisible && canHide == false)
+
+            Spacer()
+
+            HStack(spacing: 4) {
+                Button(action: onMoveUp) {
+                    Image(systemName: "chevron.up")
+                }
+                .buttonStyle(.borderless)
+                .disabled(canMoveUp == false)
+                .help("Monter")
+
+                Button(action: onMoveDown) {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .disabled(canMoveDown == false)
+                .help("Descendre")
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

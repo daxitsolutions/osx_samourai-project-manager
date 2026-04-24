@@ -98,80 +98,90 @@ struct EventWorkspaceView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Table(filteredEvents, selection: $selectedEventIDs, sortOrder: $sortOrder) {
-                        TableColumn("Date/Heure", value: \.happenedAt) { event in
-                            Text(event.happenedAt.formatted(date: .abbreviated, time: .shortened))
-                        }
-                        .width(min: 160, ideal: 190)
-
-                        TableColumn("Priorité", value: \.prioritySortWeight) { event in
-                            Picker(
-                                "Priorité",
-                                selection: Binding(
-                                    get: { event.priority },
-                                    set: {
-                                        store.updateEvent(
-                                            eventID: event.id,
-                                            title: event.title,
-                                            details: event.details,
-                                            source: event.source,
-                                            priority: $0,
-                                            happenedAt: event.happenedAt,
-                                            projectID: event.projectID,
-                                            resourceIDs: event.resourceIDs
-                                        )
-                                    }
-                                )
-                            ) {
-                                ForEach(EventPriority.allCases) { priority in
-                                    Text(priority.label).tag(priority)
+                        TableColumnForEach(activeTableColumns) { column in
+                            switch column {
+                            case .happenedAt:
+                                TableColumn(column.label, value: \.happenedAt) { event in
+                                    Text(event.happenedAt.formatted(date: .abbreviated, time: .shortened))
                                 }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
-                        .width(min: 110, ideal: 120)
+                                .width(min: 160, ideal: 190)
 
-                        TableColumn("Événement", value: \.displayTitle) { event in
-                            TextField(
-                                "Événement",
-                                text: Binding(
-                                    get: { event.title },
-                                    set: {
-                                        store.updateEvent(
-                                            eventID: event.id,
-                                            title: $0,
-                                            details: event.details,
-                                            source: event.source,
-                                            priority: event.priority,
-                                            happenedAt: event.happenedAt,
-                                            projectID: event.projectID,
-                                            resourceIDs: event.resourceIDs
+                            case .priority:
+                                TableColumn(column.label, value: \.prioritySortWeight) { event in
+                                    Picker(
+                                        "Priorité",
+                                        selection: Binding(
+                                            get: { event.priority },
+                                            set: {
+                                                store.updateEvent(
+                                                    eventID: event.id,
+                                                    title: event.title,
+                                                    details: event.details,
+                                                    source: event.source,
+                                                    priority: $0,
+                                                    happenedAt: event.happenedAt,
+                                                    projectID: event.projectID,
+                                                    resourceIDs: event.resourceIDs
+                                                )
+                                            }
                                         )
+                                    ) {
+                                        ForEach(EventPriority.allCases) { priority in
+                                            Text(priority.label).tag(priority)
+                                        }
                                     }
-                                )
-                            )
-                            .textFieldStyle(.plain)
-                            .fontWeight(.medium)
-                        }
-                        .width(min: 220, ideal: 320)
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                }
+                                .width(min: 110, ideal: 120)
 
-                        TableColumn("Source", value: \.sourceSortKey) { event in
-                            Text(event.hasSource ? event.source : "-")
-                                .foregroundStyle(event.hasSource ? .primary : .secondary)
-                        }
-                        .width(min: 180, ideal: 250)
+                            case .title:
+                                TableColumn(column.label, value: \.displayTitle) { event in
+                                    TextField(
+                                        "Événement",
+                                        text: Binding(
+                                            get: { event.title },
+                                            set: {
+                                                store.updateEvent(
+                                                    eventID: event.id,
+                                                    title: $0,
+                                                    details: event.details,
+                                                    source: event.source,
+                                                    priority: event.priority,
+                                                    happenedAt: event.happenedAt,
+                                                    projectID: event.projectID,
+                                                    resourceIDs: event.resourceIDs
+                                                )
+                                            }
+                                        )
+                                    )
+                                    .textFieldStyle(.plain)
+                                    .fontWeight(.medium)
+                                }
+                                .width(min: 220, ideal: 320)
 
-                        TableColumn("Projet", value: \.projectIDSortKey) { event in
-                            Text(store.projectName(for: event.projectID))
-                        }
-                        .width(min: 150, ideal: 220)
+                            case .source:
+                                TableColumn(column.label, value: \.sourceSortKey) { event in
+                                    Text(event.hasSource ? event.source : "-")
+                                        .foregroundStyle(event.hasSource ? .primary : .secondary)
+                                }
+                                .width(min: 180, ideal: 250)
 
-                        TableColumn("Ressources", value: \.resourceCount) { event in
-                            let names = store.resourceNames(for: event.resourceIDs)
-                            Text(names.isEmpty ? "-" : names.joined(separator: ", "))
-                                .lineLimit(2)
+                            case .project:
+                                TableColumn(column.label, value: \.projectIDSortKey) { event in
+                                    Text(store.projectName(for: event.projectID))
+                                }
+                                .width(min: 150, ideal: 220)
+
+                            case .resources:
+                                TableColumn(column.label, value: \.resourceCount) { event in
+                                    let names = store.resourceNames(for: event.resourceIDs)
+                                    Text(names.isEmpty ? "-" : names.joined(separator: ", "))
+                                        .lineLimit(2)
+                                }
+                                .width(min: 200, ideal: 320)
+                            }
                         }
-                        .width(min: 200, ideal: 320)
                     }
                     .scrollIndicators(.visible)
                 }
@@ -232,6 +242,12 @@ struct EventWorkspaceView: View {
             selectedEventIDs = selectedEventIDs.intersection(existingIDs)
             appState.selectedEventID = selectedEventIDs.singleSelection
         }
+    }
+
+    private var activeTableColumns: [EventTableColumn] {
+        appState
+            .orderedVisibleTableColumnIDs(for: .events)
+            .compactMap(EventTableColumn.init(rawValue:))
     }
 
     private var filteredEvents: [ProjectEvent] {
@@ -588,5 +604,20 @@ private enum EventEditorContext: Identifiable {
         case .edit(let eventID):
             store.event(with: eventID)
         }
+    }
+}
+
+private enum EventTableColumn: String, CaseIterable, Identifiable, Hashable {
+    case happenedAt
+    case priority
+    case title
+    case source
+    case project
+    case resources
+
+    var id: String { rawValue }
+
+    var label: String {
+        AppTableID.events.columnTitle(for: rawValue)
     }
 }

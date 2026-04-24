@@ -4,9 +4,6 @@ struct PlanningWorkspaceView: View {
     @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
 
-    @AppStorage("planning.table.visibleColumns") private var visibleColumnsRawValue = PlanningTableColumn.defaultVisibleRawValue
-    @AppStorage("planning.table.columnOrder") private var columnOrderRawValue = PlanningTableColumn.defaultOrderRawValue
-
     @State private var selectedScenarioIDs: Set<UUID> = []
     @State private var primaryScenarioID: UUID?
     @State private var editorContext: PlanningEditorContext?
@@ -14,7 +11,6 @@ struct PlanningWorkspaceView: View {
     @State private var scenarioPendingDeletion: ProjectPlanningScenario?
     @State private var expandedActivityIDs: Set<UUID> = []
     @State private var viewMode: PlanningViewMode = .tree
-    @State private var isShowingTableConfiguration = false
 
     var body: some View {
         detailPane
@@ -31,13 +27,6 @@ struct PlanningWorkspaceView: View {
                     linkedDeliverableIDs: context.linkedDeliverableIDs(in: store)
                 )
             }
-        }
-        .sheet(isPresented: $isShowingTableConfiguration) {
-            PlanningTableConfigurationSheet(
-                visibleColumns: visibleColumnsBinding,
-                orderedColumns: orderedColumnsBinding,
-                onClose: { isShowingTableConfiguration = false }
-            )
         }
         .alert("Supprimer l'activité", isPresented: Binding(
             get: { activityPendingDeletion != nil },
@@ -121,34 +110,10 @@ struct PlanningWorkspaceView: View {
         visibleScenarios.first(where: { $0.id == primaryScenarioID }) ?? visibleScenarios.first
     }
 
-    private var visibleColumnsBinding: Binding<Set<PlanningTableColumn>> {
-        Binding(
-            get: { visibleTableColumns },
-            set: { newValue in
-                visibleColumnsRawValue = PlanningTableColumn.encodeVisibleColumns(newValue)
-            }
-        )
-    }
-
-    private var orderedColumnsBinding: Binding<[PlanningTableColumn]> {
-        Binding(
-            get: { orderedTableColumns },
-            set: { newValue in
-                columnOrderRawValue = PlanningTableColumn.encodeColumnOrder(newValue)
-            }
-        )
-    }
-
-    private var visibleTableColumns: Set<PlanningTableColumn> {
-        PlanningTableColumn.decodeVisibleColumns(visibleColumnsRawValue)
-    }
-
-    private var orderedTableColumns: [PlanningTableColumn] {
-        PlanningTableColumn.decodeColumnOrder(columnOrderRawValue)
-    }
-
     private var activeTableColumns: [PlanningTableColumn] {
-        orderedTableColumns.filter { visibleTableColumns.contains($0) }
+        appState
+            .orderedVisibleTableColumnIDs(for: .planning)
+            .compactMap(PlanningTableColumn.init(rawValue:))
     }
 
     @ViewBuilder
@@ -213,11 +178,11 @@ struct PlanningWorkspaceView: View {
 
                 if viewMode == .table {
                     Button {
-                        isShowingTableConfiguration = true
+                        appState.selectedSection = .configuration
                     } label: {
-                        Label("Configurer la grille", systemImage: "gearshape")
+                        Label("Colonnes", systemImage: "slider.horizontal.3")
                     }
-                    .help("Afficher/masquer et réordonner les colonnes de la table")
+                    .help("Configurer les colonnes dans le volet Configuration")
                 }
 
                 Button {
@@ -870,108 +835,6 @@ private enum PlanningTableColumn: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    static let defaultVisibleColumns: Set<PlanningTableColumn> = Set(allCases)
-    static let defaultVisibleRawValue = encodeVisibleColumns(defaultVisibleColumns)
-    static let defaultOrderRawValue = encodeColumnOrder(allCases)
-
-    static func decodeVisibleColumns(_ rawValue: String) -> Set<PlanningTableColumn> {
-        let tokens = rawValue
-            .split(separator: ",")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.isEmpty == false }
-        let columns = Set(tokens.compactMap(PlanningTableColumn.init(rawValue:)))
-        return columns.isEmpty ? defaultVisibleColumns : columns
-    }
-
-    static func encodeVisibleColumns(_ columns: Set<PlanningTableColumn>) -> String {
-        let normalized = allCases.filter { columns.contains($0) }
-        return normalized.map(\.rawValue).joined(separator: ",")
-    }
-
-    static func decodeColumnOrder(_ rawValue: String) -> [PlanningTableColumn] {
-        let tokens = rawValue
-            .split(separator: ",")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.isEmpty == false }
-        let decoded = tokens.compactMap(PlanningTableColumn.init(rawValue:))
-        let deduped = allCases.filter { decoded.contains($0) }
-        let missing = allCases.filter { deduped.contains($0) == false }
-        let normalized = deduped + missing
-        return normalized.isEmpty ? allCases : normalized
-    }
-
-    static func encodeColumnOrder(_ columns: [PlanningTableColumn]) -> String {
-        let deduped = allCases.filter { columns.contains($0) }
-        return deduped.map(\.rawValue).joined(separator: ",")
-    }
-}
-
-private struct PlanningTableConfigurationSheet: View {
-    @Binding var visibleColumns: Set<PlanningTableColumn>
-    @Binding var orderedColumns: [PlanningTableColumn]
-    let onClose: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Visibilité des colonnes") {
-                    ForEach(orderedColumns) { column in
-                        Toggle(
-                            column.label,
-                            isOn: Binding(
-                                get: { visibleColumns.contains(column) },
-                                set: { isVisible in
-                                    if isVisible {
-                                        visibleColumns.insert(column)
-                                    } else {
-                                        visibleColumns.remove(column)
-                                        if visibleColumns.isEmpty {
-                                            visibleColumns = PlanningTableColumn.defaultVisibleColumns
-                                        }
-                                    }
-                                }
-                            )
-                        )
-                    }
-                }
-
-                Section("Ordre des colonnes (glisser-déposer)") {
-                    List {
-                        ForEach(orderedColumns) { column in
-                            HStack {
-                                Image(systemName: "line.3.horizontal")
-                                    .foregroundStyle(.secondary)
-                                Text(column.label)
-                                Spacer()
-                                if visibleColumns.contains(column) == false {
-                                    Text("Masquée")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .onMove { source, destination in
-                            orderedColumns.move(fromOffsets: source, toOffset: destination)
-                        }
-                    }
-                    .frame(minHeight: 220)
-                }
-            }
-            .navigationTitle("Configuration de la grille")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Fermer") { onClose() }
-                }
-                ToolbarItem(placement: .automatic) {
-                    Button("Réinitialiser") {
-                        visibleColumns = PlanningTableColumn.defaultVisibleColumns
-                        orderedColumns = PlanningTableColumn.allCases
-                    }
-                }
-            }
-        }
-        .frame(minWidth: 520, minHeight: 520)
-    }
 }
 
 private enum PlanningViewMode: String, CaseIterable, Identifiable {

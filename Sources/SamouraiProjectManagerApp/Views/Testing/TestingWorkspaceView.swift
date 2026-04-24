@@ -115,77 +115,87 @@ struct TestingWorkspaceView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Table(filteredRows, selection: $selectedRows, sortOrder: $sortOrder) {
-                        TableColumn("Projet", value: \TestingRow.projectName) { row in
-                            Text(row.projectName)
-                        }
-                        .width(min: 170, ideal: 230)
-
-                        TableColumn("Phase", value: \.phaseOrder) { row in
-                            Text(row.phase.kind.shortLabel)
-                                .font(.callout.weight(.semibold))
-                        }
-                        .width(min: 70, ideal: 90)
-
-                        TableColumn("Statut", value: \.statusSortKey) { row in
-                            Picker(
-                                "Statut",
-                                selection: Binding(
-                                    get: { row.phase.status },
-                                    set: { newStatus in
-                                        var updated = row.phase
-                                        updated.status = newStatus
-                                        store.replaceProjectTestingPhase(projectID: row.projectID, phase: updated)
-                                    }
-                                )
-                            ) {
-                                ForEach(ProjectTestingPhaseStatus.allCases) { status in
-                                    Text(status.label).tag(status)
+                        TableColumnForEach(activeTableColumns) { column in
+                            switch column {
+                            case .project:
+                                TableColumn(column.label, value: \TestingRow.projectName) { row in
+                                    Text(row.projectName)
                                 }
+                                .width(min: 170, ideal: 230)
+
+                            case .phase:
+                                TableColumn(column.label, value: \.phaseOrder) { row in
+                                    Text(row.phase.kind.shortLabel)
+                                        .font(.callout.weight(.semibold))
+                                }
+                                .width(min: 70, ideal: 90)
+
+                            case .status:
+                                TableColumn(column.label, value: \.statusSortKey) { row in
+                                    Picker(
+                                        "Statut",
+                                        selection: Binding(
+                                            get: { row.phase.status },
+                                            set: { newStatus in
+                                                var updated = row.phase
+                                                updated.status = newStatus
+                                                store.replaceProjectTestingPhase(projectID: row.projectID, phase: updated)
+                                            }
+                                        )
+                                    ) {
+                                        ForEach(ProjectTestingPhaseStatus.allCases) { status in
+                                            Text(status.label).tag(status)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                }
+                                .width(min: 150, ideal: 180)
+
+                            case .progress:
+                                TableColumn(column.label, value: \.progressPercentSortKey) { row in
+                                    TextField(
+                                        "%",
+                                        value: Binding(
+                                            get: { row.phase.progressPercent },
+                                            set: { newPercent in
+                                                var updated = row.phase
+                                                updated.progressPercent = min(max(newPercent, 0), 100)
+                                                store.replaceProjectTestingPhase(projectID: row.projectID, phase: updated)
+                                            }
+                                        ),
+                                        format: .number
+                                    )
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 62)
+                                }
+                                .width(min: 90, ideal: 100)
+
+                            case .owner:
+                                TableColumn(column.label, value: \.ownerSortKey) { row in
+                                    TextField(
+                                        "Owner",
+                                        text: Binding(
+                                            get: { row.phase.owner },
+                                            set: { newOwner in
+                                                var updated = row.phase
+                                                updated.owner = newOwner
+                                                store.replaceProjectTestingPhase(projectID: row.projectID, phase: updated)
+                                            }
+                                        )
+                                    )
+                                    .textFieldStyle(.plain)
+                                }
+                                .width(min: 150, ideal: 220)
+
+                            case .blocked:
+                                TableColumn(column.label, value: \.blockedSortKey) { row in
+                                    Image(systemName: row.phase.isBlocked ? "exclamationmark.triangle.fill" : "checkmark.circle")
+                                        .foregroundStyle(row.phase.isBlocked ? Color.red : .secondary)
+                                }
+                                .width(70)
                             }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
                         }
-                        .width(min: 150, ideal: 180)
-
-                        TableColumn("Progression", value: \.progressPercentSortKey) { row in
-                            TextField(
-                                "%",
-                                value: Binding(
-                                    get: { row.phase.progressPercent },
-                                    set: { newPercent in
-                                        var updated = row.phase
-                                        updated.progressPercent = min(max(newPercent, 0), 100)
-                                        store.replaceProjectTestingPhase(projectID: row.projectID, phase: updated)
-                                    }
-                                ),
-                                format: .number
-                            )
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 62)
-                        }
-                        .width(min: 90, ideal: 100)
-
-                        TableColumn("Owner", value: \.ownerSortKey) { row in
-                            TextField(
-                                "Owner",
-                                text: Binding(
-                                    get: { row.phase.owner },
-                                    set: { newOwner in
-                                        var updated = row.phase
-                                        updated.owner = newOwner
-                                        store.replaceProjectTestingPhase(projectID: row.projectID, phase: updated)
-                                    }
-                                )
-                            )
-                            .textFieldStyle(.plain)
-                        }
-                        .width(min: 150, ideal: 220)
-
-                        TableColumn("Bloqué", value: \.blockedSortKey) { row in
-                            Image(systemName: row.phase.isBlocked ? "exclamationmark.triangle.fill" : "checkmark.circle")
-                                .foregroundStyle(row.phase.isBlocked ? Color.red : .secondary)
-                        }
-                        .width(70)
                     }
                     .scrollIndicators(.visible)
                 }
@@ -240,6 +250,12 @@ struct TestingWorkspaceView: View {
 
     private var selectedRowsForExport: [TestingRow] {
         filteredRows.filter { selectedRows.contains($0.id) }
+    }
+
+    private var activeTableColumns: [TestingTableColumn] {
+        appState
+            .orderedVisibleTableColumnIDs(for: .testing)
+            .compactMap(TestingTableColumn.init(rawValue:))
     }
 
     private var scopedRows: [TestingRow] {
@@ -347,6 +363,21 @@ private struct TestingRow: Identifiable, Hashable {
 
     var blockedSortKey: Int {
         phase.isBlocked ? 1 : 0
+    }
+}
+
+private enum TestingTableColumn: String, CaseIterable, Identifiable, Hashable {
+    case project
+    case phase
+    case status
+    case progress
+    case owner
+    case blocked
+
+    var id: String { rawValue }
+
+    var label: String {
+        AppTableID.testing.columnTitle(for: rawValue)
     }
 }
 

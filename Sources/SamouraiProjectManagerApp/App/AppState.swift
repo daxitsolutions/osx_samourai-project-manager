@@ -69,6 +69,12 @@ final class AppState {
         }
     }
 
+    var tableColumnConfigurations: [AppTableID: TableColumnConfiguration] = [:] {
+        didSet {
+            persistTableColumnConfigurations()
+        }
+    }
+
     var activeImportTracker: ImportProgressTracker?
 
     var dynamicTypeSize: DynamicTypeSize {
@@ -107,6 +113,9 @@ final class AppState {
         } else {
             debugFilePath = AppState.debugDefaultFilePath
         }
+
+        tableColumnConfigurations = Self.loadPersistedTableColumnConfigurations()
+        persistTableColumnConfigurations()
     }
 
     func openProject(_ projectID: UUID) {
@@ -551,12 +560,13 @@ enum SamouraiDebugContextFactory {
                 section: section,
                 views: ["AppShellView", "ConfigurationWorkspaceView"],
                 entities: ["AppState", "SamouraiStore"],
-                enumerations: ["AppSection", "AppSectionGroup"],
+                enumerations: ["AppSection", "AppSectionGroup", "AppTableID"],
                 data: [
                     "fontSizeOffset=\(appState.fontSizeOffset)",
                     "isDebugEnabled=\(appState.isDebugEnabled)",
                     "debugKeepFullHistory=\(appState.debugKeepFullHistory)",
-                    "debugFilePath=\(appState.debugFilePath)"
+                    "debugFilePath=\(appState.debugFilePath)",
+                    "tableColumnConfigurations=\(appState.tableColumnConfigurations.count)"
                 ],
                 action: nil
             )

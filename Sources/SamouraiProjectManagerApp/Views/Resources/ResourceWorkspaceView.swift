@@ -1181,7 +1181,7 @@ private struct ResourceProfilingSummaryCard: View {
     let report: ResourceProfilingReport
     let scopeLabel: String
 
-    @AppStorage("resources.profilingSummaryExpanded") private var isExpanded = false
+    @State private var isExpanded = false
 
     private let columns = [
         GridItem(.adaptive(minimum: 300, maximum: 420), spacing: 8)
@@ -1212,7 +1212,7 @@ private struct ResourceProfilingSummaryCard: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help(isExpanded ? "Réduire les profils standard" : "Afficher les profils standard")
+                .help(isExpanded ? "Réduire les profils types" : "Afficher tous les profils types")
             }
 
             ProgressView(value: report.completionRatio)
@@ -1231,7 +1231,6 @@ private struct ResourceProfilingSummaryCard: View {
                     ForEach(report.roleCoverage) { coverage in
                         ResourceRoleCoverageRow(coverage: coverage)
                     }
-                    .scrollIndicators(.visible)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -1290,7 +1289,7 @@ private struct ResourceComparativePerformanceCard: View {
     let snapshots: [ResourcePerformanceSnapshot]
     let onEvaluate: (UUID) -> Void
 
-    @AppStorage("resources.comparativePerformanceExpanded") private var isExpanded = false
+    @State private var isExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

@@ -1,5 +1,8 @@
 # Samourai Project Manager
 
+<img width="1408" height="768" alt="samourai" src="https://github.com/user-attachments/assets/b2c4c22d-ecb0-4dbb-af6e-eaedf8b127d4" />
+
+
 Application macOS native en SwiftUI pour piloter un portefeuille de projets avec une logique de gouvernance, de delivery et de traçabilité.
 
 Le projet centralise dans une seule interface :

@@ -8,7 +8,12 @@
       "WebFetch(domain:github.com)",
       "Bash(find /Users/Dax/Documents/GitHub/osx_samourai-project-manager -type f \\\\\\( -name \"*.swift\" \\\\\\) -exec grep -l \"Risk\" {} \\\\;)",
       "Bash(gh api *)",
-      "WebFetch(domain:api.github.com)"
+      "WebFetch(domain:api.github.com)",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager log --oneline -5)",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager show --stat 7d8330a)",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager log --all --oneline)",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager show 605e7fe --stat)",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager show 605e7fe -- '*SamouraiStore.swift' '*RiskRegisterView.swift')"
     ]
   }
 }

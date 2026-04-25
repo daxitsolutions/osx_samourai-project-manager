@@ -1044,6 +1044,7 @@ final class SamouraiStore {
         status: ActionStatus? = nil
     ) {
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return }
+        let previous = actions[index]
         actions[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         actions[index].details = details.trimmingCharacters(in: .whitespacesAndNewlines)
         actions[index].priority = priority
@@ -1055,15 +1056,27 @@ final class SamouraiStore {
             actions[index].isDone = (status == .done)
         }
         actions[index].updatedAt = .now
+        let messages = actionChangeMessages(previous: previous, current: actions[index])
+        for message in messages {
+            appendActionHistoryEntry(actionIndex: index, kind: .automatic, text: message)
+        }
         actions = sortActions(actions)
         persist()
     }
 
     func updateActionStatus(actionID: UUID, status: ActionStatus) {
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return }
+        let previousStatus = actions[index].status
         actions[index].status = status
         actions[index].isDone = (status == .done)
         actions[index].updatedAt = .now
+        if previousStatus != status {
+            appendActionHistoryEntry(
+                actionIndex: index,
+                kind: .automatic,
+                text: "Statut modifié : \(previousStatus.label) → \(status.label)"
+            )
+        }
         actions = sortActions(actions)
         persist()
     }
@@ -1075,6 +1088,7 @@ final class SamouraiStore {
 
     func markActionDone(actionID: UUID, isDone: Bool) {
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return }
+        let previousStatus = actions[index].status
         actions[index].isDone = isDone
         if isDone {
             actions[index].status = .done
@@ -1082,6 +1096,13 @@ final class SamouraiStore {
             actions[index].status = .todo
         }
         actions[index].updatedAt = .now
+        if previousStatus != actions[index].status {
+            appendActionHistoryEntry(
+                actionIndex: index,
+                kind: .automatic,
+                text: "Statut modifié : \(previousStatus.label) → \(actions[index].status.label)"
+            )
+        }
         actions = sortActions(actions)
         persist()
     }
@@ -1089,6 +1110,7 @@ final class SamouraiStore {
     func assignActionToActivity(actionID: UUID, activityID: UUID?) {
         guard let actionIndex = actions.firstIndex(where: { $0.id == actionID }) else { return }
 
+        let previousActivityID = actions[actionIndex].activityID
         if let activityID {
             guard let activity = activity(with: activityID) else { return }
             guard let projectID = actions[actionIndex].projectID, projectID == activity.projectID else { return }
@@ -1098,8 +1120,98 @@ final class SamouraiStore {
         }
 
         actions[actionIndex].updatedAt = .now
+        if previousActivityID != actions[actionIndex].activityID {
+            let previousLabel = activityDisplayName(for: previousActivityID)
+            let currentLabel = activityDisplayName(for: actions[actionIndex].activityID)
+            appendActionHistoryEntry(
+                actionIndex: actionIndex,
+                kind: .automatic,
+                text: "Activité associée modifiée : \(previousLabel) → \(currentLabel)"
+            )
+        }
         actions = sortActions(actions)
         persist()
+    }
+
+    @discardableResult
+    func addActionComment(actionID: UUID, text: String) -> Bool {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.isEmpty == false else { return false }
+        guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return false }
+        appendActionHistoryEntry(actionIndex: index, kind: .manual, text: cleaned)
+        actions[index].updatedAt = .now
+        persist()
+        return true
+    }
+
+    private func appendActionHistoryEntry(
+        actionIndex: Int,
+        kind: ActionHistoryEntryKind,
+        text: String,
+        date: Date = .now
+    ) {
+        let entry = ActionHistoryEntry(kind: kind, date: date, text: text)
+        var history = actions[actionIndex].history ?? []
+        history.append(entry)
+        actions[actionIndex].history = history
+    }
+
+    private func actionChangeMessages(previous: ProjectAction, current: ProjectAction) -> [String] {
+        var messages: [String] = []
+
+        let previousTitle = previous.displayTitle
+        let currentTitle = current.displayTitle
+        if previousTitle != currentTitle {
+            messages.append("Titre modifié : « \(previousTitle) » → « \(currentTitle) »")
+        }
+
+        if previous.details != current.details {
+            messages.append("Description détaillée modifiée")
+        }
+
+        if previous.priority != current.priority {
+            messages.append("Sévérité modifiée : \(previous.priority.label) → \(current.priority.label)")
+        }
+
+        if previous.status != current.status {
+            messages.append("Statut modifié : \(previous.status.label) → \(current.status.label)")
+        }
+
+        if previous.flow != current.flow {
+            messages.append("Flux modifié : \(previous.flow.label) → \(current.flow.label)")
+        }
+
+        if previous.dueDate != current.dueDate {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "fr_FR")
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            messages.append("Date d'échéance modifiée : \(formatter.string(from: previous.dueDate)) → \(formatter.string(from: current.dueDate))")
+        }
+
+        if previous.projectID != current.projectID {
+            let previousLabel = projectDisplayName(for: previous.projectID)
+            let currentLabel = projectDisplayName(for: current.projectID)
+            messages.append("Projet modifié : \(previousLabel) → \(currentLabel)")
+        }
+
+        if previous.activityID != current.activityID {
+            let previousLabel = activityDisplayName(for: previous.activityID)
+            let currentLabel = activityDisplayName(for: current.activityID)
+            messages.append("Activité associée modifiée : \(previousLabel) → \(currentLabel)")
+        }
+
+        return messages
+    }
+
+    private func projectDisplayName(for id: UUID?) -> String {
+        guard let id else { return "Sans projet" }
+        return project(with: id)?.name ?? "Projet inconnu"
+    }
+
+    private func activityDisplayName(for id: UUID?) -> String {
+        guard let id else { return "Sans activité" }
+        return activity(with: id)?.title ?? "Activité inconnue"
     }
 
     func addActivity(

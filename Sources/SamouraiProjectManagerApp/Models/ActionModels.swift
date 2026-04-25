@@ -108,6 +108,50 @@ enum ActionPriority: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum ActionHistoryEntryKind: String, Codable, CaseIterable, Identifiable {
+    case automatic
+    case manual
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .automatic:
+            "Modification automatique"
+        case .manual:
+            "Commentaire"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .automatic:
+            "gearshape"
+        case .manual:
+            "text.bubble"
+        }
+    }
+}
+
+struct ActionHistoryEntry: Identifiable, Codable, Hashable {
+    var id: UUID
+    var kind: ActionHistoryEntryKind
+    var date: Date
+    var text: String
+
+    init(
+        id: UUID = UUID(),
+        kind: ActionHistoryEntryKind,
+        date: Date = .now,
+        text: String
+    ) {
+        self.id = id
+        self.kind = kind
+        self.date = date
+        self.text = text
+    }
+}
+
 struct ProjectAction: Identifiable, Codable, Hashable {
     var id: UUID
     var title: String
@@ -121,6 +165,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
     var createdAt: Date
     var updatedAt: Date
     var isDone: Bool
+    var history: [ActionHistoryEntry]?
 
     init(
         id: UUID = UUID(),
@@ -134,7 +179,8 @@ struct ProjectAction: Identifiable, Codable, Hashable {
         activityID: UUID? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now,
-        isDone: Bool = false
+        isDone: Bool = false,
+        history: [ActionHistoryEntry]? = nil
     ) {
         self.id = id
         self.title = title
@@ -148,6 +194,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isDone = isDone
+        self.history = history
     }
 }
 
@@ -155,5 +202,13 @@ extension ProjectAction {
     var displayTitle: String {
         let cleaned = title.trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? "Action sans titre" : cleaned
+    }
+
+    var historyEntries: [ActionHistoryEntry] {
+        history ?? []
+    }
+
+    var historyEntriesChronological: [ActionHistoryEntry] {
+        historyEntries.sorted { $0.date < $1.date }
     }
 }

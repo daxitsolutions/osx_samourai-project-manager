@@ -473,6 +473,7 @@ private struct ActionEditorSheet: View {
     @State private var didApplyPrimaryProjectDefault = false
     @State private var initialSnapshot: String?
     @State private var isShowingDismissConfirmation = false
+    @State private var newCommentText: String = ""
 
     init(action: ProjectAction?) {
         self.action = action
@@ -539,6 +540,10 @@ private struct ActionEditorSheet: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                if let action {
+                    historySection(for: action.id)
                 }
             }
             .navigationTitle(action == nil ? "Nouvelle action PM" : "Modifier l'action PM")
@@ -700,6 +705,62 @@ private struct ActionEditorSheet: View {
         }
 
         dismiss()
+    }
+
+    @ViewBuilder
+    private func historySection(for actionID: UUID) -> some View {
+        let currentAction = store.action(with: actionID)
+        let entries = currentAction?.historyEntriesChronological ?? []
+
+        Section("Historique") {
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Ajouter un commentaire", text: $newCommentText, axis: .vertical)
+                    .lineLimit(2...4)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Spacer()
+                    Button("Ajouter au journal") {
+                        let trimmed = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard trimmed.isEmpty == false else { return }
+                        store.addActionComment(actionID: actionID, text: trimmed)
+                        newCommentText = ""
+                    }
+                    .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+
+            if entries.isEmpty {
+                Text("Aucune entrée d'historique pour le moment.")
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+            } else {
+                ForEach(entries) { entry in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: entry.kind.symbolName)
+                            .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
+                            .frame(width: 18)
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.text)
+                                .font(.callout)
+                            HStack(spacing: 6) {
+                                Text(entry.kind.label)
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                                Text("•")
+                                    .foregroundStyle(.tertiary)
+                                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
     }
 
     private func applyPrimaryProjectDefaultIfNeeded() {

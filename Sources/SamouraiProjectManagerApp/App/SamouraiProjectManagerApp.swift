@@ -13,6 +13,7 @@ struct SamouraiProjectManagerApp: App {
                 .environment(store)
                 .environment(typography)
                 .environment(\.dynamicTypeSize, appState.dynamicTypeSize)
+                .environment(\.locale, appState.interfaceLocale)
                 .tint(SamouraiColorTheme.color(.brandBlue))
                 .task { typography.fontSizeOffset = appState.fontSizeOffset }
                 .onChange(of: appState.fontSizeOffset) { _, offset in

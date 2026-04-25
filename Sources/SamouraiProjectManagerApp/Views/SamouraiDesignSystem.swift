@@ -19,6 +19,7 @@ enum SamouraiSurface {
 }
 
 struct SamouraiPageHeader<Trailing: View>: View {
+    @Environment(AppState.self) private var appState
     @Environment(SamouraiTypography.self) private var typography
 
     let eyebrow: String?
@@ -42,17 +43,17 @@ struct SamouraiPageHeader<Trailing: View>: View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
                 if let eyebrow, eyebrow.isEmpty == false {
-                    Text(eyebrow.uppercased())
+                    Text(localized(eyebrow).uppercased())
                         .font(typography.captionEmphasized)
                         .foregroundStyle(SamouraiSurface.accent)
                         .tracking(0.8)
                 }
 
-                Text(title)
+                Text(localized(title))
                     .font(typography.titleDisplay)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(subtitle)
+                Text(localized(subtitle))
                     .font(typography.body)
                     .foregroundStyle(SamouraiSurface.mutedText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -63,9 +64,14 @@ struct SamouraiPageHeader<Trailing: View>: View {
             trailing()
         }
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 struct SamouraiSectionCard<Content: View, Trailing: View>: View {
+    @Environment(AppState.self) private var appState
     @Environment(SamouraiTypography.self) private var typography
 
     let title: String
@@ -89,11 +95,11 @@ struct SamouraiSectionCard<Content: View, Trailing: View>: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
+                    Text(localized(title))
                         .font(typography.title)
 
                     if let subtitle, subtitle.isEmpty == false {
-                        Text(subtitle)
+                        Text(localized(subtitle))
                             .font(typography.callout)
                             .foregroundStyle(SamouraiSurface.mutedText)
                     }
@@ -108,9 +114,14 @@ struct SamouraiSectionCard<Content: View, Trailing: View>: View {
         .padding(20)
         .samouraiCardSurface()
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 struct SamouraiMetricTile: View {
+    @Environment(AppState.self) private var appState
     @Environment(SamouraiTypography.self) private var typography
 
     let title: String
@@ -129,7 +140,7 @@ struct SamouraiMetricTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label(title, systemImage: systemImage)
+            Label(localized(title), systemImage: systemImage)
                 .font(typography.calloutMedium)
                 .foregroundStyle(SamouraiSurface.mutedText)
 
@@ -137,7 +148,7 @@ struct SamouraiMetricTile: View {
                 .font(typography.metricLarge)
                 .foregroundStyle(.primary)
 
-            Text(subtitle)
+            Text(localized(subtitle))
                 .font(typography.callout)
                 .foregroundStyle(SamouraiSurface.mutedText)
         }
@@ -161,33 +172,44 @@ struct SamouraiMetricTile: View {
                 .stroke(SamouraiSurface.borderStrong, lineWidth: 1)
         )
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 struct SamouraiEmptyStateCard: View {
+    @Environment(AppState.self) private var appState
+
     let title: String
     let systemImage: String
     let description: String
 
     var body: some View {
         ContentUnavailableView(
-            title,
+            localized(title),
             systemImage: systemImage,
-            description: Text(description)
+            description: Text(localized(description))
         )
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 12)
         .samouraiCardSurface()
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 struct SamouraiStatusPill: View {
+    @Environment(AppState.self) private var appState
     @Environment(SamouraiTypography.self) private var typography
 
     let text: String
     let tint: Color
 
     var body: some View {
-        Text(text)
+        Text(AppLocalizer.localized(text, language: appState.interfaceLanguage))
             .font(typography.captionEmphasized)
             .foregroundStyle(tint)
             .padding(.horizontal, 10)
@@ -197,6 +219,7 @@ struct SamouraiStatusPill: View {
 }
 
 struct SamouraiDebugPanel: View {
+    @Environment(AppState.self) private var appState
     @Environment(SamouraiTypography.self) private var typography
 
     let context: SamouraiDebugContext
@@ -208,7 +231,13 @@ struct SamouraiDebugPanel: View {
             HStack(spacing: 8) {
                 Image(systemName: "ladybug.fill")
                     .foregroundStyle(Color.orange)
-                Text("Debug — \(context.section.title)")
+                Text(
+                    AppLocalizer.localizedFormat(
+                        "Debug — %@",
+                        language: appState.interfaceLanguage,
+                        context.section.localizedTitle(language: appState.interfaceLanguage)
+                    )
+                )
                     .font(typography.headline)
                 Spacer()
                 if isHistoryEnabled, let historyFilePath {
@@ -241,7 +270,7 @@ struct SamouraiDebugPanel: View {
             if let action = context.action, action.isEmpty == false {
                 HStack(spacing: 6) {
                     Image(systemName: "bolt.fill").foregroundStyle(Color.orange)
-                    Text("Action en cours :")
+                    Text(localized("Action en cours :"))
                         .font(typography.captionEmphasized)
                     Text(action)
                         .font(typography.caption)
@@ -272,11 +301,11 @@ struct SamouraiDebugPanel: View {
     @ViewBuilder
     private func debugColumn(title: String, items: [String], systemImage: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: systemImage)
+            Label(localized(title), systemImage: systemImage)
                 .font(typography.captionEmphasized)
                 .foregroundStyle(.secondary)
             if items.isEmpty {
-                Text("—")
+                Text(localized("—"))
                     .font(typography.caption)
                     .foregroundStyle(.tertiary)
             } else {
@@ -289,6 +318,10 @@ struct SamouraiDebugPanel: View {
                 }
             }
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 

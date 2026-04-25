@@ -25,7 +25,7 @@ struct ConfigurationWorkspaceView: View {
                     title: "Projet actif",
                     subtitle: "Les sous-sections projet utilisent le projet sélectionné dans la liste déroulante du haut."
                 ) {
-                    Text(primaryProjectName ?? "Aucun projet principal défini pour le moment.")
+                    Text(primaryProjectName ?? localized("Aucun projet principal défini pour le moment."))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
@@ -35,14 +35,14 @@ struct ConfigurationWorkspaceView: View {
                 ) {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
-                            Label("Taille du texte", systemImage: "textformat.size")
+                            Label(localized("Taille du texte"), systemImage: "textformat.size")
                             Spacer()
-                            Text(fontSizeLabel)
+                            Text(localized(fontSizeLabelKey))
                                 .foregroundStyle(.secondary)
                                 .font(.caption)
                         }
                         Slider(value: $appState.fontSizeOffset, in: -2...4, step: 1.0) {
-                            Text("Taille")
+                            Text(localized("Taille"))
                         } minimumValueLabel: {
                             Image(systemName: "textformat.size.smaller")
                                 .foregroundStyle(.secondary)
@@ -50,6 +50,33 @@ struct ConfigurationWorkspaceView: View {
                             Image(systemName: "textformat.size.larger")
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                }
+
+                SamouraiSectionCard(
+                    title: "Préférences d'affichage",
+                    subtitle: "Choisit la langue de l'interface et applique le changement sans redémarrage."
+                ) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Label(localized("Langue de l'interface"), systemImage: "globe")
+                            Spacer()
+                            Picker(
+                                localized("Langue de l'interface"),
+                                selection: $appState.interfaceLanguage
+                            ) {
+                                ForEach(AppLanguage.allCases) { language in
+                                    Text(language.localizedDisplayName(in: appState.interfaceLanguage))
+                                        .tag(language)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .frame(width: 180)
+                        }
+
+                        Text(localized("Le changement de langue met à jour l'interface immédiatement."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -66,35 +93,41 @@ struct ConfigurationWorkspaceView: View {
                 ) {
                     VStack(alignment: .leading, spacing: 12) {
                         Toggle(isOn: $appState.isDebugEnabled) {
-                            Label("Mode debug activé", systemImage: "ladybug")
+                            Label(localized("Mode debug activé"), systemImage: "ladybug")
                         }
 
                         Toggle(isOn: $appState.debugKeepFullHistory) {
-                            Label("Garder tout l'historique dans un fichier", systemImage: "tray.and.arrow.down")
+                            Label(localized("Garder tout l'historique dans un fichier"), systemImage: "tray.and.arrow.down")
                         }
                         .disabled(appState.isDebugEnabled == false)
                         .opacity(appState.isDebugEnabled ? 1 : 0.5)
 
                         if appState.isDebugEnabled, appState.debugKeepFullHistory {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("Chemin du fichier de debug")
+                                Text(localized("Chemin du fichier de debug"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 HStack(spacing: 10) {
-                                    TextField("Chemin", text: $appState.debugFilePath)
+                                    TextField(localized("Chemin"), text: $appState.debugFilePath)
                                         .textFieldStyle(.roundedBorder)
                                         .lineLimit(1)
-                                    Button("Choisir…") {
+                                    Button(localized("Choisir…")) {
                                         if let newPath = promptForDebugFilePath(current: appState.debugFilePath) {
                                             appState.debugFilePath = newPath
                                         }
                                     }
-                                    Button("Réinitialiser") {
+                                    Button(localized("Réinitialiser")) {
                                         appState.debugFilePath = AppState.debugDefaultFilePath
                                     }
                                     .buttonStyle(.bordered)
                                 }
-                                Text("Valeur par défaut : \(AppState.debugDefaultFilePath)")
+                                Text(
+                                    AppLocalizer.localizedFormat(
+                                        "Valeur par défaut : %@",
+                                        language: appState.interfaceLanguage,
+                                        AppState.debugDefaultFilePath
+                                    )
+                                )
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
                             }
@@ -109,7 +142,7 @@ struct ConfigurationWorkspaceView: View {
                     Button(role: .destructive) {
                         isShowingDeleteConfirmation = true
                     } label: {
-                        Label("Supprimer toutes les données de l'application", systemImage: "trash")
+                        Label(localized("Supprimer toutes les données de l'application"), systemImage: "trash")
                     }
                     .buttonStyle(.bordered)
                 }
@@ -118,22 +151,22 @@ struct ConfigurationWorkspaceView: View {
         }
         .scrollIndicators(.visible)
         .confirmationDialog(
-            "Supprimer toutes les données ?",
+            localized("Supprimer toutes les données ?"),
             isPresented: $isShowingDeleteConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Supprimer définitivement", role: .destructive) {
+            Button(localized("Supprimer définitivement"), role: .destructive) {
                 store.deleteAllData()
             }
-            Button("Annuler", role: .cancel) {}
+            Button(localized("Annuler"), role: .cancel) {}
         } message: {
-            Text("Toutes les données de l'application seront perdues. Cette action est irréversible. Effectuez une sauvegarde préalable via le module Sauvegardes si vous souhaitez pouvoir les récupérer.")
+            Text(localized("Toutes les données de l'application seront perdues. Cette action est irréversible. Effectuez une sauvegarde préalable via le module Sauvegardes si vous souhaitez pouvoir les récupérer."))
         }
     }
 
     private func promptForDebugFilePath(current: String) -> String? {
         let panel = NSSavePanel()
-        panel.title = "Emplacement du fichier de debug"
+        panel.title = localized("Emplacement du fichier de debug")
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
         panel.allowedContentTypes = [.plainText, .data]
@@ -147,7 +180,7 @@ struct ConfigurationWorkspaceView: View {
         return url.path
     }
 
-    private var fontSizeLabel: String {
+    private var fontSizeLabelKey: String {
         switch Int(appState.fontSizeOffset.rounded()) {
         case ..<(-1): return "Très petit"
         case -1: return "Petit"
@@ -158,6 +191,10 @@ struct ConfigurationWorkspaceView: View {
         default: return "Maximum"
         }
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private struct TableColumnConfigurationPanel: View {
@@ -167,9 +204,9 @@ private struct TableColumnConfigurationPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Picker("Tableau", selection: $selectedTableID) {
+            Picker(localized("Tableau"), selection: $selectedTableID) {
                 ForEach(AppTableID.allCases) { tableID in
-                    Label(tableID.title, systemImage: tableID.systemImage)
+                    Label(localized(tableID.title), systemImage: tableID.systemImage)
                         .tag(tableID)
                 }
             }
@@ -177,9 +214,9 @@ private struct TableColumnConfigurationPanel: View {
             .frame(maxWidth: 360, alignment: .leading)
 
             HStack(spacing: 10) {
-                Label(selectedTableID.title, systemImage: selectedTableID.systemImage)
+                Label(localized(selectedTableID.title), systemImage: selectedTableID.systemImage)
                     .font(.headline)
-                Text(selectedTableID.subtitle)
+                Text(localized(selectedTableID.subtitle))
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(visibleColumnCount) / \(orderedColumns.count)")
@@ -224,14 +261,14 @@ private struct TableColumnConfigurationPanel: View {
                 Button {
                     appState.resetTableColumnConfiguration(tableID: selectedTableID)
                 } label: {
-                    Label("Réinitialiser", systemImage: "arrow.counterclockwise")
+                    Label(localized("Réinitialiser"), systemImage: "arrow.counterclockwise")
                 }
                 .buttonStyle(.bordered)
 
                 Button {
                     appState.showAllTableColumns(tableID: selectedTableID)
                 } label: {
-                    Label("Tout afficher", systemImage: "eye")
+                    Label(localized("Tout afficher"), systemImage: "eye")
                 }
                 .buttonStyle(.bordered)
             }
@@ -253,9 +290,15 @@ private struct TableColumnConfigurationPanel: View {
     private var visibleColumnCount: Int {
         visibleColumnIDs.count
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private struct TableColumnConfigurationRow: View {
+    @Environment(AppState.self) private var appState
+
     let column: AppTableColumnDescriptor
     let isVisible: Bool
     let canHide: Bool
@@ -268,7 +311,7 @@ private struct TableColumnConfigurationRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Toggle(
-                column.title,
+                localized(column.title),
                 isOn: Binding(
                     get: { isVisible },
                     set: { newValue in
@@ -287,16 +330,20 @@ private struct TableColumnConfigurationRow: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(canMoveUp == false)
-                .help("Monter")
+                .help(localized("Monter"))
 
                 Button(action: onMoveDown) {
                     Image(systemName: "chevron.down")
                 }
                 .buttonStyle(.borderless)
                 .disabled(canMoveDown == false)
-                .help("Descendre")
+                .help(localized("Descendre"))
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

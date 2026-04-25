@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SamouraiProjectManager",
+    defaultLocalization: "fr",
     platforms: [
         .macOS(.v15)
     ],
@@ -15,7 +16,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "SamouraiProjectManagerApp",
-            path: "Sources/SamouraiProjectManagerApp"
+            path: "Sources/SamouraiProjectManagerApp",
+            resources: [
+                .process("Resources")
+            ]
         )
     ]
 )

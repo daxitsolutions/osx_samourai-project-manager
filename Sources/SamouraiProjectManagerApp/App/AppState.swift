@@ -9,6 +9,7 @@ final class AppState {
         static let selectedSection = "app.selectedSection"
         static let primaryProjectID = "app.primaryProjectID"
         static let fontSizeOffset = "app.fontSizeOffset"
+        static let interfaceLanguage = "app.interfaceLanguage"
         static let debugEnabled = "app.debug.enabled"
         static let debugHistory = "app.debug.keepHistory"
         static let debugFilePath = "app.debug.filePath"
@@ -45,6 +46,12 @@ final class AppState {
     var fontSizeOffset: Double = 0.0 {
         didSet {
             UserDefaults.standard.set(fontSizeOffset, forKey: StorageKeys.fontSizeOffset)
+        }
+    }
+
+    var interfaceLanguage: AppLanguage = .fr {
+        didSet {
+            UserDefaults.standard.set(interfaceLanguage.rawValue, forKey: StorageKeys.interfaceLanguage)
         }
     }
 
@@ -89,6 +96,10 @@ final class AppState {
         }
     }
 
+    var interfaceLocale: Locale {
+        Locale(identifier: interfaceLanguage.localeIdentifier)
+    }
+
     init() {
         if let rawSection = UserDefaults.standard.string(forKey: StorageKeys.selectedSection),
            let storedSection = AppSection(rawValue: rawSection) {
@@ -104,6 +115,13 @@ final class AppState {
         }
 
         fontSizeOffset = UserDefaults.standard.double(forKey: StorageKeys.fontSizeOffset)
+
+        if let rawLanguage = UserDefaults.standard.string(forKey: StorageKeys.interfaceLanguage),
+           let storedLanguage = AppLanguage(rawValue: rawLanguage) {
+            interfaceLanguage = storedLanguage
+        } else {
+            interfaceLanguage = .fr
+        }
 
         isDebugEnabled = UserDefaults.standard.bool(forKey: StorageKeys.debugEnabled)
         debugKeepFullHistory = UserDefaults.standard.bool(forKey: StorageKeys.debugHistory)
@@ -329,6 +347,14 @@ enum AppSection: String, CaseIterable, Hashable, Identifiable {
             "calendar.badge.checkmark"
         }
     }
+
+    func localizedTitle(language: AppLanguage) -> String {
+        AppLocalizer.localized(title, language: language)
+    }
+
+    func localizedSummary(language: AppLanguage) -> String {
+        AppLocalizer.localized(summary, language: language)
+    }
 }
 
 enum AppSectionGroup: String, CaseIterable, Identifiable {
@@ -356,6 +382,10 @@ enum AppSectionGroup: String, CaseIterable, Identifiable {
         case .hidden:
             "Masqué"
         }
+    }
+
+    func localizedTitle(language: AppLanguage) -> String {
+        AppLocalizer.localized(title, language: language)
     }
 
     var sections: [AppSection] {

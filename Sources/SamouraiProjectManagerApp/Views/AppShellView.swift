@@ -62,9 +62,9 @@ struct AppShellView: View {
 
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 2) {
-                    Text(currentSection.title)
+                    Text(currentSection.localizedTitle(language: appState.interfaceLanguage))
                         .font(.headline)
-                    Text(toolbarSubtitle)
+                    Text(localizedToolbarSubtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -79,7 +79,7 @@ struct AppShellView: View {
         ) { result in
             switch result {
             case .success:
-                backupFeedbackMessage = "Sauvegarde exportée avec succès."
+                backupFeedbackMessage = localized("Sauvegarde exportée avec succès.")
             case .failure(let error):
                 backupFeedbackMessage = error.localizedDescription
             }
@@ -91,19 +91,19 @@ struct AppShellView: View {
         ) { result in
             handleBackupImport(result)
         }
-        .alert("Action impossible", isPresented: Binding(
+        .alert(localized("Action impossible"), isPresented: Binding(
             get: { store.lastErrorMessage != nil },
             set: { if $0 == false { store.lastErrorMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(localized("OK"), role: .cancel) {}
         } message: {
-            Text(store.lastErrorMessage ?? "Une erreur inconnue s'est produite.")
+            Text(store.lastErrorMessage ?? localized("Une erreur inconnue s'est produite."))
         }
-        .alert("Sauvegarde / restauration", isPresented: Binding(
+        .alert(localized("Sauvegarde / restauration"), isPresented: Binding(
             get: { backupFeedbackMessage != nil },
             set: { if $0 == false { backupFeedbackMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(localized("OK"), role: .cancel) {}
         } message: {
             Text(backupFeedbackMessage ?? "")
         }
@@ -127,18 +127,18 @@ struct AppShellView: View {
 
     private var sidebarView: some View {
         List {
-            Section(AppSectionGroup.portfolio.title) {
+            Section(AppSectionGroup.portfolio.localizedTitle(language: appState.interfaceLanguage)) {
                 sidebarButton(for: .projects)
             }
 
-            Section(AppSectionGroup.project.title) {
+            Section(AppSectionGroup.project.localizedTitle(language: appState.interfaceLanguage)) {
                 if let primaryProjectName {
                     Text(primaryProjectName)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .textCase(.none)
                 } else {
-                    Text("Choisir un projet en haut de page")
+                    Text(localized("Choisir un projet en haut de page"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .textCase(.none)
@@ -149,19 +149,19 @@ struct AppShellView: View {
                 }
             }
 
-            Section(AppSectionGroup.directory.title) {
+            Section(AppSectionGroup.directory.localizedTitle(language: appState.interfaceLanguage)) {
                 sidebarButton(for: .resourceDirectory)
             }
 
-            Section(AppSectionGroup.configuration.title) {
+            Section(AppSectionGroup.configuration.localizedTitle(language: appState.interfaceLanguage)) {
                 sidebarButton(for: .configuration)
             }
 
-            Section(AppSectionGroup.backups.title) {
+            Section(AppSectionGroup.backups.localizedTitle(language: appState.interfaceLanguage)) {
                 sidebarButton(for: .backups)
             }
         }
-        .navigationTitle("Samourai")
+        .navigationTitle(localized("Samourai"))
         .navigationSplitViewColumnWidth(min: 248, ideal: 284, max: 320)
         .listStyle(.sidebar)
         .scrollIndicators(.visible)
@@ -227,11 +227,11 @@ struct AppShellView: View {
         }
     }
 
-    private var toolbarSubtitle: String {
+    private var localizedToolbarSubtitle: String {
         if currentSection.showsProjectPicker, let primaryProjectName {
             return primaryProjectName
         }
-        return currentSection.summary
+        return currentSection.localizedSummary(language: appState.interfaceLanguage)
     }
 
     private var projectSections: [AppSection] {
@@ -260,15 +260,15 @@ struct AppShellView: View {
     @ViewBuilder
     private var projectScopePicker: some View {
         HStack(spacing: 8) {
-            Label("Projet", systemImage: "target")
+            Label(localized("Projet"), systemImage: "target")
                 .foregroundStyle(.secondary)
 
             if store.projects.isEmpty {
-                Text("Aucun projet")
+                Text(localized("Aucun projet"))
                     .foregroundStyle(.secondary)
             } else {
                 Picker(
-                    "Projet principal",
+                    localized("Projet principal"),
                     selection: Binding(
                         get: {
                             appState.resolvedPrimaryProjectID(in: store) ?? store.projects[0].id
@@ -290,7 +290,7 @@ struct AppShellView: View {
         do {
             let data = try store.exportBackupData()
             backupDocument = SamouraiBackupDocument(data: data)
-            backupFilename = "samourai-backup-\(Date.now.formatted(.dateTime.year().month().day()))"
+            backupFilename = localized("samourai-backup") + "-\(Date.now.formatted(.dateTime.year().month().day()))"
             isShowingBackupExporter = true
         } catch {
             backupFeedbackMessage = error.localizedDescription
@@ -315,10 +315,18 @@ struct AppShellView: View {
         do {
             let data = try Data(contentsOf: fileURL)
             let restoreResult = try store.restoreBackupData(data)
-            backupFeedbackMessage = """
-            Restauration terminée : \(restoreResult.summary)
-            Backup exporté le \(restoreResult.exportedAt.formatted(date: .abbreviated, time: .shortened)) depuis la version \(restoreResult.sourceAppVersion).
-            """
+            let restorationSummary = AppLocalizer.localizedFormat(
+                "Restauration terminée : %@",
+                language: appState.interfaceLanguage,
+                restoreResult.summary
+            )
+            let restorationMetadata = AppLocalizer.localizedFormat(
+                "Backup exporté le %@ depuis la version %@.",
+                language: appState.interfaceLanguage,
+                restoreResult.exportedAt.formatted(date: .abbreviated, time: .shortened),
+                restoreResult.sourceAppVersion
+            )
+            backupFeedbackMessage = "\(restorationSummary)\n\(restorationMetadata)"
         } catch {
             backupFeedbackMessage = error.localizedDescription
         }
@@ -354,9 +362,15 @@ struct AppShellView: View {
         }
         appState.selectedProjectID = firstProjectID
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private struct AppSidebarSectionRow: View {
+    @Environment(AppState.self) private var appState
+
     let section: AppSection
     let isSelected: Bool
 
@@ -366,7 +380,7 @@ private struct AppSidebarSectionRow: View {
                 .frame(width: 18)
                 .foregroundStyle(SamouraiSurface.accent)
 
-            Text(section.title)
+            Text(section.localizedTitle(language: appState.interfaceLanguage))
                 .font(.body.weight(.medium))
 
             Spacer(minLength: 8)

@@ -13,7 +13,12 @@
       "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager show --stat 7d8330a)",
       "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager log --all --oneline)",
       "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager show 605e7fe --stat)",
-      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager show 605e7fe -- '*SamouraiStore.swift' '*RiskRegisterView.swift')"
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager show 605e7fe -- '*SamouraiStore.swift' '*RiskRegisterView.swift')",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager log --all --oneline -- '*RiskRegisterView.swift')",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager status)",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager diff --stat)",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager diff Sources/SamouraiProjectManagerApp/Views/Actions/ActionWorkspaceView.swift)",
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager checkout -- Sources/SamouraiProjectManagerApp/Views/Actions/ActionWorkspaceView.swift)"
     ]
   }
 }

@@ -16,6 +16,19 @@ struct ActionWorkspaceView: View {
     @State private var sortOrder: [KeyPathComparator<ProjectAction>] = [
         .init(\.dueDate, order: .reverse)
     ]
+    @State private var expandedActionIDs: Set<UUID> = []
+
+    private enum Col {
+        static let done: CGFloat = 34
+        static let status: CGFloat = 145
+        static let flow: CGFloat = 170
+        static let priority: CGFloat = 120
+        static let activity: CGFloat = 200
+        static let project: CGFloat = 200
+        static let dueDate: CGFloat = 130
+        static let createdAt: CGFloat = 170
+        static let expand: CGFloat = 28
+    }
 
     var body: some View {
         @Bindable var appState = appState
@@ -163,45 +176,112 @@ struct ActionWorkspaceView: View {
         .onChange(of: store.actions.map(\.id)) { _, actionIDs in
             let existingIDs = Set(actionIDs)
             selectedActionIDs = selectedActionIDs.intersection(existingIDs)
+            expandedActionIDs = expandedActionIDs.intersection(existingIDs)
             appState.selectedActionID = selectedActionIDs.singleSelection
         }
     }
 
     private var actionsTable: some View {
-        Table(filteredActions, selection: $selectedActionIDs, sortOrder: $sortOrder) {
-            TableColumnForEach(activeTableColumns) { column in
-                actionTableColumn(column)
+        VStack(spacing: 0) {
+            actionsHeader
+            Divider()
+            List(filteredActions, selection: $selectedActionIDs) { action in
+                actionRow(for: action)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                    .listRowSeparator(.visible)
             }
+            .listStyle(.inset)
+            .focusable()
+            .onKeyPress(.space) {
+                guard let id = selectedActionIDs.singleSelection else { return .ignored }
+                withAnimation(.easeInOut(duration: 0.18)) { toggleExpansion(id) }
+                return .handled
+            }
+            .scrollIndicators(.visible)
         }
-        .scrollIndicators(.visible)
     }
 
-    @TableColumnBuilder<ProjectAction, KeyPathComparator<ProjectAction>>
-    private func actionTableColumn(_ column: ActionTableColumn) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
+    @ViewBuilder
+    private var actionsHeader: some View {
+        HStack(spacing: 8) {
+            ForEach(activeTableColumns) { column in
+                actionHeaderCell(for: column)
+            }
+            Spacer().frame(width: Col.expand)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    @ViewBuilder
+    private func actionHeaderCell(for column: ActionTableColumn) -> some View {
         switch column {
         case .done:
-            actionDoneColumn()
+            Spacer().frame(width: Col.done)
         case .status:
-            actionStatusColumn(label: column.label)
+            ActionSortHeader(label: column.label, comparator: .init(\.statusSortKey), sortOrder: $sortOrder)
+                .frame(width: Col.status, alignment: .leading)
         case .flow:
-            actionFlowColumn(label: column.label)
+            ActionSortHeader(label: column.label, comparator: .init(\.flowSortKey), sortOrder: $sortOrder)
+                .frame(width: Col.flow, alignment: .leading)
         case .priority:
-            actionPriorityColumn(label: column.label)
+            ActionSortHeader(label: column.label, comparator: .init(\.prioritySortWeight, order: .reverse), sortOrder: $sortOrder)
+                .frame(width: Col.priority, alignment: .leading)
         case .title:
-            actionTitleColumn(label: column.label)
+            ActionSortHeader(label: column.label, comparator: .init(\.displayTitle), sortOrder: $sortOrder)
+                .frame(maxWidth: .infinity, alignment: .leading)
         case .activity:
-            actionActivityColumn(label: column.label)
+            ActionSortHeader(label: column.label, comparator: .init(\.activityIDSortKey), sortOrder: $sortOrder)
+                .frame(width: Col.activity, alignment: .leading)
         case .project:
-            actionProjectColumn(label: column.label)
+            ActionSortHeader(label: column.label, comparator: .init(\.projectIDSortKey), sortOrder: $sortOrder)
+                .frame(width: Col.project, alignment: .leading)
         case .dueDate:
-            actionDueDateColumn(label: column.label)
+            ActionSortHeader(label: column.label, comparator: .init(\.dueDate, order: .reverse), sortOrder: $sortOrder)
+                .frame(width: Col.dueDate, alignment: .leading)
         case .createdAt:
-            actionCreatedAtColumn(label: column.label)
+            ActionSortHeader(label: column.label, comparator: .init(\.createdAt, order: .reverse), sortOrder: $sortOrder)
+                .frame(width: Col.createdAt, alignment: .leading)
         }
     }
 
-    private func actionDoneColumn() -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
-        TableColumn("", value: \.isDoneSortKey) { action in
+    @ViewBuilder
+    private func actionRow(for action: ProjectAction) -> some View {
+        let isExpanded = expandedActionIDs.contains(action.id)
+
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                ForEach(activeTableColumns) { column in
+                    actionRowCell(for: column, action: action)
+                }
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { toggleExpansion(action.id) }
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down.circle.fill" : "chevron.right.circle")
+                        .foregroundStyle(isExpanded ? Color.accentColor : Color.secondary)
+                        .font(.system(size: 13))
+                }
+                .buttonStyle(.plain)
+                .frame(width: Col.expand)
+                .help(historyHint(for: action))
+            }
+            .frame(minHeight: 32)
+
+            if isExpanded {
+                ActionHistoryInlinePanel(actionID: action.id)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity
+                    ))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func actionRowCell(for column: ActionTableColumn, action: ProjectAction) -> some View {
+        switch column {
+        case .done:
             Toggle(
                 "Terminée",
                 isOn: Binding(
@@ -211,12 +291,9 @@ struct ActionWorkspaceView: View {
             )
             .labelsHidden()
             .toggleStyle(.checkbox)
-        }
-        .width(34)
-    }
+            .frame(width: Col.done)
 
-    private func actionStatusColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
-        TableColumn(label, value: \.statusSortKey) { action in
+        case .status:
             Picker(
                 "Statut",
                 selection: Binding(
@@ -236,19 +313,14 @@ struct ActionWorkspaceView: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-        }
-        .width(min: 130, ideal: 145)
-    }
+            .frame(width: Col.status, alignment: .leading)
 
-    private func actionFlowColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
-        TableColumn(label, value: \.flowSortKey) { action in
+        case .flow:
             Label(action.flow.label, systemImage: action.flow.systemImage)
-        }
-        .width(min: 160, ideal: 170)
-    }
+                .frame(width: Col.flow, alignment: .leading)
+                .lineLimit(1)
 
-    private func actionPriorityColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
-        TableColumn(label, value: \.prioritySortWeight) { action in
+        case .priority:
             Picker(
                 "Priorité",
                 selection: Binding(
@@ -272,12 +344,9 @@ struct ActionWorkspaceView: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-        }
-        .width(min: 110, ideal: 120)
-    }
+            .frame(width: Col.priority, alignment: .leading)
 
-    private func actionTitleColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
-        TableColumn(label, value: \.displayTitle) { action in
+        case .title:
             TextField(
                 "Titre",
                 text: Binding(
@@ -297,55 +366,61 @@ struct ActionWorkspaceView: View {
             )
             .textFieldStyle(.plain)
             .fontWeight(.medium)
-        }
-        .width(min: 220, ideal: 360)
-    }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-    private func actionActivityColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
-        TableColumn(label, value: \.activityIDSortKey) { action in
-            if let projectID = action.projectID {
-                Picker(
-                    "Activité",
-                    selection: Binding(
-                        get: { action.activityID },
-                        set: { store.assignActionToActivity(actionID: action.id, activityID: $0) }
-                    )
-                ) {
-                    Text("Aucune").tag(Optional<UUID>.none)
-                    ForEach(store.activities(for: projectID)) { activity in
-                        Text(activity.displayTitle).tag(Optional(activity.id))
+        case .activity:
+            Group {
+                if let projectID = action.projectID {
+                    Picker(
+                        "Activité",
+                        selection: Binding(
+                            get: { action.activityID },
+                            set: { store.assignActionToActivity(actionID: action.id, activityID: $0) }
+                        )
+                    ) {
+                        Text("Aucune").tag(Optional<UUID>.none)
+                        ForEach(store.activities(for: projectID)) { activity in
+                            Text(activity.displayTitle).tag(Optional(activity.id))
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                } else {
+                    Text("-")
+                        .foregroundStyle(.secondary)
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-            } else {
-                Text("-")
-                    .foregroundStyle(.secondary)
             }
-        }
-        .width(min: 150, ideal: 220)
-    }
+            .frame(width: Col.activity, alignment: .leading)
 
-    private func actionProjectColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
-        TableColumn(label, value: \.projectIDSortKey) { action in
+        case .project:
             Text(store.projectName(for: action.projectID))
-        }
-        .width(min: 150, ideal: 220)
-    }
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(width: Col.project, alignment: .leading)
 
-    private func actionDueDateColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
-        TableColumn(label, value: \.dueDate) { action in
+        case .dueDate:
             Text(action.dueDate.formatted(date: .abbreviated, time: .omitted))
-        }
-        .width(min: 120, ideal: 130)
-    }
+                .frame(width: Col.dueDate, alignment: .leading)
 
-    private func actionCreatedAtColumn(label: String) -> some TableColumnContent<ProjectAction, KeyPathComparator<ProjectAction>> {
-        TableColumn(label, value: \.createdAt) { action in
+        case .createdAt:
             Text(action.createdAt.formatted(date: .abbreviated, time: .shortened))
                 .foregroundStyle(.secondary)
+                .frame(width: Col.createdAt, alignment: .leading)
         }
-        .width(min: 150, ideal: 170)
+    }
+
+    private func toggleExpansion(_ id: UUID) {
+        if expandedActionIDs.contains(id) {
+            expandedActionIDs.remove(id)
+        } else {
+            expandedActionIDs.insert(id)
+        }
+    }
+
+    private func historyHint(for action: ProjectAction) -> String {
+        let count = action.historyEntries.count
+        if count == 0 { return "Aucune entrée d'historique" }
+        return "Afficher le journal (\(count) entrée\(count > 1 ? "s" : ""))"
     }
 
     private var activeTableColumns: [ActionTableColumn] {
@@ -453,6 +528,89 @@ private extension ProjectAction {
     var statusSortKey: String { status.rawValue }
     var activityIDSortKey: String { activityID?.uuidString ?? "" }
     var projectIDSortKey: String { projectID?.uuidString ?? "" }
+}
+
+private struct ActionSortHeader: View {
+    let label: String
+    let comparator: KeyPathComparator<ProjectAction>
+    @Binding var sortOrder: [KeyPathComparator<ProjectAction>]
+
+    private var isActive: Bool {
+        sortOrder.first?.keyPath == comparator.keyPath
+    }
+
+    var body: some View {
+        Button {
+            if isActive, var first = sortOrder.first {
+                first.order = first.order == .forward ? .reverse : .forward
+                sortOrder = [first]
+            } else {
+                sortOrder = [comparator]
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text(label)
+                    .font(.caption.weight(.medium))
+                if isActive {
+                    Image(systemName: sortOrder.first?.order == .forward ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                }
+            }
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ActionHistoryInlinePanel: View {
+    @Environment(SamouraiStore.self) private var store
+    let actionID: UUID
+
+    var body: some View {
+        let entries = store.action(with: actionID)?.historyEntriesChronological ?? []
+
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
+                .padding(.top, 4)
+
+            if entries.isEmpty {
+                Text("Aucune entrée d'historique pour cette action.")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 4)
+            } else {
+                ForEach(entries) { entry in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: entry.kind.symbolName)
+                            .font(.caption)
+                            .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
+                            .frame(width: 14)
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(entry.text)
+                                .font(.callout)
+                                .fixedSize(horizontal: false, vertical: true)
+                            HStack(spacing: 4) {
+                                Text(entry.kind.label)
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                                Text("·")
+                                    .foregroundStyle(.tertiary)
+                                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 3)
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 10)
+    }
 }
 
 private struct ActionEditorSheet: View {

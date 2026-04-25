@@ -28,7 +28,7 @@ struct DecisionWorkspaceView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Registre des décisions")
                             .font(.title2.weight(.semibold))
-                        Text("\(filteredDecisions.count) / \(scopedDecisions.count) décision(s)")
+                        Text(appState.localizedFormat("%d / %d décision(s)", filteredDecisions.count, scopedDecisions.count))
                             .foregroundStyle(.secondary)
                     }
 
@@ -48,19 +48,21 @@ struct DecisionWorkspaceView: View {
                             isShowingDeleteConfirmation = true
                         } label: {
                             Label(
-                                selectedDecisionIDs.count > 1 ? "Supprimer (\(selectedDecisionIDs.count))" : "Supprimer",
+                                selectedDecisionIDs.count > 1
+                                    ? appState.localizedFormat("Supprimer (%d)", selectedDecisionIDs.count)
+                                    : appState.localized("Supprimer"),
                                 systemImage: "trash"
                             )
                         }
                     }
 
                     Menu {
-                        Button("Exporter la vue (\(filteredDecisions.count))") {
+                        Button(appState.localizedFormat("Exporter la vue (%d)", filteredDecisions.count)) {
                             prepareExport(decisions: filteredDecisions, filenameSuffix: "vue")
                         }
                         .disabled(filteredDecisions.isEmpty)
 
-                        Button("Exporter la sélection (\(selectedDecisionsForExport.count))") {
+                        Button(appState.localizedFormat("Exporter la sélection (%d)", selectedDecisionsForExport.count)) {
                             prepareExport(decisions: selectedDecisionsForExport, filenameSuffix: "selection")
                         }
                         .disabled(selectedDecisionsForExport.isEmpty)
@@ -104,14 +106,14 @@ struct DecisionWorkspaceView: View {
                         TableColumnForEach(activeTableColumns) { column in
                             switch column {
                             case .reference:
-                                TableColumn(column.label, value: \.sequenceNumber) { decision in
+                                TableColumn(appState.localized(column.label), value: \.sequenceNumber) { decision in
                                     Text("D-\(decision.sequenceNumber)")
                                         .monospacedDigit()
                                 }
                                 .width(min: 70, ideal: 80)
 
                             case .status:
-                                TableColumn(column.label, value: \.statusSortKey) { decision in
+                                TableColumn(appState.localized(column.label), value: \.statusSortKey) { decision in
                                     Picker(
                                         "Statut",
                                         selection: Binding(
@@ -126,13 +128,13 @@ struct DecisionWorkspaceView: View {
                                                     meetingIDs: decision.meetingIDs,
                                                     eventIDs: decision.eventIDs,
                                                     impactedResourceIDs: decision.impactedResourceIDs,
-                                                    changeSummary: "Mise à jour rapide du statut"
+                                                    changeSummary: appState.localized("Mise à jour rapide du statut")
                                                 )
                                             }
                                         )
                                     ) {
                                         ForEach(DecisionStatus.allCases) { status in
-                                            Text(status.shortLabel).tag(status)
+                                            Text(status.shortLabel.appLocalized(language: appState.interfaceLanguage)).tag(status)
                                         }
                                     }
                                     .labelsHidden()
@@ -141,7 +143,7 @@ struct DecisionWorkspaceView: View {
                                 .width(min: 130, ideal: 160)
 
                             case .title:
-                                TableColumn(column.label, value: \.displayTitle) { decision in
+                                TableColumn(appState.localized(column.label), value: \.displayTitle) { decision in
                                     TextField(
                                         "Décision",
                                         text: Binding(
@@ -156,7 +158,7 @@ struct DecisionWorkspaceView: View {
                                                     meetingIDs: decision.meetingIDs,
                                                     eventIDs: decision.eventIDs,
                                                     impactedResourceIDs: decision.impactedResourceIDs,
-                                                    changeSummary: "Mise à jour rapide du titre"
+                                                    changeSummary: appState.localized("Mise à jour rapide du titre")
                                                 )
                                             }
                                         )
@@ -167,31 +169,31 @@ struct DecisionWorkspaceView: View {
                                 .width(min: 240, ideal: 340)
 
                             case .project:
-                                TableColumn(column.label, value: \.projectIDSortKey) { decision in
+                                TableColumn(appState.localized(column.label), value: \.projectIDSortKey) { decision in
                                     Text(store.projectName(for: decision.projectID))
                                 }
                                 .width(min: 150, ideal: 220)
 
                             case .meetings:
-                                TableColumn(column.label, value: \.meetingCount) { decision in
+                                TableColumn(appState.localized(column.label), value: \.meetingCount) { decision in
                                     Text("\(decision.meetingIDs.count)")
                                 }
                                 .width(min: 90, ideal: 110)
 
                             case .events:
-                                TableColumn(column.label, value: \.eventCount) { decision in
+                                TableColumn(appState.localized(column.label), value: \.eventCount) { decision in
                                     Text("\(decision.eventIDs.count)")
                                 }
                                 .width(min: 100, ideal: 120)
 
                             case .revisions:
-                                TableColumn(column.label, value: \.revisionCount) { decision in
+                                TableColumn(appState.localized(column.label), value: \.revisionCount) { decision in
                                     Text("\(decision.history.count)")
                                 }
                                 .width(min: 90, ideal: 110)
 
                             case .comments:
-                                TableColumn(column.label, value: \.commentCount) { decision in
+                                TableColumn(appState.localized(column.label), value: \.commentCount) { decision in
                                     Text("\(decision.comments.count)")
                                 }
                                 .width(min: 110, ideal: 130)
@@ -238,9 +240,11 @@ struct DecisionWorkspaceView: View {
             }
         } message: {
             Text(
-                selectedDecisionIDs.count > 1
-                ? "Ces décisions seront retirées du registre de gouvernance."
-                : "La décision sera retirée du registre de gouvernance."
+                appState.localized(
+                    selectedDecisionIDs.count > 1
+                    ? "Ces décisions seront retirées du registre de gouvernance."
+                    : "La décision sera retirée du registre de gouvernance."
+                )
             )
         }
         .alert("Commentaire", isPresented: Binding(
@@ -249,7 +253,7 @@ struct DecisionWorkspaceView: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(commentValidationMessage ?? "")
+            Text(appState.localized(commentValidationMessage ?? ""))
         }
         .onChange(of: selectedDecisionIDs) { _, newSelection in
             appState.selectedDecisionID = newSelection.singleSelection
@@ -290,8 +294,8 @@ struct DecisionWorkspaceView: View {
             var searchableValues: [String] = [
                 decision.title,
                 decision.details,
-                decision.status.label,
-                decision.status.shortLabel,
+                decision.status.label.appLocalized(language: appState.interfaceLanguage),
+                decision.status.shortLabel.appLocalized(language: appState.interfaceLanguage),
                 "D-\(decision.sequenceNumber)",
                 store.projectName(for: decision.projectID)
             ]
@@ -334,10 +338,11 @@ struct DecisionWorkspaceView: View {
     private func prepareExport(decisions: [ProjectDecision], filenameSuffix: String) {
         guard decisions.isEmpty == false else { return }
         let headers = ["Reference", "Statut", "Decision", "Projet", "Revisions", "Commentaires"]
+            .map { appState.localized($0) }
         let rows = decisions.map { decision in
             [
                 "D-\(decision.sequenceNumber)",
-                decision.status.shortLabel,
+                decision.status.shortLabel.appLocalized(language: appState.interfaceLanguage),
                 decision.displayTitle,
                 store.projectName(for: decision.projectID),
                 String(decision.history.count),
@@ -413,7 +418,7 @@ private struct DecisionEditorSheet: View {
 
                     Picker("Statut", selection: $status) {
                         ForEach(DecisionStatus.allCases) { value in
-                            Text(value.label).tag(value)
+                            Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
                         }
                     }
 
@@ -455,7 +460,7 @@ private struct DecisionEditorSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle(decision == nil ? "Nouvelle décision" : "Modifier la décision")
+            .navigationTitle(appState.localized(decision == nil ? "Nouvelle décision" : "Modifier la décision"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
@@ -464,7 +469,7 @@ private struct DecisionEditorSheet: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(decision == nil ? "Créer" : "Enregistrer") {
+                    Button(appState.localized(decision == nil ? "Créer" : "Enregistrer")) {
                         save()
                     }
                 }
@@ -475,7 +480,7 @@ private struct DecisionEditorSheet: View {
             )) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text(validationMessage ?? "")
+                Text(appState.localized(validationMessage ?? ""))
             }
         }
         .frame(minWidth: 760, minHeight: 780)
@@ -572,11 +577,11 @@ private struct DecisionEditorSheet: View {
     @ViewBuilder
     private func meetingPickerSection() -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Réunions liées")
+            Text(appState.localized("Réunions liées"))
                 .font(.headline)
 
             if store.meetings.isEmpty {
-                Text("Aucune réunion disponible")
+                Text(appState.localized("Aucune réunion disponible"))
                     .foregroundStyle(.secondary)
             } else {
                 TextField("Rechercher une réunion…", text: $meetingSearchText)
@@ -603,16 +608,16 @@ private struct DecisionEditorSheet: View {
     @ViewBuilder
     private func resourcePickerSection() -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Ressources impactées")
+            Text(appState.localized("Ressources impactées"))
                 .font(.headline)
 
             TextField("Rechercher une ressource…", text: $resourceSearchText)
                 .textFieldStyle(.roundedBorder)
 
             if visibleResources.isEmpty {
-                Text(resourceSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                Text(appState.localized(resourceSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? "Saisissez un nom ou un rôle pour rechercher"
-                    : "Aucun résultat")
+                    : "Aucun résultat"))
                     .foregroundStyle(.secondary)
                     .font(.caption)
             } else {
@@ -641,11 +646,11 @@ private struct DecisionEditorSheet: View {
         label: @escaping (Item) -> String
     ) -> some View where Item.ID == UUID {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
+            Text(appState.localized(title))
                 .font(.headline)
 
             if items.isEmpty {
-                Text("Aucun élément disponible")
+                Text(appState.localized("Aucun élément disponible"))
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(items) { item in

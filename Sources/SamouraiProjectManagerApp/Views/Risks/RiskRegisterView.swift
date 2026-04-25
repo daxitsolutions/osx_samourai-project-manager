@@ -39,19 +39,19 @@ struct RiskRegisterView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Registre global des risques")
                             .font(.title2.weight(.semibold))
-                        Text("\(filteredRisks.count) / \(scopedRisks.count) risque(s) suivi(s)")
+                        Text(appState.localizedFormat("%d / %d risque(s) suivi(s)", filteredRisks.count, scopedRisks.count))
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
                     Menu {
-                        Button("Exporter la vue (\(filteredRisks.count))") {
+                        Button(appState.localizedFormat("Exporter la vue (%d)", filteredRisks.count)) {
                             prepareExport(risks: filteredRisks, filenameSuffix: "vue")
                         }
                         .disabled(filteredRisks.isEmpty)
 
-                        Button("Exporter la sélection (\(selectedRisksForExport.count))") {
+                        Button(appState.localizedFormat("Exporter la sélection (%d)", selectedRisksForExport.count)) {
                             prepareExport(risks: selectedRisksForExport, filenameSuffix: "selection")
                         }
                         .disabled(selectedRisksForExport.isEmpty)
@@ -73,7 +73,9 @@ struct RiskRegisterView: View {
                             isShowingDeleteConfirmation = true
                         } label: {
                             Label(
-                                selectedRiskIDs.count > 1 ? "Supprimer (\(selectedRiskIDs.count))" : "Supprimer",
+                                selectedRiskIDs.count > 1
+                                    ? appState.localizedFormat("Supprimer (%d)", selectedRiskIDs.count)
+                                    : appState.localized("Supprimer"),
                                 systemImage: "trash"
                             )
                         }
@@ -176,7 +178,7 @@ struct RiskRegisterView: View {
                 isShowingDeleteConfirmation = false
             }
         } message: {
-            Text(selectedRiskIDs.count > 1 ? "Les risques sélectionnés seront supprimés." : "Le risque sélectionné sera supprimé.")
+            Text(appState.localized(selectedRiskIDs.count > 1 ? "Les risques sélectionnés seront supprimés." : "Le risque sélectionné sera supprimé."))
         }
         .alert("Import des risques", isPresented: Binding(
             get: { importFeedbackMessage != nil },
@@ -184,7 +186,7 @@ struct RiskRegisterView: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(importFeedbackMessage ?? "")
+            Text(appState.localized(importFeedbackMessage ?? ""))
         }
         .onChange(of: selectedRiskIDs) { _, newSelection in
             appState.selectedRiskID = newSelection.singleSelection
@@ -300,7 +302,7 @@ struct RiskRegisterView: View {
                     )
                 ) {
                     ForEach(RiskSeverity.allCases) { severity in
-                        Text(severity.label).tag(severity)
+                        Text(severity.label.appLocalized(language: appState.interfaceLanguage)).tag(severity)
                     }
                 }
                 .labelsHidden()
@@ -393,9 +395,9 @@ struct RiskRegisterView: View {
                     appState.openRisk(riskID)
                 }
 
-                importFeedbackMessage = "Import terminé : \(importResult.summary)"
+                importFeedbackMessage = appState.localizedFormat("Import terminé : %@", importResult.summary)
             } catch is CancellationError {
-                importFeedbackMessage = "Import annulé."
+                importFeedbackMessage = appState.localized("Import annulé.")
             } catch {
                 importFeedbackMessage = error.localizedDescription
             }
@@ -425,7 +427,7 @@ struct RiskRegisterView: View {
                 entry.risk.displayTitle,
                 entry.risk.displayOwner,
                 entry.risk.displayStatus,
-                entry.risk.severity.label,
+                entry.risk.severity.label.appLocalized(language: appState.interfaceLanguage),
                 entry.projectName,
                 entry.risk.projectNames ?? "",
                 entry.risk.externalID ?? ""
@@ -445,13 +447,14 @@ struct RiskRegisterView: View {
     private func prepareExport(risks: [RiskEntry], filenameSuffix: String) {
         guard risks.isEmpty == false else { return }
         let headers = ["ID", "Titre", "Projet", "Owner", "Severite", "Statut", "Score"]
+            .map { appState.localized($0) }
         let rows = risks.map { entry in
             [
                 entry.risk.externalID ?? "",
                 entry.risk.displayTitle,
                 entry.risk.projectNames ?? entry.projectName,
                 entry.risk.displayOwner,
-                entry.risk.severity.label,
+                entry.risk.severity.label.appLocalized(language: appState.interfaceLanguage),
                 entry.risk.displayStatus,
                 scoreLabel(for: entry.risk.score0to10)
             ]
@@ -470,6 +473,8 @@ struct RiskRegisterView: View {
 // MARK: - Sort header
 
 private struct RiskSortHeader: View {
+    @Environment(AppState.self) private var appState
+
     let label: String
     let comparator: KeyPathComparator<RiskEntry>
     @Binding var sortOrder: [KeyPathComparator<RiskEntry>]
@@ -488,7 +493,7 @@ private struct RiskSortHeader: View {
             }
         } label: {
             HStack(spacing: 3) {
-                Text(label)
+                Text(label.appLocalized(language: appState.interfaceLanguage))
                     .font(.caption.weight(.medium))
                 if isActive {
                     Image(systemName: sortOrder.first?.order == .forward ? "chevron.up" : "chevron.down")
@@ -504,6 +509,7 @@ private struct RiskSortHeader: View {
 // MARK: - Inline history panel
 
 private struct RiskHistoryInlinePanel: View {
+    @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
     let riskID: UUID
 
@@ -515,7 +521,7 @@ private struct RiskHistoryInlinePanel: View {
                 .padding(.top, 4)
 
             if entries.isEmpty {
-                Text("Aucune entrée d'historique pour ce risque.")
+                Text(appState.localized("Aucune entrée d'historique pour ce risque."))
                     .font(.callout)
                     .foregroundStyle(.tertiary)
                     .padding(.vertical, 10)
@@ -532,7 +538,7 @@ private struct RiskHistoryInlinePanel: View {
                             Text(entry.text)
                                 .font(.callout)
                             HStack(spacing: 4) {
-                                Text(entry.kind.label)
+                                Text(entry.kind.label.appLocalized(language: appState.interfaceLanguage))
                                     .font(.caption2.weight(.medium))
                                     .foregroundStyle(.secondary)
                                 Text("·")
@@ -570,6 +576,8 @@ private extension RiskEntry {
 // MARK: - Status badge & menu
 
 struct RiskStatusBadge: View {
+    @Environment(AppState.self) private var appState
+
     let status: RiskStatus
 
     var body: some View {
@@ -577,7 +585,7 @@ struct RiskStatusBadge: View {
             Circle()
                 .fill(status.tintColor)
                 .frame(width: 8, height: 8)
-            Text(status.label)
+            Text(status.label.appLocalized(language: appState.interfaceLanguage))
                 .font(.caption.weight(.medium))
                 .foregroundStyle(status.tintColor)
                 .lineLimit(1)
@@ -594,6 +602,8 @@ struct RiskStatusBadge: View {
 }
 
 struct RiskStatusMenu: View {
+    @Environment(AppState.self) private var appState
+
     let status: RiskStatus
     let onChange: (RiskStatus) -> Void
 
@@ -607,7 +617,7 @@ struct RiskStatusMenu: View {
                         Circle()
                             .fill(option.tintColor)
                             .frame(width: 10, height: 10)
-                        Text(option.label)
+                        Text(option.label.appLocalized(language: appState.interfaceLanguage))
                         if option == status {
                             Spacer()
                             Image(systemName: "checkmark")
@@ -681,7 +691,7 @@ private struct ManualRiskEditorSheet: View {
 
                 Picker("Sévérité", selection: $severity) {
                     ForEach(RiskSeverity.allCases) { s in
-                        Text(s.label).tag(s)
+                        Text(s.label.appLocalized(language: appState.interfaceLanguage)).tag(s)
                     }
                 }
 
@@ -691,7 +701,7 @@ private struct ManualRiskEditorSheet: View {
                             Circle()
                                 .fill(s.tintColor)
                                 .frame(width: 10, height: 10)
-                            Text(s.label)
+                            Text(s.label.appLocalized(language: appState.interfaceLanguage))
                         }
                         .tag(s)
                     }
@@ -704,7 +714,7 @@ private struct ManualRiskEditorSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(entry == nil ? "Nouveau risque" : "Modifier le risque")
+            .navigationTitle(appState.localized(entry == nil ? "Nouveau risque" : "Modifier le risque"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
@@ -713,7 +723,7 @@ private struct ManualRiskEditorSheet: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(entry == nil ? "Créer" : "Enregistrer") {
+                    Button(appState.localized(entry == nil ? "Créer" : "Enregistrer")) {
                         save()
                     }
                     .disabled(formIsInvalid)
@@ -784,7 +794,7 @@ private struct ManualRiskEditorSheet: View {
                             Text(entry.text)
                                 .font(.callout)
                             HStack(spacing: 6) {
-                                Text(entry.kind.label)
+                                Text(entry.kind.label.appLocalized(language: appState.interfaceLanguage))
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
                                 Text("•")

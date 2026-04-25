@@ -39,7 +39,7 @@ struct ActionWorkspaceView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Liste d'actions PM")
                             .font(.title2.weight(.semibold))
-                        Text("\(filteredActions.count) / \(scopedActions.count) action(s)")
+                        Text(appState.localizedFormat("%d / %d action(s)", filteredActions.count, scopedActions.count))
                             .foregroundStyle(.secondary)
                     }
 
@@ -59,19 +59,21 @@ struct ActionWorkspaceView: View {
                             isShowingDeleteConfirmation = true
                         } label: {
                             Label(
-                                selectedActionIDs.count > 1 ? "Supprimer (\(selectedActionIDs.count))" : "Supprimer",
+                                selectedActionIDs.count > 1
+                                    ? appState.localizedFormat("Supprimer (%d)", selectedActionIDs.count)
+                                    : appState.localized("Supprimer"),
                                 systemImage: "trash"
                             )
                         }
                     }
 
                     Menu {
-                        Button("Exporter la vue (\(filteredActions.count))") {
+                        Button(appState.localizedFormat("Exporter la vue (%d)", filteredActions.count)) {
                             prepareExport(actions: filteredActions, filenameSuffix: "vue")
                         }
                         .disabled(filteredActions.isEmpty)
 
-                        Button("Exporter la sélection (\(selectedActionsForExport.count))") {
+                        Button(appState.localizedFormat("Exporter la sélection (%d)", selectedActionsForExport.count)) {
                             prepareExport(actions: selectedActionsForExport, filenameSuffix: "selection")
                         }
                         .disabled(selectedActionsForExport.isEmpty)
@@ -95,7 +97,7 @@ struct ActionWorkspaceView: View {
 
                     Picker("Flux", selection: $selectedFlow) {
                         ForEach(ActionFlowFilter.allCases) { filter in
-                            Text(filter.label).tag(filter)
+                            Text(filter.label.appLocalized(language: appState.interfaceLanguage)).tag(filter)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -159,9 +161,11 @@ struct ActionWorkspaceView: View {
             }
         } message: {
             Text(
-                selectedActionIDs.count > 1
-                ? "Ces actions seront retirées de la liste proactive du PM."
-                : "Cette action sera retirée de la liste proactive du PM."
+                appState.localized(
+                    selectedActionIDs.count > 1
+                    ? "Ces actions seront retirées de la liste proactive du PM."
+                    : "Cette action sera retirée de la liste proactive du PM."
+                )
             )
         }
         .onChange(of: selectedActionIDs) { _, newSelection in
@@ -258,9 +262,10 @@ struct ActionWorkspaceView: View {
                 Button {
                     withAnimation(.easeInOut(duration: 0.18)) { toggleExpansion(action.id) }
                 } label: {
-                    Image(systemName: isExpanded ? "chevron.down.circle.fill" : "chevron.right.circle")
+                    Image(systemName: isExpanded ? "minus.circle.fill" : "plus.circle.fill")
+                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(isExpanded ? Color.accentColor : Color.secondary)
-                        .font(.system(size: 13))
+                        .font(.system(size: 14))
                 }
                 .buttonStyle(.plain)
                 .frame(width: Col.expand)
@@ -306,7 +311,7 @@ struct ActionWorkspaceView: View {
                         Circle()
                             .fill(status.tintColor)
                             .frame(width: 8, height: 8)
-                        Text(status.label)
+                        Text(status.label.appLocalized(language: appState.interfaceLanguage))
                     }
                     .tag(status)
                 }
@@ -316,7 +321,7 @@ struct ActionWorkspaceView: View {
             .frame(width: Col.status, alignment: .leading)
 
         case .flow:
-            Label(action.flow.label, systemImage: action.flow.systemImage)
+            Label(action.flow.label.appLocalized(language: appState.interfaceLanguage), systemImage: action.flow.systemImage)
                 .frame(width: Col.flow, alignment: .leading)
                 .lineLimit(1)
 
@@ -339,7 +344,7 @@ struct ActionWorkspaceView: View {
                 )
             ) {
                 ForEach(ActionPriority.allCases) { priority in
-                    Text(priority.label).tag(priority)
+                    Text(priority.label.appLocalized(language: appState.interfaceLanguage)).tag(priority)
                 }
             }
             .labelsHidden()
@@ -419,8 +424,11 @@ struct ActionWorkspaceView: View {
 
     private func historyHint(for action: ProjectAction) -> String {
         let count = action.historyEntries.count
-        if count == 0 { return "Aucune entrée d'historique" }
-        return "Afficher le journal (\(count) entrée\(count > 1 ? "s" : ""))"
+        if count == 0 { return appState.localized("Ouvrir le journal d'activité") }
+        return appState.localizedFormat(
+            count == 1 ? "Ouvrir le journal d'activité (%d entrée)" : "Ouvrir le journal d'activité (%d entrées)",
+            count
+        )
     }
 
     private var activeTableColumns: [ActionTableColumn] {
@@ -455,9 +463,9 @@ struct ActionWorkspaceView: View {
             let searchableValues: [String] = [
                 action.title,
                 action.details,
-                action.priority.label,
-                action.flow.label,
-                action.status.label,
+                action.priority.label.appLocalized(language: appState.interfaceLanguage),
+                action.flow.label.appLocalized(language: appState.interfaceLanguage),
+                action.status.label.appLocalized(language: appState.interfaceLanguage),
                 activityTitle(for: action.activityID),
                 store.projectName(for: action.projectID),
                 action.dueDate.formatted(date: .abbreviated, time: .omitted),
@@ -502,12 +510,13 @@ struct ActionWorkspaceView: View {
     private func prepareExport(actions: [ProjectAction], filenameSuffix: String) {
         guard actions.isEmpty == false else { return }
         let headers = ["Titre", "Statut", "Priorite", "Flux", "Projet", "Activite", "Echeance", "Creee le"]
+            .map { appState.localized($0) }
         let rows = actions.map { action in
             [
                 action.displayTitle,
-                action.status.label,
-                action.priority.label,
-                action.flow.label,
+                action.status.label.appLocalized(language: appState.interfaceLanguage),
+                action.priority.label.appLocalized(language: appState.interfaceLanguage),
+                action.flow.label.appLocalized(language: appState.interfaceLanguage),
                 store.projectName(for: action.projectID),
                 activityTitle(for: action.activityID),
                 action.dueDate.formatted(date: .abbreviated, time: .omitted),
@@ -531,6 +540,8 @@ private extension ProjectAction {
 }
 
 private struct ActionSortHeader: View {
+    @Environment(AppState.self) private var appState
+
     let label: String
     let comparator: KeyPathComparator<ProjectAction>
     @Binding var sortOrder: [KeyPathComparator<ProjectAction>]
@@ -549,7 +560,7 @@ private struct ActionSortHeader: View {
             }
         } label: {
             HStack(spacing: 3) {
-                Text(label)
+                Text(label.appLocalized(language: appState.interfaceLanguage))
                     .font(.caption.weight(.medium))
                 if isActive {
                     Image(systemName: sortOrder.first?.order == .forward ? "chevron.up" : "chevron.down")
@@ -563,53 +574,98 @@ private struct ActionSortHeader: View {
 }
 
 private struct ActionHistoryInlinePanel: View {
+    @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
     let actionID: UUID
+
+    private enum SubCol {
+        static let kind: CGFloat = 170
+        static let date: CGFloat = 150
+    }
 
     var body: some View {
         let entries = store.action(with: actionID)?.historyEntriesChronological ?? []
 
         VStack(alignment: .leading, spacing: 0) {
-            Divider()
-                .padding(.top, 4)
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                Text(appState.localized("Journal d'activité"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(appState.localizedFormat(entries.count == 1 ? "%d entrée" : "%d entrées", entries.count))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
 
             if entries.isEmpty {
-                Text("Aucune entrée d'historique pour cette action.")
+                Text(appState.localized("Aucune entrée d'historique pour cette action."))
                     .font(.callout)
                     .foregroundStyle(.tertiary)
                     .padding(.vertical, 10)
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, 10)
             } else {
-                ForEach(entries) { entry in
+                HStack(spacing: 8) {
+                    Text("Type")
+                        .frame(width: SubCol.kind, alignment: .leading)
+                    Text("Description")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Date")
+                        .frame(width: SubCol.date, alignment: .leading)
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+
+                Divider()
+
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                     HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: entry.kind.symbolName)
-                            .font(.caption)
-                            .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
-                            .frame(width: 14)
-                            .padding(.top, 2)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(entry.text)
-                                .font(.callout)
-                                .fixedSize(horizontal: false, vertical: true)
-                            HStack(spacing: 4) {
-                                Text(entry.kind.label)
-                                    .font(.caption2.weight(.medium))
-                                    .foregroundStyle(.secondary)
-                                Text("·")
-                                    .foregroundStyle(.tertiary)
-                                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
+                        HStack(spacing: 6) {
+                            Image(systemName: entry.kind.symbolName)
+                                .font(.caption)
+                                .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
+                                .frame(width: 14)
+                            Text(entry.kind.label.appLocalized(language: appState.interfaceLanguage))
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
-                        Spacer(minLength: 0)
+                        .frame(width: SubCol.kind, alignment: .leading)
+
+                        Text(entry.text)
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(width: SubCol.date, alignment: .leading)
                     }
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(index.isMultiple(of: 2) ? Color.clear : Color(nsColor: .controlBackgroundColor).opacity(0.5))
                 }
             }
         }
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.secondary.opacity(0.18), lineWidth: 0.5)
+        )
         .padding(.horizontal, 4)
-        .padding(.bottom, 10)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
     }
 }
 
@@ -667,7 +723,7 @@ private struct ActionEditorSheet: View {
                                 Circle()
                                     .fill(value.tintColor)
                                     .frame(width: 9, height: 9)
-                                Text(value.label)
+                                Text(value.label.appLocalized(language: appState.interfaceLanguage))
                             }
                             .tag(value)
                         }
@@ -676,7 +732,7 @@ private struct ActionEditorSheet: View {
                     if action != nil {
                         Picker("Flux", selection: $flow) {
                             ForEach(ActionFlow.allCases) { value in
-                                Text(value.label).tag(value)
+                                Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
                             }
                         }
                     }
@@ -704,7 +760,7 @@ private struct ActionEditorSheet: View {
                     historySection(for: action.id)
                 }
             }
-            .navigationTitle(action == nil ? "Nouvelle action PM" : "Modifier l'action PM")
+            .navigationTitle(appState.localized(action == nil ? "Nouvelle action PM" : "Modifier l'action PM"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
@@ -713,7 +769,7 @@ private struct ActionEditorSheet: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(action == nil ? "Créer" : "Enregistrer") {
+                    Button(appState.localized(action == nil ? "Créer" : "Enregistrer")) {
                         save()
                     }
                 }
@@ -724,7 +780,7 @@ private struct ActionEditorSheet: View {
             )) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text(validationMessage ?? "")
+                Text(appState.localized(validationMessage ?? ""))
             }
         }
         .frame(minWidth: 660, minHeight: 520)
@@ -765,7 +821,7 @@ private struct ActionEditorSheet: View {
                     Circle()
                         .fill(priority.severityColor)
                         .frame(width: 10, height: 10)
-                    Text(priority.label)
+                    Text(priority.label.appLocalized(language: appState.interfaceLanguage))
                         .fontWeight(.medium)
                         .foregroundStyle(priority.severityColor)
                 }
@@ -776,7 +832,7 @@ private struct ActionEditorSheet: View {
 
             HStack {
                 ForEach(ActionPriority.allCases) { level in
-                    Text(level.label)
+                    Text(level.label.appLocalized(language: appState.interfaceLanguage))
                         .font(.caption2)
                         .foregroundStyle(level == priority ? level.severityColor : .secondary)
                         .frame(maxWidth: .infinity, alignment: alignment(for: level))
@@ -903,7 +959,7 @@ private struct ActionEditorSheet: View {
                             Text(entry.text)
                                 .font(.callout)
                             HStack(spacing: 6) {
-                                Text(entry.kind.label)
+                                Text(entry.kind.label.appLocalized(language: appState.interfaceLanguage))
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
                                 Text("•")

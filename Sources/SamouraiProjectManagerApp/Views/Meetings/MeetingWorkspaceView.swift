@@ -31,7 +31,7 @@ struct MeetingWorkspaceView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Registre des réunions")
                             .font(.title2.weight(.semibold))
-                        Text("\(filteredMeetings.count) / \(scopedMeetings.count) réunion(s)")
+                        Text(appState.localizedFormat("%d / %d réunion(s)", filteredMeetings.count, scopedMeetings.count))
                             .foregroundStyle(.secondary)
                     }
 
@@ -51,19 +51,21 @@ struct MeetingWorkspaceView: View {
                             isShowingDeleteConfirmation = true
                         } label: {
                             Label(
-                                selectedMeetingIDs.count > 1 ? "Supprimer (\(selectedMeetingIDs.count))" : "Supprimer",
+                                selectedMeetingIDs.count > 1
+                                    ? appState.localizedFormat("Supprimer (%d)", selectedMeetingIDs.count)
+                                    : appState.localized("Supprimer"),
                                 systemImage: "trash"
                             )
                         }
                     }
 
                     Menu {
-                        Button("Exporter la vue (\(filteredMeetings.count))") {
+                        Button(appState.localizedFormat("Exporter la vue (%d)", filteredMeetings.count)) {
                             prepareExport(meetings: filteredMeetings, filenameSuffix: "vue")
                         }
                         .disabled(filteredMeetings.isEmpty)
 
-                        Button("Exporter la sélection (\(selectedMeetingsForExport.count))") {
+                        Button(appState.localizedFormat("Exporter la sélection (%d)", selectedMeetingsForExport.count)) {
                             prepareExport(meetings: selectedMeetingsForExport, filenameSuffix: "selection")
                         }
                         .disabled(selectedMeetingsForExport.isEmpty)
@@ -111,13 +113,13 @@ struct MeetingWorkspaceView: View {
                         TableColumnForEach(activeTableColumns) { column in
                             switch column {
                             case .meetingAt:
-                                TableColumn(column.label, value: \.meetingAt) { meeting in
+                                TableColumn(appState.localized(column.label), value: \.meetingAt) { meeting in
                                     Text(meeting.meetingAt.formatted(date: .abbreviated, time: .shortened))
                                 }
                                 .width(min: 165, ideal: 190)
 
                             case .title:
-                                TableColumn(column.label, value: \.displayTitle) { meeting in
+                                TableColumn(appState.localized(column.label), value: \.displayTitle) { meeting in
                                     TextField(
                                         "Réunion",
                                         text: Binding(
@@ -146,13 +148,13 @@ struct MeetingWorkspaceView: View {
                                 .width(min: 220, ideal: 320)
 
                             case .project:
-                                TableColumn(column.label, value: \.projectIDSortKey) { meeting in
+                                TableColumn(appState.localized(column.label), value: \.projectIDSortKey) { meeting in
                                     Text(store.projectName(for: meeting.projectID))
                                 }
                                 .width(min: 150, ideal: 220)
 
                             case .mode:
-                                TableColumn(column.label, value: \.modeSortKey) { meeting in
+                                TableColumn(appState.localized(column.label), value: \.modeSortKey) { meeting in
                                     Picker(
                                         "Mode",
                                         selection: Binding(
@@ -176,7 +178,7 @@ struct MeetingWorkspaceView: View {
                                         )
                                     ) {
                                         ForEach(MeetingMode.allCases) { mode in
-                                            Text(mode.label).tag(mode)
+                                            Text(mode.label.appLocalized(language: appState.interfaceLanguage)).tag(mode)
                                         }
                                     }
                                     .labelsHidden()
@@ -185,13 +187,13 @@ struct MeetingWorkspaceView: View {
                                 .width(min: 120, ideal: 140)
 
                             case .duration:
-                                TableColumn(column.label, value: \.durationMinutes) { meeting in
-                                    Text("\(meeting.durationMinutes) min")
+                                TableColumn(appState.localized(column.label), value: \.durationMinutes) { meeting in
+                                    Text(appState.localizedFormat("%d min", meeting.durationMinutes))
                                 }
                                 .width(min: 90, ideal: 110)
 
                             case .aiSummary:
-                                TableColumn(column.label, value: \.aiSummary) { meeting in
+                                TableColumn(appState.localized(column.label), value: \.aiSummary) { meeting in
                                     Text(meeting.aiSummary)
                                         .lineLimit(2)
                                 }
@@ -239,9 +241,11 @@ struct MeetingWorkspaceView: View {
             }
         } message: {
             Text(
-                selectedMeetingIDs.count > 1
-                ? "Ces réunions seront retirées du registre."
-                : "Cette réunion sera retirée du registre."
+                appState.localized(
+                    selectedMeetingIDs.count > 1
+                    ? "Ces réunions seront retirées du registre."
+                    : "Cette réunion sera retirée du registre."
+                )
             )
         }
         .alert("Import glisser-déposer", isPresented: Binding(
@@ -250,7 +254,7 @@ struct MeetingWorkspaceView: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(dropFeedbackMessage ?? "")
+            Text(appState.localized(dropFeedbackMessage ?? ""))
         }
         .onChange(of: selectedMeetingIDs) { _, newSelection in
             appState.selectedMeetingID = newSelection.singleSelection
@@ -322,7 +326,7 @@ struct MeetingWorkspaceView: View {
             let searchableValues: [String] = [
                 meeting.title,
                 store.projectName(for: meeting.projectID),
-                meeting.mode.label,
+                meeting.mode.label.appLocalized(language: appState.interfaceLanguage),
                 meeting.organizer,
                 meeting.participants,
                 meeting.locationOrLink,
@@ -364,12 +368,13 @@ struct MeetingWorkspaceView: View {
     private func prepareExport(meetings: [ProjectMeeting], filenameSuffix: String) {
         guard meetings.isEmpty == false else { return }
         let headers = ["Date", "Reunion", "Projet", "Mode", "DureeMin", "Participants", "Organisateur"]
+            .map { appState.localized($0) }
         let rows = meetings.map { meeting in
             [
                 meeting.meetingAt.formatted(date: .abbreviated, time: .shortened),
                 meeting.displayTitle,
                 store.projectName(for: meeting.projectID),
-                meeting.mode.label,
+                meeting.mode.label.appLocalized(language: appState.interfaceLanguage),
                 String(meeting.durationMinutes),
                 meeting.participants,
                 meeting.organizer
@@ -467,7 +472,7 @@ private struct MeetingEditorSheet: View {
 
                     Picker("Type", selection: $mode) {
                         ForEach(MeetingMode.allCases) { value in
-                            Text(value.label).tag(value)
+                            Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
                         }
                     }
 
@@ -504,7 +509,7 @@ private struct MeetingEditorSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle(meeting == nil ? "Nouvelle réunion" : "Modifier la réunion")
+            .navigationTitle(appState.localized(meeting == nil ? "Nouvelle réunion" : "Modifier la réunion"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
@@ -513,7 +518,7 @@ private struct MeetingEditorSheet: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(meeting == nil ? "Créer" : "Enregistrer") {
+                    Button(appState.localized(meeting == nil ? "Créer" : "Enregistrer")) {
                         save()
                     }
                 }
@@ -524,7 +529,7 @@ private struct MeetingEditorSheet: View {
             )) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text(validationMessage ?? "")
+                Text(appState.localized(validationMessage ?? ""))
             }
         }
         .frame(minWidth: 760, minHeight: 760)

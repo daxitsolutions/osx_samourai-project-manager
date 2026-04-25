@@ -52,7 +52,7 @@ struct ResourceWorkspaceView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(workspaceTitle)
                             .font(.title2.weight(.semibold))
-                        Text("\(filteredResources.count) / \(searchBaseResources.count) ressource(s) affichée(s)")
+                        Text(appState.localizedFormat("%d / %d ressource(s) affichée(s)", filteredResources.count, searchBaseResources.count))
                             .foregroundStyle(.secondary)
                     }
 
@@ -107,7 +107,7 @@ struct ResourceWorkspaceView: View {
                             )
                         }
 
-                        Button("Exporter la sélection (\(selectedResourcesForExport.count))") {
+                        Button(appState.localizedFormat("Exporter la sélection (%d)", selectedResourcesForExport.count)) {
                             prepareExport(
                                 resources: selectedResourcesForExport,
                                 defaultFilename: "ressources-selection-\(Date.now.formatted(.dateTime.year().month().day()))"
@@ -175,7 +175,7 @@ struct ResourceWorkspaceView: View {
                         if scopedProjectID != nil {
                             Picker("Favoris", selection: $projectFavoriteFilter) {
                                 ForEach(ResourceProjectFavoriteFilter.allCases) { filter in
-                                    Text(filter.label).tag(filter)
+                                    Text(filter.label.appLocalized(language: appState.interfaceLanguage)).tag(filter)
                                 }
                             }
                             .pickerStyle(.segmented)
@@ -184,7 +184,7 @@ struct ResourceWorkspaceView: View {
 
                         Picker("Affichage", selection: displayModeBinding) {
                             ForEach(ResourceDisplayMode.allCases) { mode in
-                                Label(mode.label, systemImage: mode.iconName).tag(mode)
+                                Label(mode.label.appLocalized(language: appState.interfaceLanguage), systemImage: mode.iconName).tag(mode)
                             }
                         }
                         .pickerStyle(.segmented)
@@ -602,7 +602,7 @@ struct ResourceWorkspaceView: View {
                     TableColumnForEach(activeTableColumns) { column in
                         switch column {
                         case .name:
-                            TableColumn(column.label, value: \.fullName) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.fullName) { (resource: Resource) in
                                 TextField(
                                     "Nom",
                                     text: inlineTextBinding(for: resource, field: \.nom)
@@ -616,7 +616,7 @@ struct ResourceWorkspaceView: View {
                             .width(min: 160, ideal: 220)
 
                         case .primaryResourceRole:
-                            TableColumn(column.label, value: \.primaryResourceRoleSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.primaryResourceRoleSortKey) { (resource: Resource) in
                                 TextField(
                                     "Rôle",
                                     text: inlineTextBinding(for: resource, field: \.primaryResourceRole)
@@ -630,7 +630,7 @@ struct ResourceWorkspaceView: View {
                             .width(min: 150, ideal: 200)
 
                         case .parentDescription:
-                            TableColumn(column.label, value: \.parentDescriptionSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.parentDescriptionSortKey) { (resource: Resource) in
                                 TextField(
                                     "Département",
                                     text: inlineTextBinding(for: resource, field: \.parentDescription)
@@ -644,14 +644,14 @@ struct ResourceWorkspaceView: View {
                             .width(min: 130, ideal: 180)
 
                         case .projects:
-                            TableColumn(column.label, value: \.assignedProjectCount) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.assignedProjectCount) { (resource: Resource) in
                                 let assignedProjectNames = projectNames(for: resource.assignedProjectIDs)
                                 Text(assignedProjectNames.isEmpty ? "-" : assignedProjectNames.joined(separator: ", "))
                             }
                             .width(min: 180, ideal: 260)
 
                         case .allocationPercent:
-                            TableColumn(column.label, value: \.allocationPercent) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.allocationPercent) { (resource: Resource) in
                                 TextField(
                                     "Allocation",
                                     text: inlineTextBinding(for: resource, field: \.allocationPercentText)
@@ -666,13 +666,13 @@ struct ResourceWorkspaceView: View {
                             .width(min: 70, ideal: 90)
 
                         case .status:
-                            TableColumn(column.label, value: \.statusSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.statusSortKey) { (resource: Resource) in
                                 Picker(
                                     "Statut",
                                     selection: inlineStatusBinding(for: resource)
                                 ) {
                                     ForEach(ResourceStatus.allCases) { status in
-                                        Text(status.label).tag(status)
+                                        Text(status.label.appLocalized(language: appState.interfaceLanguage)).tag(status)
                                     }
                                 }
                                 .labelsHidden()
@@ -681,13 +681,13 @@ struct ResourceWorkspaceView: View {
                             .width(min: 100, ideal: 130)
 
                         case .engagement:
-                            TableColumn(column.label, value: \.engagementSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.engagementSortKey) { (resource: Resource) in
                                 Picker(
                                     "Engagement",
                                     selection: inlineEngagementBinding(for: resource)
                                 ) {
                                     ForEach(ResourceEngagement.allCases) { engagement in
-                                        Text(engagement.label).tag(engagement)
+                                        Text(engagement.label.appLocalized(language: appState.interfaceLanguage)).tag(engagement)
                                     }
                                 }
                                 .labelsHidden()
@@ -696,7 +696,7 @@ struct ResourceWorkspaceView: View {
                             .width(min: 100, ideal: 140)
 
                         case .email:
-                            TableColumn(column.label, value: \.email) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.email) { (resource: Resource) in
                                 TextField(
                                     "E-mail",
                                     text: inlineTextBinding(for: resource, field: \.email)
@@ -710,7 +710,7 @@ struct ResourceWorkspaceView: View {
                             .width(min: 180, ideal: 240)
 
                         case .phone:
-                            TableColumn(column.label, value: \.phone) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.phone) { (resource: Resource) in
                                 TextField(
                                     "Téléphone",
                                     text: inlineTextBinding(for: resource, field: \.phone)
@@ -724,85 +724,85 @@ struct ResourceWorkspaceView: View {
                             .width(min: 120, ideal: 160)
 
                         case .resourceRoles:
-                            TableColumn(column.label, value: \.resourceRolesSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.resourceRolesSortKey) { (resource: Resource) in
                                 Text(resource.resourceRoles ?? "-")
                             }
                             .width(min: 140, ideal: 190)
 
                         case .organizationalResource:
-                            TableColumn(column.label, value: \.organizationalResourceSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.organizationalResourceSortKey) { (resource: Resource) in
                                 Text(resource.organizationalResource ?? "-")
                             }
                             .width(min: 140, ideal: 190)
 
                         case .competence1:
-                            TableColumn(column.label, value: \.competence1SortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.competence1SortKey) { (resource: Resource) in
                                 Text(resource.competence1 ?? "-")
                             }
                             .width(min: 120, ideal: 160)
 
                         case .resourceCalendar:
-                            TableColumn(column.label, value: \.resourceCalendarSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.resourceCalendarSortKey) { (resource: Resource) in
                                 Text(resource.resourceCalendar ?? "-")
                             }
                             .width(min: 120, ideal: 160)
 
                         case .resourceStartDate:
-                            TableColumn(column.label, value: \.resourceStartDateSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.resourceStartDateSortKey) { (resource: Resource) in
                                 Text(resource.resourceStartDate?.formatted(date: .abbreviated, time: .omitted) ?? "-")
                             }
                             .width(min: 110, ideal: 140)
 
                         case .resourceFinishDate:
-                            TableColumn(column.label, value: \.resourceFinishDateSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.resourceFinishDateSortKey) { (resource: Resource) in
                                 Text(resource.resourceFinishDate?.formatted(date: .abbreviated, time: .omitted) ?? "-")
                             }
                             .width(min: 110, ideal: 140)
 
                         case .responsableOperationnel:
-                            TableColumn(column.label, value: \.responsableOperationnelSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.responsableOperationnelSortKey) { (resource: Resource) in
                                 Text(resource.responsableOperationnel ?? "-")
                             }
                             .width(min: 120, ideal: 170)
 
                         case .responsableInterne:
-                            TableColumn(column.label, value: \.responsableInterneSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.responsableInterneSortKey) { (resource: Resource) in
                                 Text(resource.responsableInterne ?? "-")
                             }
                             .width(min: 130, ideal: 170)
 
                         case .localisation:
-                            TableColumn(column.label, value: \.localisationSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.localisationSortKey) { (resource: Resource) in
                                 Text(resource.localisation ?? "-")
                             }
                             .width(min: 110, ideal: 150)
 
                         case .typeDeRessource:
-                            TableColumn(column.label, value: \.typeDeRessourceSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.typeDeRessourceSortKey) { (resource: Resource) in
                                 Text(resource.typeDeRessource ?? "-")
                             }
                             .width(min: 100, ideal: 140)
 
                         case .journeesTempsPartiel:
-                            TableColumn(column.label, value: \.journeesTempsPartielSortKey) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.journeesTempsPartielSortKey) { (resource: Resource) in
                                 Text(resource.journeesTempsPartiel ?? "-")
                             }
                             .width(min: 100, ideal: 140)
 
                         case .notes:
-                            TableColumn(column.label, value: \.notes) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.notes) { (resource: Resource) in
                                 Text(resource.notes.isEmpty ? "-" : resource.notes)
                             }
                             .width(min: 160, ideal: 260)
 
                         case .createdAt:
-                            TableColumn(column.label, value: \.createdAt) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.createdAt) { (resource: Resource) in
                                 Text(resource.createdAt.formatted(date: .abbreviated, time: .omitted))
                             }
                             .width(min: 110, ideal: 140)
 
                         case .updatedAt:
-                            TableColumn(column.label, value: \.updatedAt) { (resource: Resource) in
+                            TableColumn(appState.localized(column.label), value: \.updatedAt) { (resource: Resource) in
                                 Text(resource.updatedAt.formatted(date: .abbreviated, time: .omitted))
                             }
                             .width(min: 110, ideal: 140)
@@ -840,8 +840,8 @@ struct ResourceWorkspaceView: View {
             resource.parentDescription ?? "",
             resource.organizationalResource ?? "",
             assignedProjectNames.joined(separator: ", "),
-            resource.engagement.label,
-            resource.status.label,
+            resource.engagement.label.appLocalized(language: appState.interfaceLanguage),
+            resource.status.label.appLocalized(language: appState.interfaceLanguage),
             resource.allocationLabel,
             "\(resource.allocationPercent)",
             resource.email,
@@ -1159,6 +1159,8 @@ struct ResourceWorkspaceView: View {
 }
 
 private struct ResourceProfilingSummaryCard: View {
+    @Environment(AppState.self) private var appState
+
     let report: ResourceProfilingReport
     let scopeLabel: String
 
@@ -1172,7 +1174,7 @@ private struct ResourceProfilingSummaryCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Gestion contextuelle des ressources")
+                    Text(appState.localized("Gestion contextuelle des ressources"))
                         .font(.headline)
                     Text(scopeLabel)
                         .font(.caption)
@@ -1181,7 +1183,7 @@ private struct ResourceProfilingSummaryCard: View {
 
                 Spacer()
 
-                Text("Profil complet à \(report.completionPercent)%")
+                Text(appState.localizedFormat("Profil complet à %d%%", report.completionPercent))
                     .font(.subheadline.weight(.semibold))
 
                 Button {
@@ -1193,16 +1195,16 @@ private struct ResourceProfilingSummaryCard: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help(isExpanded ? "Réduire les profils types" : "Afficher tous les profils types")
+                .help(appState.localized(isExpanded ? "Réduire les profils types" : "Afficher tous les profils types"))
             }
 
             ProgressView(value: report.completionRatio)
                 .progressViewStyle(.linear)
 
             HStack(spacing: 16) {
-                Label("\(report.coveredCount)/\(report.requiredRoles.count) rôles pourvus", systemImage: "checkmark.seal")
-                Label("\(report.missingRoles.count) lacune(s)", systemImage: "exclamationmark.triangle")
-                Label("\(report.activeContributorCount) ressource(s) active(s)", systemImage: "circle.fill")
+                Label(appState.localizedFormat("%d/%d rôles pourvus", report.coveredCount, report.requiredRoles.count), systemImage: "checkmark.seal")
+                Label(appState.localizedFormat("%d lacune(s)", report.missingRoles.count), systemImage: "exclamationmark.triangle")
+                Label(appState.localizedFormat("%d ressource(s) active(s)", report.activeContributorCount), systemImage: "circle.fill")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -1229,19 +1231,21 @@ private struct ResourceProfilingSummaryCard: View {
 }
 
 private struct ResourceRoleCoverageRow: View {
+    @Environment(AppState.self) private var appState
+
     let coverage: ResourceRoleCoverage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 8) {
                 Text(coverage.isCovered ? "✅" : "⚠️")
-                Text(coverage.role.label)
+                Text(coverage.role.label.appLocalized(language: appState.interfaceLanguage))
                     .font(.subheadline)
                     .lineLimit(2)
             }
 
             if coverage.assignedResources.isEmpty {
-                Text("À pourvoir - aucune ressource assignée")
+                Text(appState.localized("À pourvoir - aucune ressource assignée"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -1251,7 +1255,7 @@ private struct ResourceRoleCoverageRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-                Text(activeNames.isEmpty ? "🔵 Actif: aucune contribution active" : "🔵 Actif: \(activeNames)")
+                Text(activeNames.isEmpty ? appState.localized("🔵 Actif: aucune contribution active") : appState.localizedFormat("🔵 Actif: %@", activeNames))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -1267,6 +1271,8 @@ private struct ResourceRoleCoverageRow: View {
 }
 
 private struct ResourceComparativePerformanceCard: View {
+    @Environment(AppState.self) private var appState
+
     let snapshots: [ResourcePerformanceSnapshot]
     let onEvaluate: (UUID) -> Void
 
@@ -1275,11 +1281,11 @@ private struct ResourceComparativePerformanceCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Synthèse comparative de performance")
+                Text(appState.localized("Synthèse comparative de performance"))
                     .font(.headline)
                 Spacer()
                 let atRiskCount = snapshots.filter { $0.alerts.isEmpty == false }.count
-                Text("\(atRiskCount) profil(s) à risque")
+                Text(appState.localizedFormat("%d profil(s) à risque", atRiskCount))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -1292,13 +1298,13 @@ private struct ResourceComparativePerformanceCard: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help(isExpanded ? "Réduire la synthèse" : "Afficher la synthèse comparative")
+                .help(appState.localized(isExpanded ? "Réduire la synthèse" : "Afficher la synthèse comparative"))
             }
 
             if isExpanded {
                 Group {
                     if snapshots.isEmpty {
-                        Text("Aucune ressource disponible.")
+                        Text(appState.localized("Aucune ressource disponible."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
@@ -1337,9 +1343,11 @@ private struct ResourceComparativePerformanceCard: View {
     }
 
     private func performanceSubtitle(for snapshot: ResourcePerformanceSnapshot) -> String {
-        let scoreText = snapshot.latestScore.map { String(format: "%.2f/5", $0) } ?? "Pas de note"
-        let alertsText = snapshot.alerts.isEmpty ? "Aucune alerte" : snapshot.alerts.map(\.kind.label).joined(separator: " • ")
-        return "\(scoreText) • \(snapshot.trend.label) • \(alertsText)"
+        let scoreText = snapshot.latestScore.map { String(format: "%.2f/5", $0) } ?? appState.localized("Pas de note")
+        let alertsText = snapshot.alerts.isEmpty
+            ? appState.localized("Aucune alerte")
+            : snapshot.alerts.map { $0.kind.label.appLocalized(language: appState.interfaceLanguage) }.joined(separator: " • ")
+        return "\(scoreText) • \(snapshot.trend.label.appLocalized(language: appState.interfaceLanguage)) • \(alertsText)"
     }
 }
 
@@ -1805,6 +1813,7 @@ private struct ResourceEvaluationPayload {
 
 private struct ResourceEvaluationSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
 
     let resource: Resource
     let scopedProject: Project?
@@ -1823,7 +1832,7 @@ private struct ResourceEvaluationSheet: View {
                     TextField("Jalon / Milestone", text: $draft.milestone)
                     TextField("Évaluateur", text: $draft.evaluator)
                     if let scopedProject {
-                        Text("Projet: \(scopedProject.name) • Phase: \(scopedProject.phase.label)")
+                        Text(appState.localizedFormat("Projet: %@ • Phase: %@", scopedProject.name, scopedProject.phase.label.appLocalized(language: appState.interfaceLanguage)))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
@@ -1835,9 +1844,9 @@ private struct ResourceEvaluationSheet: View {
 
                 Section("Notation structurée (1..5)") {
                     ForEach(ResourceEvaluationCriterion.allCases) { criterion in
-                        Picker(criterion.label, selection: scoreBinding(for: criterion)) {
+                        Picker(criterion.label.appLocalized(language: appState.interfaceLanguage), selection: scoreBinding(for: criterion)) {
                             ForEach(ResourceEvaluationScale.allCases) { level in
-                                Text("\(level.rawValue) - \(level.label)").tag(level)
+                                Text(appState.localizedFormat("%d - %@", level.rawValue, level.label.appLocalized(language: appState.interfaceLanguage))).tag(level)
                             }
                         }
                         .pickerStyle(.menu)
@@ -1850,7 +1859,7 @@ private struct ResourceEvaluationSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Nouvelle évaluation")
+            .navigationTitle(appState.localized("Nouvelle évaluation"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {

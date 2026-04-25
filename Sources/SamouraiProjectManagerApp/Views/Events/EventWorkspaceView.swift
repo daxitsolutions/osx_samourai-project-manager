@@ -25,7 +25,7 @@ struct EventWorkspaceView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Événements projet")
                             .font(.title2.weight(.semibold))
-                        Text("\(filteredEvents.count) / \(scopedEvents.count) événement(s) affiché(s)")
+                        Text(appState.localizedFormat("%d / %d événement(s) affiché(s)", filteredEvents.count, scopedEvents.count))
                             .foregroundStyle(.secondary)
                     }
 
@@ -45,19 +45,21 @@ struct EventWorkspaceView: View {
                             isShowingDeleteConfirmation = true
                         } label: {
                             Label(
-                                selectedEventIDs.count > 1 ? "Supprimer (\(selectedEventIDs.count))" : "Supprimer",
+                                selectedEventIDs.count > 1
+                                    ? appState.localizedFormat("Supprimer (%d)", selectedEventIDs.count)
+                                    : appState.localized("Supprimer"),
                                 systemImage: "trash"
                             )
                         }
                     }
 
                     Menu {
-                        Button("Exporter la vue (\(filteredEvents.count))") {
+                        Button(appState.localizedFormat("Exporter la vue (%d)", filteredEvents.count)) {
                             prepareExport(events: filteredEvents, filenameSuffix: "vue")
                         }
                         .disabled(filteredEvents.isEmpty)
 
-                        Button("Exporter la sélection (\(selectedEventsForExport.count))") {
+                        Button(appState.localizedFormat("Exporter la sélection (%d)", selectedEventsForExport.count)) {
                             prepareExport(events: selectedEventsForExport, filenameSuffix: "selection")
                         }
                         .disabled(selectedEventsForExport.isEmpty)
@@ -101,13 +103,13 @@ struct EventWorkspaceView: View {
                         TableColumnForEach(activeTableColumns) { column in
                             switch column {
                             case .happenedAt:
-                                TableColumn(column.label, value: \.happenedAt) { event in
+                                TableColumn(appState.localized(column.label), value: \.happenedAt) { event in
                                     Text(event.happenedAt.formatted(date: .abbreviated, time: .shortened))
                                 }
                                 .width(min: 160, ideal: 190)
 
                             case .priority:
-                                TableColumn(column.label, value: \.prioritySortWeight) { event in
+                                TableColumn(appState.localized(column.label), value: \.prioritySortWeight) { event in
                                     Picker(
                                         "Priorité",
                                         selection: Binding(
@@ -127,7 +129,7 @@ struct EventWorkspaceView: View {
                                         )
                                     ) {
                                         ForEach(EventPriority.allCases) { priority in
-                                            Text(priority.label).tag(priority)
+                                            Text(priority.label.appLocalized(language: appState.interfaceLanguage)).tag(priority)
                                         }
                                     }
                                     .labelsHidden()
@@ -136,7 +138,7 @@ struct EventWorkspaceView: View {
                                 .width(min: 110, ideal: 120)
 
                             case .title:
-                                TableColumn(column.label, value: \.displayTitle) { event in
+                                TableColumn(appState.localized(column.label), value: \.displayTitle) { event in
                                     TextField(
                                         "Événement",
                                         text: Binding(
@@ -161,20 +163,20 @@ struct EventWorkspaceView: View {
                                 .width(min: 220, ideal: 320)
 
                             case .source:
-                                TableColumn(column.label, value: \.sourceSortKey) { event in
+                                TableColumn(appState.localized(column.label), value: \.sourceSortKey) { event in
                                     Text(event.hasSource ? event.source : "-")
                                         .foregroundStyle(event.hasSource ? .primary : .secondary)
                                 }
                                 .width(min: 180, ideal: 250)
 
                             case .project:
-                                TableColumn(column.label, value: \.projectIDSortKey) { event in
+                                TableColumn(appState.localized(column.label), value: \.projectIDSortKey) { event in
                                     Text(store.projectName(for: event.projectID))
                                 }
                                 .width(min: 150, ideal: 220)
 
                             case .resources:
-                                TableColumn(column.label, value: \.resourceCount) { event in
+                                TableColumn(appState.localized(column.label), value: \.resourceCount) { event in
                                     let names = store.resourceNames(for: event.resourceIDs)
                                     Text(names.isEmpty ? "-" : names.joined(separator: ", "))
                                         .lineLimit(2)
@@ -223,9 +225,11 @@ struct EventWorkspaceView: View {
             }
         } message: {
             Text(
-                selectedEventIDs.count > 1
-                ? "Ces événements seront supprimés du suivi projet."
-                : "Cet événement sera supprimé du suivi projet."
+                appState.localized(
+                    selectedEventIDs.count > 1
+                    ? "Ces événements seront supprimés du suivi projet."
+                    : "Cet événement sera supprimé du suivi projet."
+                )
             )
         }
         .onChange(of: selectedEventIDs) { _, newSelection in
@@ -269,7 +273,7 @@ struct EventWorkspaceView: View {
                 event.title,
                 event.details,
                 event.source,
-                event.priority.label,
+                event.priority.label.appLocalized(language: appState.interfaceLanguage),
                 store.projectName(for: event.projectID),
                 event.happenedAt.formatted(date: .abbreviated, time: .shortened)
             ] + resourceNames
@@ -307,10 +311,11 @@ struct EventWorkspaceView: View {
     private func prepareExport(events: [ProjectEvent], filenameSuffix: String) {
         guard events.isEmpty == false else { return }
         let headers = ["DateHeure", "Priorite", "Titre", "Source", "Projet", "Ressources"]
+            .map { appState.localized($0) }
         let rows = events.map { event in
             [
                 event.happenedAt.formatted(date: .abbreviated, time: .shortened),
-                event.priority.label,
+                event.priority.label.appLocalized(language: appState.interfaceLanguage),
                 event.displayTitle,
                 event.source,
                 store.projectName(for: event.projectID),
@@ -372,7 +377,7 @@ private struct EventEditorSheet: View {
 
                     Picker("Priorité", selection: $priority) {
                         ForEach(EventPriority.allCases) { value in
-                            Text(value.label).tag(value)
+                            Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
                         }
                     }
 
@@ -431,7 +436,7 @@ private struct EventEditorSheet: View {
                         .frame(minHeight: 140)
                 }
             }
-            .navigationTitle(event == nil ? "Nouvel événement" : "Modifier l'événement")
+            .navigationTitle(appState.localized(event == nil ? "Nouvel événement" : "Modifier l'événement"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") {
@@ -440,7 +445,7 @@ private struct EventEditorSheet: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(event == nil ? "Créer" : "Enregistrer") {
+                    Button(appState.localized(event == nil ? "Créer" : "Enregistrer")) {
                         save()
                     }
                 }
@@ -451,7 +456,7 @@ private struct EventEditorSheet: View {
             )) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text(validationMessage ?? "")
+                Text(appState.localized(validationMessage ?? ""))
             }
         }
         .frame(minWidth: 700, minHeight: 620)

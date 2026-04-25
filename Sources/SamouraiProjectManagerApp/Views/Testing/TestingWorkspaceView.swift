@@ -25,19 +25,19 @@ struct TestingWorkspaceView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Testing")
                             .font(.title2.weight(.semibold))
-                        Text("\(filteredRows.count) / \(scopedRows.count) phase(s) de test")
+                        Text(appState.localizedFormat("%d / %d phase(s) de test", filteredRows.count, scopedRows.count))
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
                     Menu {
-                        Button("Exporter la vue (\(filteredRows.count))") {
+                        Button(appState.localizedFormat("Exporter la vue (%d)", filteredRows.count)) {
                             prepareExport(rows: filteredRows, filenameSuffix: "vue")
                         }
                         .disabled(filteredRows.isEmpty)
 
-                        Button("Exporter la sélection (\(selectedRowsForExport.count))") {
+                        Button(appState.localizedFormat("Exporter la sélection (%d)", selectedRowsForExport.count)) {
                             prepareExport(rows: selectedRowsForExport, filenameSuffix: "selection")
                         }
                         .disabled(selectedRowsForExport.isEmpty)
@@ -48,7 +48,12 @@ struct TestingWorkspaceView: View {
                     Button(role: .destructive) {
                         isShowingDeleteConfirmation = true
                     } label: {
-                        Label(selectedRows.count > 1 ? "Supprimer (\(selectedRows.count))" : "Supprimer", systemImage: "trash")
+                        Label(
+                            selectedRows.count > 1
+                                ? appState.localizedFormat("Supprimer (%d)", selectedRows.count)
+                                : appState.localized("Supprimer"),
+                            systemImage: "trash"
+                        )
                     }
                     .disabled(selectedRows.isEmpty)
 
@@ -79,7 +84,7 @@ struct TestingWorkspaceView: View {
                     Picker("Statut", selection: $selectedStatus) {
                         Text("Tous les statuts").tag(Optional<ProjectTestingPhaseStatus>.none)
                         ForEach(ProjectTestingPhaseStatus.allCases) { status in
-                            Text(status.label).tag(Optional(status))
+                            Text(status.label.appLocalized(language: appState.interfaceLanguage)).tag(Optional(status))
                         }
                     }
                     .pickerStyle(.menu)
@@ -87,7 +92,7 @@ struct TestingWorkspaceView: View {
 
                     if let primaryProjectID = appState.resolvedPrimaryProjectID(in: store),
                        let project = store.project(with: primaryProjectID) {
-                        Text("Portée: \(project.name)")
+                        Text(appState.localizedFormat("Portée: %@", project.name))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
@@ -118,20 +123,20 @@ struct TestingWorkspaceView: View {
                         TableColumnForEach(activeTableColumns) { column in
                             switch column {
                             case .project:
-                                TableColumn(column.label, value: \TestingRow.projectName) { row in
+                                TableColumn(appState.localized(column.label), value: \TestingRow.projectName) { row in
                                     Text(row.projectName)
                                 }
                                 .width(min: 170, ideal: 230)
 
                             case .phase:
-                                TableColumn(column.label, value: \.phaseOrder) { row in
+                                TableColumn(appState.localized(column.label), value: \.phaseOrder) { row in
                                     Text(row.phase.kind.shortLabel)
                                         .font(.callout.weight(.semibold))
                                 }
                                 .width(min: 70, ideal: 90)
 
                             case .status:
-                                TableColumn(column.label, value: \.statusSortKey) { row in
+                                TableColumn(appState.localized(column.label), value: \.statusSortKey) { row in
                                     Picker(
                                         "Statut",
                                         selection: Binding(
@@ -144,7 +149,7 @@ struct TestingWorkspaceView: View {
                                         )
                                     ) {
                                         ForEach(ProjectTestingPhaseStatus.allCases) { status in
-                                            Text(status.label).tag(status)
+                                            Text(status.label.appLocalized(language: appState.interfaceLanguage)).tag(status)
                                         }
                                     }
                                     .labelsHidden()
@@ -153,7 +158,7 @@ struct TestingWorkspaceView: View {
                                 .width(min: 150, ideal: 180)
 
                             case .progress:
-                                TableColumn(column.label, value: \.progressPercentSortKey) { row in
+                                TableColumn(appState.localized(column.label), value: \.progressPercentSortKey) { row in
                                     TextField(
                                         "%",
                                         value: Binding(
@@ -172,7 +177,7 @@ struct TestingWorkspaceView: View {
                                 .width(min: 90, ideal: 100)
 
                             case .owner:
-                                TableColumn(column.label, value: \.ownerSortKey) { row in
+                                TableColumn(appState.localized(column.label), value: \.ownerSortKey) { row in
                                     TextField(
                                         "Owner",
                                         text: Binding(
@@ -189,7 +194,7 @@ struct TestingWorkspaceView: View {
                                 .width(min: 150, ideal: 220)
 
                             case .blocked:
-                                TableColumn(column.label, value: \.blockedSortKey) { row in
+                                TableColumn(appState.localized(column.label), value: \.blockedSortKey) { row in
                                     Image(systemName: row.phase.isBlocked ? "exclamationmark.triangle.fill" : "checkmark.circle")
                                         .foregroundStyle(row.phase.isBlocked ? Color.red : .secondary)
                                 }
@@ -240,7 +245,7 @@ struct TestingWorkspaceView: View {
             }
             Button("Annuler", role: .cancel) {}
         } message: {
-            Text(selectedRows.count > 1 ? "Les entrées sélectionnées seront réinitialisées." : "Cette entrée sera réinitialisée.")
+            Text(appState.localized(selectedRows.count > 1 ? "Les entrées sélectionnées seront réinitialisées." : "Cette entrée sera réinitialisée."))
         }
         .onChange(of: scopedRows.map(\.id)) { _, ids in
             let existing = Set(ids)
@@ -291,8 +296,8 @@ struct TestingWorkspaceView: View {
                 guard normalizedQuery.isEmpty == false else { return true }
                 let values = [
                     row.projectName,
-                    row.phase.kind.label,
-                    row.phase.status.label,
+                    row.phase.kind.label.appLocalized(language: appState.interfaceLanguage),
+                    row.phase.status.label.appLocalized(language: appState.interfaceLanguage),
                     row.phase.owner,
                     row.phase.notes,
                     row.phase.externalURL
@@ -320,7 +325,7 @@ struct TestingWorkspaceView: View {
             [
                 row.projectName,
                 row.phase.kind.shortLabel,
-                row.phase.status.label,
+                row.phase.status.label.appLocalized(language: appState.interfaceLanguage),
                 String(row.phase.progressPercent),
                 row.phase.owner,
                 row.phase.estimatedEndDate?.formatted(date: .abbreviated, time: .omitted) ?? "",
@@ -382,6 +387,8 @@ private enum TestingTableColumn: String, CaseIterable, Identifiable, Hashable {
 }
 
 private struct TestingRowDetailView: View {
+    @Environment(AppState.self) private var appState
+
     let row: TestingRow
     let onUpdate: (ProjectTestingPhase) -> Void
     let onDelete: () -> Void
@@ -389,13 +396,13 @@ private struct TestingRowDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Détail Testing")
+                Text(appState.localized("Détail Testing"))
                     .font(.title2.weight(.semibold))
 
                 HStack(spacing: 16) {
                     detailMetric(title: "Projet", value: row.projectName)
-                    detailMetric(title: "Phase", value: row.phase.kind.label)
-                    detailMetric(title: "RAG", value: row.phase.status.label)
+                    detailMetric(title: "Phase", value: row.phase.kind.label.appLocalized(language: appState.interfaceLanguage))
+                    detailMetric(title: "RAG", value: row.phase.status.label.appLocalized(language: appState.interfaceLanguage))
                 }
 
                 Picker(
@@ -410,7 +417,7 @@ private struct TestingRowDetailView: View {
                     )
                 ) {
                     ForEach(ProjectTestingPhaseStatus.allCases) { status in
-                        Text(status.label).tag(status)
+                        Text(status.label.appLocalized(language: appState.interfaceLanguage)).tag(status)
                     }
                 }
 
@@ -492,7 +499,7 @@ private struct TestingRowDetailView: View {
 
     private func detailMetric(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            Text(appState.localized(title))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(value)
@@ -522,6 +529,7 @@ private struct TestingPhaseEditorSheet: View {
     let onSave: (Payload) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
 
     @State private var selectedProjectID: UUID?
     @State private var selectedKind: ProjectTestingPhaseKind = .ut
@@ -546,17 +554,17 @@ private struct TestingPhaseEditorSheet: View {
 
                 Picker("Phase", selection: $selectedKind) {
                     ForEach(ProjectTestingPhaseKind.allCases) { kind in
-                        Text(kind.label).tag(kind)
+                        Text(kind.label.appLocalized(language: appState.interfaceLanguage)).tag(kind)
                     }
                 }
 
                 Picker("Statut", selection: $selectedStatus) {
                     ForEach(ProjectTestingPhaseStatus.allCases) { status in
-                        Text(status.label).tag(status)
+                        Text(status.label.appLocalized(language: appState.interfaceLanguage)).tag(status)
                     }
                 }
 
-                Stepper("Progression: \(progressPercent)%", value: $progressPercent, in: 0...100)
+                Stepper(appState.localizedFormat("Progression: %d%%", progressPercent), value: $progressPercent, in: 0...100)
 
                 TextField("Owner", text: $owner)
                 TextField("Notes", text: $notes, axis: .vertical)
@@ -567,7 +575,7 @@ private struct TestingPhaseEditorSheet: View {
                 optionalDatePicker(title: "Fin réelle", value: $actualEndDate)
             }
             .formStyle(.grouped)
-            .navigationTitle("Nouvelle entrée Testing")
+            .navigationTitle(appState.localized("Nouvelle entrée Testing"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") { requestDismiss() }
@@ -680,12 +688,12 @@ private struct TestingPhaseEditorSheet: View {
                 value.wrappedValue = isEnabled ? (value.wrappedValue ?? .now) : nil
             }
         )) {
-            Text(title)
+            Text(appState.localized(title))
         }
 
         if value.wrappedValue != nil {
             DatePicker(
-                title,
+                appState.localized(title),
                 selection: Binding(
                     get: { value.wrappedValue ?? .now },
                     set: { value.wrappedValue = $0 }

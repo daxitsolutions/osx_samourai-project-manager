@@ -54,6 +54,10 @@ enum AppLocalizer {
     }
 
     static func localizedFormat(_ key: String, language: AppLanguage, _ arguments: CVarArg...) -> String {
+        localizedFormat(key, language: language, arguments: arguments)
+    }
+
+    static func localizedFormat(_ key: String, language: AppLanguage, arguments: [CVarArg]) -> String {
         let format = localized(key, language: language)
         return String(format: format, locale: Locale(identifier: language.localeIdentifier), arguments: arguments)
     }
@@ -69,6 +73,16 @@ enum AppLocalizer {
 extension String {
     func appLocalized(language: AppLanguage) -> String {
         AppLocalizer.localized(self, language: language)
+    }
+}
+
+extension AppState {
+    func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: interfaceLanguage)
+    }
+
+    func localizedFormat(_ key: String, _ arguments: CVarArg...) -> String {
+        AppLocalizer.localizedFormat(key, language: interfaceLanguage, arguments: arguments)
     }
 }
 

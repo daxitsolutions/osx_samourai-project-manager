@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SearchableSingleSelectDropdown<Item: Identifiable>: View where Item.ID: Hashable {
+    @Environment(AppState.self) private var appState
+
     let title: String
     let placeholder: String
     let items: [Item]
@@ -25,7 +27,7 @@ struct SearchableSingleSelectDropdown<Item: Identifiable>: View where Item.ID: H
 
     private var summary: String {
         guard let selectedID, let selected = items.first(where: { $0.id == selectedID }) else {
-            return "Aucune"
+            return localized("Aucune")
         }
         return itemLabel(selected)
     }
@@ -37,7 +39,7 @@ struct SearchableSingleSelectDropdown<Item: Identifiable>: View where Item.ID: H
             } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
+                        Text(localized(title))
                             .foregroundStyle(.primary)
                         Text(summary)
                             .font(.caption)
@@ -54,10 +56,10 @@ struct SearchableSingleSelectDropdown<Item: Identifiable>: View where Item.ID: H
             .buttonStyle(.plain)
 
             if isExpanded {
-                TextField(placeholder, text: $query)
+                TextField(localized(placeholder), text: $query)
                     .textFieldStyle(.roundedBorder)
 
-                Button("Aucune activité parente") {
+                Button(localized("Aucune activité parente")) {
                     selectedID = nil
                 }
                 .buttonStyle(.plain)
@@ -65,7 +67,7 @@ struct SearchableSingleSelectDropdown<Item: Identifiable>: View where Item.ID: H
                 .foregroundStyle(.secondary)
 
                 if filteredItems.isEmpty {
-                    Text("Aucun résultat")
+                    Text(localized("Aucun résultat"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 4)
@@ -95,9 +97,15 @@ struct SearchableSingleSelectDropdown<Item: Identifiable>: View where Item.ID: H
             }
         }
     }
+
+    private func localized(_ key: String) -> String {
+        key.appLocalized(language: appState.interfaceLanguage)
+    }
 }
 
 struct SearchableMultiSelectDropdown<Item: Identifiable>: View where Item.ID: Hashable {
+    @Environment(AppState.self) private var appState
+
     let title: String
     let placeholder: String
     let items: [Item]
@@ -122,9 +130,9 @@ struct SearchableMultiSelectDropdown<Item: Identifiable>: View where Item.ID: Ha
 
     private var summary: String {
         let count = selectedIDs.count
-        if count == 0 { return "Aucune sélection" }
-        if count == 1 { return "1 sélection" }
-        return "\(count) sélections"
+        if count == 0 { return localized("Aucune sélection") }
+        if count == 1 { return AppLocalizer.localizedFormat("%d sélection", language: appState.interfaceLanguage, count) }
+        return AppLocalizer.localizedFormat("%d sélections", language: appState.interfaceLanguage, count)
     }
 
     var body: some View {
@@ -134,7 +142,7 @@ struct SearchableMultiSelectDropdown<Item: Identifiable>: View where Item.ID: Ha
             } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
+                        Text(localized(title))
                             .foregroundStyle(.primary)
                         Text(summary)
                             .font(.caption)
@@ -150,11 +158,11 @@ struct SearchableMultiSelectDropdown<Item: Identifiable>: View where Item.ID: Ha
             .buttonStyle(.plain)
 
             if isExpanded {
-                TextField(placeholder, text: $query)
+                TextField(localized(placeholder), text: $query)
                     .textFieldStyle(.roundedBorder)
 
                 if filteredItems.isEmpty {
-                    Text("Aucun résultat")
+                    Text(localized("Aucun résultat"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 4)
@@ -182,5 +190,9 @@ struct SearchableMultiSelectDropdown<Item: Identifiable>: View where Item.ID: Ha
                 }
             }
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        key.appLocalized(language: appState.interfaceLanguage)
     }
 }

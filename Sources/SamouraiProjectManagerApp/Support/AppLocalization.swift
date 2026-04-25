@@ -66,6 +66,12 @@ enum AppLocalizer {
     }
 }
 
+extension String {
+    func appLocalized(language: AppLanguage) -> String {
+        AppLocalizer.localized(self, language: language)
+    }
+}
+
 struct LocalizedText: View {
     @Environment(AppState.self) private var appState
 

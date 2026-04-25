@@ -3,14 +3,19 @@ set -euo pipefail
 
 APP_NAME="SamouraiProjectManager"
 APP_EXECUTABLE="$APP_NAME"
+TARGET_NAME="SamouraiProjectManagerApp"
 BUNDLE_ID="com.samourai.projectmanager"
 CONFIGURATION="release"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEST_DIR="/Applications"
 INSTALL=1
+KEEP_STAGING=0
+ICON_SOURCE="$ROOT_DIR/Assets/AppIconSource.png"
+RESOURCE_BUNDLE_NAME="${APP_NAME}_${TARGET_NAME}.bundle"
 
 if [[ "${1:-}" == "--no-install" ]]; then
   INSTALL=0
+  KEEP_STAGING=1
 fi
 
 log() {
@@ -34,14 +39,60 @@ build_binary() {
     log "Binaire introuvable: $BUILD_BIN"
     exit 1
   fi
+
+  RESOURCE_BUNDLE="$bin_dir/$RESOURCE_BUNDLE_NAME"
+}
+
+create_app_icon() {
+  if [[ ! -f "$ICON_SOURCE" ]]; then
+    log "Source d'icône introuvable: $ICON_SOURCE"
+    exit 1
+  fi
+
+  local icon_base="$STAGING_DIR/AppIcon-base.png"
+  local icon_square="$STAGING_DIR/AppIcon-square.png"
+  local iconset_dir="$STAGING_DIR/AppIcon.iconset"
+
+  sips --resampleHeightWidthMax 1024 "$ICON_SOURCE" --out "$icon_base" >/dev/null
+  sips --padToHeightWidth 1024 1024 --padColor FFFFFF "$icon_base" --out "$icon_square" >/dev/null
+
+  mkdir -p "$iconset_dir"
+
+  while IFS=: read -r logical_size pixel_size filename; do
+    sips -z "$pixel_size" "$pixel_size" "$icon_square" --out "$iconset_dir/$filename" >/dev/null
+  done <<'EOF'
+16:16:icon_16x16.png
+16:32:icon_16x16@2x.png
+32:32:icon_32x32.png
+32:64:icon_32x32@2x.png
+128:128:icon_128x128.png
+128:256:icon_128x128@2x.png
+256:256:icon_256x256.png
+256:512:icon_256x256@2x.png
+512:512:icon_512x512.png
+512:1024:icon_512x512@2x.png
+EOF
+
+  iconutil -c icns "$iconset_dir" -o "$APP_BUNDLE/Contents/Resources/$APP_NAME.icns"
+}
+
+copy_resource_bundle() {
+  if [[ ! -d "$RESOURCE_BUNDLE" ]]; then
+    log "Bundle de ressources SwiftPM introuvable: $RESOURCE_BUNDLE"
+    exit 1
+  fi
+
+  cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/$RESOURCE_BUNDLE_NAME"
 }
 
 create_bundle() {
   STAGING_DIR="$(mktemp -d "/tmp/${APP_NAME}-bundle-XXXXXX")"
   APP_BUNDLE="$STAGING_DIR/$APP_NAME.app"
 
-  mkdir -p "$APP_BUNDLE/Contents/MacOS"
+  mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
   cp "$BUILD_BIN" "$APP_BUNDLE/Contents/MacOS/$APP_EXECUTABLE"
+  copy_resource_bundle
+  create_app_icon
 
   cat >"$APP_BUNDLE/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -52,6 +103,8 @@ create_bundle() {
   <string>fr</string>
   <key>CFBundleExecutable</key>
   <string>$APP_EXECUTABLE</string>
+  <key>CFBundleIconFile</key>
+  <string>$APP_NAME.icns</string>
   <key>CFBundleIdentifier</key>
   <string>$BUNDLE_ID</string>
   <key>CFBundleInfoDictionaryVersion</key>
@@ -94,7 +147,7 @@ install_bundle() {
 }
 
 cleanup() {
-  if [[ -n "${STAGING_DIR:-}" && -d "${STAGING_DIR:-}" ]]; then
+  if [[ "$KEEP_STAGING" -eq 0 && -n "${STAGING_DIR:-}" && -d "${STAGING_DIR:-}" ]]; then
     rm -rf "$STAGING_DIR"
   fi
 }

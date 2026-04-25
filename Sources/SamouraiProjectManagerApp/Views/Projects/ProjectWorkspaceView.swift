@@ -21,19 +21,38 @@ struct ProjectWorkspaceView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Portefeuille projets")
                             .font(.title2.weight(.semibold))
-                        Text("\(projects.count) / \(store.projects.count) projet(s)")
+                        Text(
+                            AppLocalizer.localizedFormat(
+                                "%d / %d projet(s)",
+                                language: appState.interfaceLanguage,
+                                projects.count,
+                                store.projects.count
+                            )
+                        )
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
                     Menu {
-                        Button("Exporter la vue (\(projects.count))") {
+                        Button(
+                            AppLocalizer.localizedFormat(
+                                "Exporter la vue (%d)",
+                                language: appState.interfaceLanguage,
+                                projects.count
+                            )
+                        ) {
                             prepareExport(projects: projects, filenameSuffix: "vue")
                         }
                         .disabled(projects.isEmpty)
 
-                        Button("Exporter la sélection (\(selectedProjectsForExport.count))") {
+                        Button(
+                            AppLocalizer.localizedFormat(
+                                "Exporter la sélection (%d)",
+                                language: appState.interfaceLanguage,
+                                selectedProjectsForExport.count
+                            )
+                        ) {
                             prepareExport(projects: selectedProjectsForExport, filenameSuffix: "selection")
                         }
                         .disabled(selectedProjectsForExport.isEmpty)
@@ -54,10 +73,18 @@ struct ProjectWorkspaceView: View {
                         Button(role: .destructive) {
                             isShowingDeleteConfirmation = true
                         } label: {
-                            Label(
-                                selectedProjectIDs.count > 1 ? "Supprimer (\(selectedProjectIDs.count))" : "Supprimer",
-                                systemImage: "trash"
-                            )
+                            if selectedProjectIDs.count > 1 {
+                                Label(
+                                    AppLocalizer.localizedFormat(
+                                        "Supprimer (%d)",
+                                        language: appState.interfaceLanguage,
+                                        selectedProjectIDs.count
+                                    ),
+                                    systemImage: "trash"
+                                )
+                            } else {
+                                Label(localized("Supprimer"), systemImage: "trash")
+                            }
                         }
                     }
 
@@ -130,11 +157,9 @@ struct ProjectWorkspaceView: View {
                 isShowingDeleteConfirmation = false
             }
         } message: {
-            Text(
-                selectedProjectIDs.count > 1
-                ? "Les projets sélectionnés seront supprimés. Les risques sont conservés comme non affectés."
-                : "Le projet sélectionné sera supprimé. Les risques seront conservés comme non affectés."
-            )
+            Text(selectedProjectIDs.count > 1
+                 ? localized("Les projets sélectionnés seront supprimés. Les risques sont conservés comme non affectés.")
+                 : localized("Le projet sélectionné sera supprimé. Les risques seront conservés comme non affectés."))
         }
         .onChange(of: selectedProjectIDs) { _, newSelection in
             let singleSelection = newSelection.singleSelection
@@ -171,9 +196,9 @@ struct ProjectWorkspaceView: View {
                 project.summary,
                 project.sponsor,
                 project.manager,
-                project.phase.label,
-                project.deliveryMode.label,
-                project.health.label
+                project.phase.label.appLocalized(language: appState.interfaceLanguage),
+                project.deliveryMode.label.appLocalized(language: appState.interfaceLanguage),
+                project.health.label.appLocalized(language: appState.interfaceLanguage)
             ]
             let normalized = values.map { $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current) }
             return terms.allSatisfy { term in
@@ -195,9 +220,9 @@ struct ProjectWorkspaceView: View {
                 project.summary,
                 project.sponsor,
                 project.manager,
-                project.phase.label,
-                project.health.label,
-                project.deliveryMode.label,
+                project.phase.label.appLocalized(language: appState.interfaceLanguage),
+                project.health.label.appLocalized(language: appState.interfaceLanguage),
+                project.deliveryMode.label.appLocalized(language: appState.interfaceLanguage),
                 project.targetDate.formatted(date: .abbreviated, time: .omitted)
             ]
         }
@@ -205,6 +230,10 @@ struct ProjectWorkspaceView: View {
         exportDocument = EntityCSVDocument(text: csv)
         exportFilename = "samourai-projets-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
         isShowingFileExporter = true
+    }
+
+    private func localized(_ key: String) -> String {
+        key.appLocalized(language: appState.interfaceLanguage)
     }
 }
 
@@ -229,6 +258,8 @@ private enum ProjectEditorContext: Identifiable {
 }
 
 private struct ProjectListRow: View {
+    @Environment(AppState.self) private var appState
+
     let project: Project
     let onNameChange: (String) -> Void
     let onHealthChange: (ProjectHealth) -> Void
@@ -254,7 +285,7 @@ private struct ProjectListRow: View {
                     )
                 ) {
                     ForEach(ProjectHealth.allCases) { health in
-                        Text(health.label).tag(health)
+                        Text(health.label.appLocalized(language: appState.interfaceLanguage)).tag(health)
                     }
                 }
                 .labelsHidden()
@@ -268,7 +299,7 @@ private struct ProjectListRow: View {
                 .lineLimit(2)
 
             HStack {
-                Text(project.phase.label)
+                Text(project.phase.label.appLocalized(language: appState.interfaceLanguage))
                 Spacer()
                 Text(project.targetDate.formatted(date: .abbreviated, time: .omitted))
             }

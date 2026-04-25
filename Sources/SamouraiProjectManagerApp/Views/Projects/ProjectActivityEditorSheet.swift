@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProjectActivityEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
 
     let projectID: UUID
@@ -80,7 +81,7 @@ struct ProjectActivityEditorSheet: View {
                     }
                     Picker("Type hiérarchique", selection: $hierarchyLevel) {
                         ForEach(ActivityHierarchyLevel.allCases) { level in
-                            Text(level.label).tag(level)
+                            Text(level.label.appLocalized(language: appState.interfaceLanguage)).tag(level)
                         }
                     }
                     SearchableSingleSelectDropdown(

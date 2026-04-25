@@ -43,19 +43,19 @@ struct ProjectEditorSheet: View {
 
                 Picker("Phase", selection: $phase) {
                     ForEach(ProjectPhase.allCases) { phase in
-                        Text(phase.label).tag(phase)
+                        Text(phase.label.appLocalized(language: appState.interfaceLanguage)).tag(phase)
                     }
                 }
 
                 Picker("Santé", selection: $health) {
                     ForEach(ProjectHealth.allCases) { health in
-                        Text(health.label).tag(health)
+                        Text(health.label.appLocalized(language: appState.interfaceLanguage)).tag(health)
                     }
                 }
 
                 Picker("Mode de delivery", selection: $deliveryMode) {
                     ForEach(DeliveryMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
+                        Text(mode.label.appLocalized(language: appState.interfaceLanguage)).tag(mode)
                     }
                 }
 
@@ -178,6 +178,7 @@ struct ProjectEditorSheet: View {
 
 struct RiskEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
 
     let projectID: UUID
@@ -200,7 +201,7 @@ struct RiskEditorSheet: View {
 
                 Picker("Sévérité", selection: $severity) {
                     ForEach(RiskSeverity.allCases) { severity in
-                        Text(severity.label).tag(severity)
+                        Text(severity.label.appLocalized(language: appState.interfaceLanguage)).tag(severity)
                     }
                 }
 

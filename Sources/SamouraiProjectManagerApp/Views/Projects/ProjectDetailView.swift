@@ -104,23 +104,23 @@ struct ProjectDetailView: View {
 
                 Spacer()
 
-                Text(project.health.label)
+                Text(project.health.label.appLocalized(language: appState.interfaceLanguage))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(project.health.tintColor.opacity(0.15), in: Capsule())
             }
 
             HStack(spacing: 18) {
-                Label(project.phase.label, systemImage: "flag.pattern.checkered")
-                Label(project.deliveryMode.label, systemImage: "arrow.trianglehead.branch")
-                Label("Sponsor: \(project.sponsor)", systemImage: "person.2")
-                Label("Pilote: \(project.manager)", systemImage: "person.crop.circle")
+                Label(project.phase.label.appLocalized(language: appState.interfaceLanguage), systemImage: "flag.pattern.checkered")
+                Label(project.deliveryMode.label.appLocalized(language: appState.interfaceLanguage), systemImage: "arrow.trianglehead.branch")
+                Label(AppLocalizer.localizedFormat("Sponsor: %@", language: appState.interfaceLanguage, project.sponsor), systemImage: "person.2")
+                Label(AppLocalizer.localizedFormat("Pilote: %@", language: appState.interfaceLanguage, project.manager), systemImage: "person.crop.circle")
             }
             .foregroundStyle(.secondary)
 
             HStack(spacing: 18) {
-                Label("Démarrage \(project.startDate.formatted(date: .abbreviated, time: .omitted))", systemImage: "calendar")
-                Label("Cible \(project.targetDate.formatted(date: .abbreviated, time: .omitted))", systemImage: "calendar.badge.clock")
+                Label(AppLocalizer.localizedFormat("Démarrage %@", language: appState.interfaceLanguage, project.startDate.formatted(date: .abbreviated, time: .omitted)), systemImage: "calendar")
+                Label(AppLocalizer.localizedFormat("Cible %@", language: appState.interfaceLanguage, project.targetDate.formatted(date: .abbreviated, time: .omitted)), systemImage: "calendar.badge.clock")
             }
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -166,7 +166,7 @@ struct ProjectDetailView: View {
                 Spacer()
                 Picker("Favoris", selection: $resourceFavoriteFilter) {
                     ForEach(ProjectResourceFavoriteFilter.allCases) { filter in
-                        Text(filter.label).tag(filter)
+                        Text(filter.label.appLocalized(language: appState.interfaceLanguage)).tag(filter)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -211,12 +211,12 @@ struct ProjectDetailView: View {
                                             .foregroundStyle(.secondary)
                                     }
 
-                                    Text(resource.displayPrimaryRole.isEmpty ? "Rôle non renseigné" : resource.displayPrimaryRole)
+                                    Text(resource.displayPrimaryRole.isEmpty ? localized("Rôle non renseigné") : resource.displayPrimaryRole)
                                         .foregroundStyle(.secondary)
 
                                     HStack(spacing: 16) {
-                                        Text(resource.engagement.label)
-                                        Text(resource.status.label)
+                                        Text(resource.engagement.label.appLocalized(language: appState.interfaceLanguage))
+                                        Text(resource.status.label.appLocalized(language: appState.interfaceLanguage))
                                     }
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
@@ -249,7 +249,7 @@ struct ProjectDetailView: View {
                 Text("Tests & Contrôle Qualité")
                     .font(.title2.weight(.semibold))
                 Spacer()
-                Text("\(project.testingRAGStatus.symbol) \(project.testingRAGStatus.label)")
+                Text("\(project.testingRAGStatus.symbol) \(project.testingRAGStatus.label.appLocalized(language: appState.interfaceLanguage))")
                     .font(.callout.weight(.semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -257,8 +257,8 @@ struct ProjectDetailView: View {
             }
 
             HStack(spacing: 18) {
-                Label("Avancement moyen: \(project.testingAverageProgressPercent)%", systemImage: "chart.line.uptrend.xyaxis")
-                Label("Phases bloquées: \(project.blockedTestingPhaseCount)", systemImage: "exclamationmark.triangle")
+                Label(AppLocalizer.localizedFormat("Avancement moyen: %d%%", language: appState.interfaceLanguage, project.testingAverageProgressPercent), systemImage: "chart.line.uptrend.xyaxis")
+                Label(AppLocalizer.localizedFormat("Phases bloquées: %d", language: appState.interfaceLanguage, project.blockedTestingPhaseCount), systemImage: "exclamationmark.triangle")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -309,7 +309,7 @@ struct ProjectDetailView: View {
                                 )
                             ) {
                                 ForEach(ProjectTestingPhaseStatus.allCases) { status in
-                                    Text(status.label).tag(status)
+                                    Text(status.label.appLocalized(language: appState.interfaceLanguage)).tag(status)
                                 }
                             }
                             .labelsHidden()
@@ -423,7 +423,7 @@ struct ProjectDetailView: View {
                 Image(systemName: date == nil ? "plus.circle" : "xmark.circle")
             }
             .buttonStyle(.plain)
-            .help(date == nil ? "Renseigner une date" : "Effacer la date")
+            .help(localized(date == nil ? "Renseigner une date" : "Effacer la date"))
         }
     }
 
@@ -439,7 +439,7 @@ struct ProjectDetailView: View {
                 Spacer()
                 Picker("Vue", selection: $planningViewMode) {
                     ForEach(PlanningViewMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
+                        Text(mode.label.appLocalized(language: appState.interfaceLanguage)).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -460,16 +460,25 @@ struct ProjectDetailView: View {
                         projectID: project.id,
                         label: planningBaselineLabel,
                         validatedBy: planningValidatedBy
-                    ) ?? "Création baseline impossible (ajoute au moins une activité)."
+                    ) ?? localized("Création baseline impossible (ajoute au moins une activité).")
                 }
                 .buttonStyle(.bordered)
             }
 
             if let planningVariance {
                 HStack(spacing: 18) {
-                    Label("Baseline: \(planningVariance.baselineLabel)", systemImage: "flag.checkered.circle")
-                    Label("Retards: \(planningVariance.delayedCount)", systemImage: "exclamationmark.triangle")
-                    Label("Avances: \(planningVariance.acceleratedCount)", systemImage: "arrow.down.right")
+                    Label(
+                        AppLocalizer.localizedFormat("Baseline: %@", language: appState.interfaceLanguage, planningVariance.baselineLabel),
+                        systemImage: "flag.checkered.circle"
+                    )
+                    Label(
+                        AppLocalizer.localizedFormat("Retards: %d", language: appState.interfaceLanguage, planningVariance.delayedCount),
+                        systemImage: "exclamationmark.triangle"
+                    )
+                    Label(
+                        AppLocalizer.localizedFormat("Avances: %d", language: appState.interfaceLanguage, planningVariance.acceleratedCount),
+                        systemImage: "arrow.down.right"
+                    )
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -513,7 +522,7 @@ struct ProjectDetailView: View {
         let progress = store.activityProgress(activityID: activity.id)
         let childActivities = allActivities.filter { $0.parentActivityID == activity.id && $0.isMilestone == false }
         let isExpanded = expandedActivityIDs.contains(activity.id)
-        let levelTitle = activity.hierarchyLevel.label
+        let levelTitle = activity.hierarchyLevel.label.appLocalized(language: appState.interfaceLanguage)
         let levelColor = activity.hierarchyLevel.tintColor
         let predecessorTitles = allActivities
             .filter { activity.predecessorActivityIDs.contains($0.id) }
@@ -659,7 +668,13 @@ struct ProjectDetailView: View {
                     Text(
                         linkedActions.isEmpty
                         ? progress.formatted(.percent.precision(.fractionLength(0)))
-                        : "\(doneCount)/\(linkedActions.count) actions · \(progress.formatted(.percent.precision(.fractionLength(0))))"
+                        : AppLocalizer.localizedFormat(
+                            "%d/%d actions · %@",
+                            language: appState.interfaceLanguage,
+                            doneCount,
+                            linkedActions.count,
+                            progress.formatted(.percent.precision(.fractionLength(0)))
+                        )
                     )
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -668,7 +683,13 @@ struct ProjectDetailView: View {
             }
 
             if linkedActions.isEmpty == false {
-                Text("Activités rattachées: \(linkedActions.count)")
+                Text(
+                    AppLocalizer.localizedFormat(
+                        "Activités rattachées: %d",
+                        language: appState.interfaceLanguage,
+                        linkedActions.count
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -689,7 +710,13 @@ struct ProjectDetailView: View {
             }
 
             if predecessorTitles.isEmpty == false {
-                Text("Dépendances: \(predecessorTitles.joined(separator: ", "))")
+                Text(
+                    AppLocalizer.localizedFormat(
+                        "Dépendances: %@",
+                        language: appState.interfaceLanguage,
+                        predecessorTitles.joined(separator: ", ")
+                    )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -759,18 +786,24 @@ struct ProjectDetailView: View {
                             Text(risk.displayTitle)
                                 .font(.headline)
                             Spacer()
-                            Text(risk.severity.label)
+                            Text(risk.severity.label.appLocalized(language: appState.interfaceLanguage))
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text("Owner: \(risk.displayOwner.isEmpty ? "-" : risk.displayOwner)")
+                        Text(AppLocalizer.localizedFormat("Owner: %@", language: appState.interfaceLanguage, risk.displayOwner.isEmpty ? "-" : risk.displayOwner))
                             .foregroundStyle(.secondary)
 
                         Text(risk.displayMitigation)
                             .font(.callout)
 
                         if let dueDate = risk.dueDate {
-                            Text("Action attendue pour le \(dueDate.formatted(date: .abbreviated, time: .omitted))")
+                            Text(
+                                AppLocalizer.localizedFormat(
+                                    "Action attendue pour le %@",
+                                    language: appState.interfaceLanguage,
+                                    dueDate.formatted(date: .abbreviated, time: .omitted)
+                                )
+                            )
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -819,7 +852,7 @@ struct ProjectDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            Text("Owner: \(deliverable.owner)")
+                            Text(AppLocalizer.localizedFormat("Owner: %@", language: appState.interfaceLanguage, deliverable.owner))
                                 .foregroundStyle(.secondary)
                             Text(deliverable.details)
                                 .font(.callout)
@@ -830,6 +863,10 @@ struct ProjectDetailView: View {
                 }
             }
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        key.appLocalized(language: appState.interfaceLanguage)
     }
 }
 

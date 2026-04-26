@@ -10,6 +10,7 @@ private final class AppShellDebugLogTracker {
 struct AppShellView: View {
     @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
+    @Environment(RESTAPIService.self) private var restAPIService
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isShowingBackupExporter = false
@@ -49,9 +50,16 @@ struct AppShellView: View {
         .task {
             await store.loadIfNeeded()
             ensureDefaultProjectSelection()
+            synchronizeRESTAPIService()
         }
         .onChange(of: store.projects.map(\.id)) { _, _ in
             ensureDefaultProjectSelection()
+        }
+        .onChange(of: appState.isRESTAPIEnabled) { _, _ in
+            synchronizeRESTAPIService()
+        }
+        .onChange(of: appState.restAPIPort) { _, _ in
+            synchronizeRESTAPIService()
         }
         .toolbar {
             if currentSection.showsProjectPicker {
@@ -185,6 +193,25 @@ struct AppShellView: View {
 
     private var currentSection: AppSection {
         appState.selectedSection ?? .dashboard
+    }
+
+    private func synchronizeRESTAPIService() {
+        guard store.hasLoaded else { return }
+        if appState.isRESTAPIEnabled == false {
+            restAPIService.stop()
+            return
+        }
+
+        guard restAPIService.isRunning == false || restAPIService.activePort != appState.restAPIPort else {
+            return
+        }
+
+        do {
+            try restAPIService.restart(port: appState.restAPIPort, store: store)
+        } catch {
+            appState.isRESTAPIEnabled = false
+            restAPIService.reportConfigurationError(error.localizedDescription)
+        }
     }
 
     @ViewBuilder

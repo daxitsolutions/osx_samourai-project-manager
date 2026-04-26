@@ -13,9 +13,12 @@ final class AppState {
         static let debugEnabled = "app.debug.enabled"
         static let debugHistory = "app.debug.keepHistory"
         static let debugFilePath = "app.debug.filePath"
+        static let restAPIEnabled = "app.restAPI.enabled"
+        static let restAPIPort = "app.restAPI.port"
     }
 
     static let debugDefaultFilePath: String = "/tmp/samouraidata/debug.log"
+    static let defaultRESTAPIPort: Int = 8080
 
     var selectedSection: AppSection? = .dashboard {
         didSet {
@@ -77,6 +80,18 @@ final class AppState {
         }
     }
 
+    var isRESTAPIEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(isRESTAPIEnabled, forKey: StorageKeys.restAPIEnabled)
+        }
+    }
+
+    var restAPIPort: Int = AppState.defaultRESTAPIPort {
+        didSet {
+            UserDefaults.standard.set(restAPIPort, forKey: StorageKeys.restAPIPort)
+        }
+    }
+
     var tableColumnConfigurations: [AppTableID: TableColumnConfiguration] = [:] {
         didSet {
             persistTableColumnConfigurations()
@@ -134,8 +149,18 @@ final class AppState {
             debugFilePath = AppState.debugDefaultFilePath
         }
 
+        isRESTAPIEnabled = UserDefaults.standard.bool(forKey: StorageKeys.restAPIEnabled)
+        let storedRESTAPIPort = UserDefaults.standard.integer(forKey: StorageKeys.restAPIPort)
+        restAPIPort = Self.isValidRESTAPIPort(storedRESTAPIPort)
+            ? storedRESTAPIPort
+            : AppState.defaultRESTAPIPort
+
         tableColumnConfigurations = Self.loadPersistedTableColumnConfigurations()
         persistTableColumnConfigurations()
+    }
+
+    static func isValidRESTAPIPort(_ port: Int) -> Bool {
+        (1_024...65_535).contains(port)
     }
 
     func openProject(_ projectID: UUID) {

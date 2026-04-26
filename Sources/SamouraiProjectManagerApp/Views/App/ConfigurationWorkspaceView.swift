@@ -5,11 +5,13 @@ import UniformTypeIdentifiers
 struct ConfigurationWorkspaceView: View {
     @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
+    @Environment(RESTAPIService.self) private var restAPIService
 
     let primaryProjectName: String?
 
     @State private var isShowingDeleteConfirmation = false
     @State private var selectedTableID: AppTableID = .actions
+    @State private var restAPIPortText = String(AppState.defaultRESTAPIPort)
 
     var body: some View {
         @Bindable var appState = appState
@@ -77,6 +79,89 @@ struct ConfigurationWorkspaceView: View {
                         Text(localized("Le changement de langue met à jour l'interface immédiatement."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                SamouraiSectionCard(
+                    title: "API REST",
+                    subtitle: "Pilote le serveur local exposant le modèle de données en JSON."
+                ) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(spacing: 12) {
+                            Toggle(isOn: Binding(
+                                get: { appState.isRESTAPIEnabled },
+                                set: { setRESTAPIEnabled($0) }
+                            )) {
+                                Label(localized("Activer l'API REST"), systemImage: "network")
+                            }
+                            Spacer()
+                            apiStatusBadge
+                        }
+
+                        HStack(spacing: 12) {
+                            Label(localized("Port de l'API"), systemImage: "number")
+                            Spacer()
+                            TextField(localized("Port"), text: $restAPIPortText)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 96)
+                                .multilineTextAlignment(.trailing)
+                                .onSubmit { applyRESTAPIPortText(restAPIPortText) }
+                                .onChange(of: restAPIPortText) { _, newValue in
+                                    applyRESTAPIPortText(newValue)
+                                }
+                        }
+
+                        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 18, verticalSpacing: 8) {
+                            GridRow {
+                                Text(localized("Format d'entrée"))
+                                    .foregroundStyle(.secondary)
+                                Text("JSON (application/json)")
+                                    .fontWeight(.semibold)
+                            }
+                            GridRow {
+                                Text(localized("Format de sortie"))
+                                    .foregroundStyle(.secondary)
+                                Text("JSON (application/json)")
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .font(.caption)
+
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(restAPIService.isRunning ? SamouraiColorTheme.color(.brandGreen) : SamouraiColorTheme.color(.dangerRed))
+                                .frame(width: 8, height: 8)
+                            Text("Statut : \(restAPIService.statusMessage)")
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.caption)
+
+                        if let errorMessage = restAPIService.lastErrorMessage {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(SamouraiColorTheme.color(.dangerRed))
+                        }
+
+                        Divider()
+
+                        Text(localized("Objets concernés par le CRUD des API"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], alignment: .leading, spacing: 8) {
+                            ForEach(restAPIObjectLabels, id: \.self) { label in
+                                Label(label, systemImage: "curlybraces")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .onAppear {
+                        restAPIPortText = String(appState.restAPIPort)
+                    }
+                    .onChange(of: appState.restAPIPort) { _, newPort in
+                        if restAPIPortText != String(newPort) {
+                            restAPIPortText = String(newPort)
+                        }
                     }
                 }
 
@@ -190,6 +275,95 @@ struct ConfigurationWorkspaceView: View {
         case 3: return "Énorme"
         default: return "Maximum"
         }
+    }
+
+    @ViewBuilder
+    private var apiStatusBadge: some View {
+        Text(restAPIService.isRunning ? localized("ON") : localized("OFF"))
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(restAPIService.isRunning ? SamouraiColorTheme.color(.brandGreen) : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(restAPIService.isRunning ? SamouraiColorTheme.color(.brandGreen).opacity(0.12) : Color.secondary.opacity(0.12))
+            )
+    }
+
+    private var restAPIObjectLabels: [String] {
+        [
+            "Meetings",
+            "Projects",
+            "Resources",
+            "ResourceDirectory",
+            "Risks",
+            "PMActions",
+            "Decisions",
+            "Events",
+            "Deliverables",
+            "ScopeIn",
+            "ScopeOut"
+        ]
+    }
+
+    private func setRESTAPIEnabled(_ isEnabled: Bool) {
+        guard isEnabled else {
+            appState.isRESTAPIEnabled = false
+            return
+        }
+
+        guard validateRESTAPIPort(appState.restAPIPort) else {
+            appState.isRESTAPIEnabled = false
+            return
+        }
+
+        appState.isRESTAPIEnabled = true
+    }
+
+    private func applyRESTAPIPortText(_ rawValue: String) {
+        let digits = rawValue.filter(\.isNumber)
+        if digits != rawValue {
+            restAPIPortText = digits
+            return
+        }
+
+        guard let port = Int(digits) else {
+            return
+        }
+
+        guard AppState.isValidRESTAPIPort(port) else {
+            restAPIService.reportConfigurationError(localized("Le port doit être compris entre 1024 et 65535."))
+            return
+        }
+
+        guard port != appState.restAPIPort else {
+            return
+        }
+
+        guard validateRESTAPIPort(port) else {
+            return
+        }
+
+        appState.restAPIPort = port
+    }
+
+    private func validateRESTAPIPort(_ port: Int) -> Bool {
+        if restAPIService.activePort == port {
+            return true
+        }
+
+        guard RESTAPIService.isPortAvailable(port) else {
+            restAPIService.reportConfigurationError(
+                AppLocalizer.localizedFormat(
+                    "Le port %@ est déjà utilisé par un autre processus.",
+                    language: appState.interfaceLanguage,
+                    "\(port)"
+                )
+            )
+            return false
+        }
+
+        return true
     }
 
     private func localized(_ key: String) -> String {

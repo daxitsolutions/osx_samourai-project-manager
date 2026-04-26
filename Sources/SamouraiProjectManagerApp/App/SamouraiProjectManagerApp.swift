@@ -5,6 +5,7 @@ struct SamouraiProjectManagerApp: App {
     @State private var appState = AppState()
     @State private var store = SamouraiStore()
     @State private var typography = SamouraiTypography()
+    @State private var restAPIService = RESTAPIService()
 
     var body: some Scene {
         WindowGroup("Samourai Project Manager") {
@@ -12,6 +13,7 @@ struct SamouraiProjectManagerApp: App {
                 .environment(appState)
                 .environment(store)
                 .environment(typography)
+                .environment(restAPIService)
                 .environment(\.dynamicTypeSize, appState.dynamicTypeSize)
                 .environment(\.locale, appState.interfaceLocale)
                 .tint(SamouraiColorTheme.color(.brandBlue))

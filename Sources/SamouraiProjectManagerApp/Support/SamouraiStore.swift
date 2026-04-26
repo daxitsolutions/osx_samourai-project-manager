@@ -3028,6 +3028,472 @@ final class SamouraiStore {
         return result
     }
 
+    func apiDatabaseSnapshot() -> SamouraiDatabase {
+        makeDatabase()
+    }
+
+    func apiReplaceDatabase(_ database: SamouraiDatabase) throws {
+        let normalized = try validatedDatabase(from: database)
+        let projectIDs = Set(normalized.projects.map(\.id))
+        projects = sortProjects(normalized.projects)
+        resources = sortResources(sanitizeResourceAssignments(normalized.resources, projectIDs: projectIDs))
+        unassignedRisks = sortStandaloneRisks(normalized.unassignedRisks)
+        activities = sortActivities(sanitizeActivities(normalized.activities, projectIDs: projectIDs))
+        events = sortEvents(
+            sanitizeEvents(
+                normalized.events,
+                projectIDs: projectIDs,
+                resourceIDs: Set(normalized.resources.map(\.id))
+            )
+        )
+        let activitiesByID = Dictionary(uniqueKeysWithValues: activities.map { ($0.id, $0) })
+        actions = sortActions(sanitizeActions(normalized.actions, projectIDs: projectIDs, activitiesByID: activitiesByID))
+        meetings = sortMeetings(sanitizeMeetings(normalized.meetings, projectIDs: projectIDs))
+        decisions = sortDecisions(
+            sanitizeDecisions(
+                normalized.decisions,
+                projectIDs: projectIDs,
+                meetingIDs: Set(meetings.map(\.id)),
+                eventIDs: Set(events.map(\.id)),
+                resourceIDs: Set(resources.map(\.id))
+            )
+        )
+        governanceReports = sortGovernanceReports(sanitizeGovernanceReports(normalized.governanceReports, projectIDs: projectIDs))
+        persist()
+    }
+
+    @discardableResult
+    func apiUpsertProject(_ project: Project, replacing id: UUID? = nil) throws -> Project {
+        var updated = project
+        if let id {
+            guard let index = projects.firstIndex(where: { $0.id == id }) else {
+                throw RESTAPIError.notFound("Projet introuvable.")
+            }
+            updated.id = id
+            updated.updatedAt = .now
+            projects[index] = updated
+        } else {
+            guard projects.contains(where: { $0.id == updated.id }) == false else {
+                throw RESTAPIError.conflict("Un projet avec cet ID existe déjà.")
+            }
+            projects.append(updated)
+        }
+        projects = sortProjects(projects)
+        persist()
+        return updated
+    }
+
+    func apiDeleteProject(id: UUID) throws {
+        guard projects.contains(where: { $0.id == id }) else {
+            throw RESTAPIError.notFound("Projet introuvable.")
+        }
+        deleteProject(projectID: id)
+    }
+
+    @discardableResult
+    func apiUpsertResource(_ resource: Resource, replacing id: UUID? = nil) throws -> Resource {
+        var updated = resource
+        let validProjectIDs = Set(projects.map(\.id))
+        updated.assignedProjectIDs = updated.assignedProjectIDs.filter { validProjectIDs.contains($0) }
+        updated.favoriteProjectIDs = updated.favoriteProjectIDs.filter { updated.assignedProjectIDs.contains($0) }
+        if let id {
+            guard let index = resources.firstIndex(where: { $0.id == id }) else {
+                throw RESTAPIError.notFound("Ressource introuvable.")
+            }
+            updated.id = id
+            updated.updatedAt = .now
+            resources[index] = updated
+        } else {
+            guard resources.contains(where: { $0.id == updated.id }) == false else {
+                throw RESTAPIError.conflict("Une ressource avec cet ID existe déjà.")
+            }
+            resources.append(updated)
+        }
+        resources = sortResources(resources)
+        persist()
+        return updated
+    }
+
+    func apiDeleteResource(id: UUID) throws {
+        guard resources.contains(where: { $0.id == id }) else {
+            throw RESTAPIError.notFound("Ressource introuvable.")
+        }
+        deleteResource(resourceID: id)
+    }
+
+    @discardableResult
+    func apiUpsertEvent(_ event: ProjectEvent, replacing id: UUID? = nil) throws -> ProjectEvent {
+        var updated = event
+        updated.projectID = sanitizedProjectID(updated.projectID)
+        updated.resourceIDs = sanitizedResourceIDs(updated.resourceIDs)
+        if let id {
+            guard let index = events.firstIndex(where: { $0.id == id }) else {
+                throw RESTAPIError.notFound("Événement introuvable.")
+            }
+            updated.id = id
+            updated.updatedAt = .now
+            events[index] = updated
+        } else {
+            guard events.contains(where: { $0.id == updated.id }) == false else {
+                throw RESTAPIError.conflict("Un événement avec cet ID existe déjà.")
+            }
+            events.append(updated)
+        }
+        events = sortEvents(events)
+        persist()
+        return updated
+    }
+
+    func apiDeleteEvent(id: UUID) throws {
+        guard events.contains(where: { $0.id == id }) else {
+            throw RESTAPIError.notFound("Événement introuvable.")
+        }
+        deleteEvent(eventID: id)
+    }
+
+    @discardableResult
+    func apiUpsertAction(_ action: ProjectAction, replacing id: UUID? = nil) throws -> ProjectAction {
+        var updated = action
+        updated.projectID = sanitizedProjectID(updated.projectID)
+        if let activityID = updated.activityID {
+            guard let projectID = updated.projectID,
+                  let activity = activity(with: activityID),
+                  activity.projectID == projectID
+            else {
+                updated.activityID = nil
+                return try apiUpsertAction(updated, replacing: id)
+            }
+        }
+        if let id {
+            guard let index = actions.firstIndex(where: { $0.id == id }) else {
+                throw RESTAPIError.notFound("Action introuvable.")
+            }
+            updated.id = id
+            updated.updatedAt = .now
+            actions[index] = updated
+        } else {
+            guard actions.contains(where: { $0.id == updated.id }) == false else {
+                throw RESTAPIError.conflict("Une action avec cet ID existe déjà.")
+            }
+            actions.append(updated)
+        }
+        actions = sortActions(actions)
+        persist()
+        return updated
+    }
+
+    func apiDeleteAction(id: UUID) throws {
+        guard actions.contains(where: { $0.id == id }) else {
+            throw RESTAPIError.notFound("Action introuvable.")
+        }
+        deleteAction(actionID: id)
+    }
+
+    @discardableResult
+    func apiUpsertMeeting(_ meeting: ProjectMeeting, replacing id: UUID? = nil) throws -> ProjectMeeting {
+        var updated = meeting
+        updated.projectID = sanitizedProjectID(updated.projectID)
+        updated.durationMinutes = max(updated.durationMinutes, 1)
+        if let id {
+            guard let index = meetings.firstIndex(where: { $0.id == id }) else {
+                throw RESTAPIError.notFound("Réunion introuvable.")
+            }
+            updated.id = id
+            updated.updatedAt = .now
+            meetings[index] = updated
+        } else {
+            guard meetings.contains(where: { $0.id == updated.id }) == false else {
+                throw RESTAPIError.conflict("Une réunion avec cet ID existe déjà.")
+            }
+            meetings.append(updated)
+        }
+        meetings = sortMeetings(meetings)
+        persist()
+        return updated
+    }
+
+    func apiDeleteMeeting(id: UUID) throws {
+        guard meetings.contains(where: { $0.id == id }) else {
+            throw RESTAPIError.notFound("Réunion introuvable.")
+        }
+        deleteMeeting(meetingID: id)
+    }
+
+    @discardableResult
+    func apiUpsertDecision(_ decision: ProjectDecision, replacing id: UUID? = nil) throws -> ProjectDecision {
+        var updated = decision
+        updated.projectID = sanitizedProjectID(updated.projectID)
+        updated.meetingIDs = sanitizedMeetingIDs(updated.meetingIDs)
+        updated.eventIDs = sanitizedEventIDs(updated.eventIDs)
+        updated.impactedResourceIDs = sanitizedResourceIDs(updated.impactedResourceIDs)
+        if let id {
+            guard let index = decisions.firstIndex(where: { $0.id == id }) else {
+                throw RESTAPIError.notFound("Décision introuvable.")
+            }
+            updated.id = id
+            updated.updatedAt = .now
+            decisions[index] = updated
+        } else {
+            guard decisions.contains(where: { $0.id == updated.id }) == false else {
+                throw RESTAPIError.conflict("Une décision avec cet ID existe déjà.")
+            }
+            decisions.append(updated)
+        }
+        decisions = sortDecisions(decisions)
+        persist()
+        return updated
+    }
+
+    func apiDeleteDecision(id: UUID) throws {
+        guard decisions.contains(where: { $0.id == id }) else {
+            throw RESTAPIError.notFound("Décision introuvable.")
+        }
+        deleteDecision(decisionID: id)
+    }
+
+    @discardableResult
+    func apiUpsertActivity(_ activity: ProjectActivity, replacing id: UUID? = nil) throws -> ProjectActivity {
+        guard projects.contains(where: { $0.id == activity.projectID }) else {
+            throw RESTAPIError.badRequest("Activité rattachée à un projet inexistant.")
+        }
+        var updated = activity
+        updated.scenarioID = sanitizedPlanningScenarioID(projectID: activity.projectID, scenarioID: activity.scenarioID)
+            ?? defaultPlanningScenarioID(for: activity.projectID)
+            ?? activity.projectID
+        updated.parentActivityID = sanitizedParentActivityID(
+            projectID: updated.projectID,
+            scenarioID: updated.scenarioID,
+            parentActivityID: updated.parentActivityID,
+            childHierarchyLevel: updated.hierarchyLevel,
+            currentActivityID: id ?? updated.id
+        )
+        updated.predecessorActivityIDs = sanitizedPredecessorActivityIDs(
+            projectID: updated.projectID,
+            scenarioID: updated.scenarioID,
+            predecessorIDs: updated.predecessorActivityIDs,
+            currentActivityID: id ?? updated.id
+        )
+        updated.linkedDeliverableIDs = sanitizedDeliverableIDs(projectID: updated.projectID, deliverableIDs: updated.linkedDeliverableIDs)
+        let dates = normalizedActivityDates(
+            estimatedStartDate: updated.estimatedStartDate,
+            estimatedEndDate: updated.estimatedEndDate,
+            isMilestone: updated.isMilestone
+        )
+        updated.estimatedStartDate = dates.startDate
+        updated.estimatedEndDate = dates.endDate
+
+        if let id {
+            guard let index = activities.firstIndex(where: { $0.id == id }) else {
+                throw RESTAPIError.notFound("Activité introuvable.")
+            }
+            updated.id = id
+            updated.updatedAt = .now
+            activities[index] = updated
+        } else {
+            guard activities.contains(where: { $0.id == updated.id }) == false else {
+                throw RESTAPIError.conflict("Une activité avec cet ID existe déjà.")
+            }
+            activities.append(updated)
+        }
+        activities = sortActivities(activities)
+        persist()
+        return updated
+    }
+
+    func apiDeleteActivity(id: UUID) throws {
+        guard activities.contains(where: { $0.id == id }) else {
+            throw RESTAPIError.notFound("Activité introuvable.")
+        }
+        deleteActivity(activityID: id)
+    }
+
+    func apiRiskRecords() -> [APIRiskRecord] {
+        let projectRecords = projects.flatMap { project in
+            project.risks.map { APIRiskRecord(projectID: project.id, risk: $0) }
+        }
+        let unassignedRecords = unassignedRisks.map { APIRiskRecord(projectID: nil, risk: $0) }
+        return projectRecords + unassignedRecords
+    }
+
+    @discardableResult
+    func apiUpsertRisk(_ record: APIRiskRecord, replacing id: UUID? = nil) throws -> APIRiskRecord {
+        var updatedRecord = record
+        if let projectID = updatedRecord.projectID,
+           projects.contains(where: { $0.id == projectID }) == false {
+            throw RESTAPIError.badRequest("Risque rattaché à un projet inexistant.")
+        }
+
+        if let id {
+            guard apiRiskRecords().contains(where: { $0.risk.id == id }) else {
+                throw RESTAPIError.notFound("Risque introuvable.")
+            }
+            updatedRecord.risk.id = id
+            try apiDeleteRisk(id: id)
+        } else if apiRiskRecords().contains(where: { $0.risk.id == updatedRecord.risk.id }) {
+            throw RESTAPIError.conflict("Un risque avec cet ID existe déjà.")
+        }
+
+        if let projectID = updatedRecord.projectID {
+            guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
+                throw RESTAPIError.badRequest("Risque rattaché à un projet inexistant.")
+            }
+            updatedRecord.risk.projectNames = projects[projectIndex].name
+            projects[projectIndex].risks.append(updatedRecord.risk)
+            projects[projectIndex].updatedAt = .now
+            projects = sortProjects(projects)
+        } else {
+            unassignedRisks.append(updatedRecord.risk)
+            unassignedRisks = sortStandaloneRisks(unassignedRisks)
+        }
+        persist()
+        return updatedRecord
+    }
+
+    func apiDeleteRisk(id: UUID) throws {
+        for projectIndex in projects.indices {
+            if let riskIndex = projects[projectIndex].risks.firstIndex(where: { $0.id == id }) {
+                projects[projectIndex].risks.remove(at: riskIndex)
+                projects[projectIndex].updatedAt = .now
+                persist()
+                return
+            }
+        }
+        guard let riskIndex = unassignedRisks.firstIndex(where: { $0.id == id }) else {
+            throw RESTAPIError.notFound("Risque introuvable.")
+        }
+        unassignedRisks.remove(at: riskIndex)
+        unassignedRisks = sortStandaloneRisks(unassignedRisks)
+        persist()
+    }
+
+    func apiDeliverableRecords() -> [APIDeliverableRecord] {
+        projects.flatMap { project in
+            project.deliverables.map { APIDeliverableRecord(projectID: project.id, deliverable: $0) }
+        }
+    }
+
+    @discardableResult
+    func apiUpsertDeliverable(_ record: APIDeliverableRecord, replacing id: UUID? = nil) throws -> APIDeliverableRecord {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == record.projectID }) else {
+            throw RESTAPIError.badRequest("Livrable rattaché à un projet inexistant.")
+        }
+        var updatedRecord = record
+        if let id {
+            updatedRecord.deliverable.id = id
+            try apiDeleteDeliverable(id: id)
+        } else if apiDeliverableRecords().contains(where: { $0.deliverable.id == updatedRecord.deliverable.id }) {
+            throw RESTAPIError.conflict("Un livrable avec cet ID existe déjà.")
+        }
+        projects[projectIndex].deliverables.append(updatedRecord.deliverable)
+        projects[projectIndex].deliverables = projects[projectIndex].sortedDeliverables
+        projects[projectIndex].updatedAt = .now
+        projects = sortProjects(projects)
+        persist()
+        return updatedRecord
+    }
+
+    func apiDeleteDeliverable(id: UUID) throws {
+        for projectIndex in projects.indices {
+            if let deliverableIndex = projects[projectIndex].deliverables.firstIndex(where: { $0.id == id }) {
+                projects[projectIndex].deliverables.remove(at: deliverableIndex)
+                projects[projectIndex].updatedAt = .now
+                activities = activities.map { activity in
+                    var updated = activity
+                    updated.linkedDeliverableIDs.removeAll { $0 == id }
+                    return updated
+                }
+                persist()
+                return
+            }
+        }
+        throw RESTAPIError.notFound("Livrable introuvable.")
+    }
+
+    func apiScopeItems(inScope: Bool) -> [APIScopeItem] {
+        projects.flatMap { project in
+            let items = inScope
+                ? (project.scopeDefinition?.inScopeItems ?? [])
+                : (project.scopeDefinition?.outOfScopeItems ?? [])
+            return items.enumerated().map { index, value in
+                APIScopeItem(projectID: project.id, index: index, value: value)
+            }
+        }
+    }
+
+    @discardableResult
+    func apiAppendScopeItem(_ item: APIScopeItem, inScope: Bool) throws -> APIScopeItem {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == item.projectID }) else {
+            throw RESTAPIError.badRequest("Élément de périmètre rattaché à un projet inexistant.")
+        }
+        let cleaned = item.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.isEmpty == false else {
+            throw RESTAPIError.badRequest("Le libellé du périmètre est obligatoire.")
+        }
+        var definition = projects[projectIndex].scopeDefinition ?? ProjectScopeDefinition()
+        if inScope {
+            definition.inScopeItems.append(cleaned)
+            definition.inScopeItems = normalizedScopeItems(definition.inScopeItems)
+        } else {
+            definition.outOfScopeItems.append(cleaned)
+            definition.outOfScopeItems = normalizedScopeItems(definition.outOfScopeItems)
+        }
+        definition.updatedAt = .now
+        projects[projectIndex].scopeDefinition = definition
+        projects[projectIndex].updatedAt = .now
+        persist()
+        let index = max((inScope ? definition.inScopeItems.count : definition.outOfScopeItems.count) - 1, 0)
+        return APIScopeItem(projectID: item.projectID, index: index, value: cleaned)
+    }
+
+    @discardableResult
+    func apiReplaceScopeItem(projectID: UUID, index: Int, value: String, inScope: Bool) throws -> APIScopeItem {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
+            throw RESTAPIError.badRequest("Élément de périmètre rattaché à un projet inexistant.")
+        }
+        var definition = projects[projectIndex].scopeDefinition ?? ProjectScopeDefinition()
+        if inScope {
+            guard definition.inScopeItems.indices.contains(index) else {
+                throw RESTAPIError.notFound("Élément ScopeIn introuvable.")
+            }
+            definition.inScopeItems[index] = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            definition.inScopeItems = normalizedScopeItems(definition.inScopeItems)
+        } else {
+            guard definition.outOfScopeItems.indices.contains(index) else {
+                throw RESTAPIError.notFound("Élément ScopeOut introuvable.")
+            }
+            definition.outOfScopeItems[index] = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            definition.outOfScopeItems = normalizedScopeItems(definition.outOfScopeItems)
+        }
+        definition.updatedAt = .now
+        projects[projectIndex].scopeDefinition = definition
+        projects[projectIndex].updatedAt = .now
+        persist()
+        let cleanedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return APIScopeItem(projectID: projectID, index: min(index, max((inScope ? definition.inScopeItems.count : definition.outOfScopeItems.count) - 1, 0)), value: cleanedValue)
+    }
+
+    func apiDeleteScopeItem(projectID: UUID, index: Int, inScope: Bool) throws {
+        guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
+            throw RESTAPIError.badRequest("Élément de périmètre rattaché à un projet inexistant.")
+        }
+        var definition = projects[projectIndex].scopeDefinition ?? ProjectScopeDefinition()
+        if inScope {
+            guard definition.inScopeItems.indices.contains(index) else {
+                throw RESTAPIError.notFound("Élément ScopeIn introuvable.")
+            }
+            definition.inScopeItems.remove(at: index)
+        } else {
+            guard definition.outOfScopeItems.indices.contains(index) else {
+                throw RESTAPIError.notFound("Élément ScopeOut introuvable.")
+            }
+            definition.outOfScopeItems.remove(at: index)
+        }
+        definition.updatedAt = .now
+        projects[projectIndex].scopeDefinition = definition
+        projects[projectIndex].updatedAt = .now
+        persist()
+    }
+
     private func persist() {
         let snapshot = makeDatabase()
         Task(priority: .utility) { [persistence] in

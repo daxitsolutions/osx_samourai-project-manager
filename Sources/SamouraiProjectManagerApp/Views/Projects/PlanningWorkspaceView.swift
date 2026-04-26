@@ -170,7 +170,7 @@ struct PlanningWorkspaceView: View {
 
                 Picker(localized("Vue"), selection: $viewMode) {
                     ForEach(PlanningViewMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
+                        Text(localized(mode.label)).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -376,7 +376,7 @@ struct PlanningWorkspaceView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 0) {
                     ForEach(activeTableColumns) { column in
-                        Text(column.label)
+                        Text(localized(column.label))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .frame(width: columnWidth(column), alignment: .leading)
@@ -455,7 +455,7 @@ struct PlanningWorkspaceView: View {
                 )
             ) {
                 ForEach(ActivityHierarchyLevel.allCases) { level in
-                    Text(level.label).tag(level)
+                    Text(localized(level.label)).tag(level)
                 }
             }
             .labelsHidden()
@@ -644,7 +644,7 @@ struct PlanningWorkspaceView: View {
                         Text(activity.displayTitle)
                             .font(.headline)
                         HStack(spacing: 10) {
-                            Text(activity.hierarchyLevel.label)
+                            Text(localized(activity.hierarchyLevel.label))
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 3)

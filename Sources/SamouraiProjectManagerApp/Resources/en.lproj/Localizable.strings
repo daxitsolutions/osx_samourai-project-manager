@@ -739,7 +739,7 @@
 "Fichier de sauvegarde invalide ou non reconnu." = "Invalid or unrecognized backup file.";
 "Fin de Phase" = "End of Phase";
 "Format non pris en charge. Utilise .ics, .txt, .md ou texte brut." = "Unsupported format. Use .ics, .txt, .md or plain text.";
-"Grille Jours" = "Day Grid";
+"Grille Jours" = "Excel view";
 "IDs actions dupliqués." = "Duplicate action IDs.";
 "IDs activités dupliqués." = "Duplicate activity IDs.";
 "IDs décisions dupliqués." = "Duplicate decision IDs.";
@@ -843,3 +843,4 @@
 "Date d'échéance modifiée : %@ → %@" = "Due date changed: %@ → %@";
 "Date d'action cible modifiée : %@ → %@" = "Target action date changed: %@ → %@";
 "Change Request passée à %@." = "Change Request moved to %@.";
+"Arborescence" = "Tree";

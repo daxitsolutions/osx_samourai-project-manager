@@ -24,5 +24,61 @@
       "Bash(python3 /tmp/localize_views.py --dry-run Views/App/BackupWorkspaceView.swift)",
       "Bash(python3 /tmp/collect_all_strings.py)"
     ]
+  },
+  "effortLevel": "high",
+  "theme": "auto",
+  "hooks": {
+    "Start": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "say 'Claude est prêt'"
+          },
+          {
+            "type": "command",
+            "command": "echo '🚀 Prêt à coder...'"
+          }
+        ]
+      }
+    ],
+
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Ping.aiff"
+          },
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Claude attend ta réponse\" with title \"⚠️ Action requise\" sound name \"Ping\"'"
+          },
+          {
+            "type": "command",
+            "command": "say 'Claude a besoin de toi'"
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Glass.aiff"
+          },
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Réponse prête\" with title \"✅ Claude\" sound name \"Glass\"'"
+          },
+          {
+            "type": "command",
+            "command": "say \"j'ai fini\""
+          }
+        ]
+      }
+    ]
   }
 }

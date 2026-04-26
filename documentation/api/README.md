@@ -4,9 +4,11 @@ Cette documentation décrit l'API REST locale de Samourai Project Manager.
 
 ## Ouvrir Swagger UI
 
-Ouvre `documentation/api/index.html` dans un navigateur. La page charge `openapi.yaml` et utilise Swagger UI depuis le CDN officiel `swagger-ui-dist`.
+Ouvre `documentation/api/index.html` dans un navigateur. La page charge une copie JavaScript embarquee du contrat OpenAPI et utilise Swagger UI depuis le CDN officiel `swagger-ui-dist`.
 
-Si le navigateur bloque le chargement local du fichier YAML, sers le dossier avec un serveur statique :
+Le fichier source maintenable reste `openapi.yaml`. `openapi.js` est la version generee pour permettre une ouverture directe en `file://` sans erreur de fetch locale.
+
+Tu peux aussi servir le dossier avec un serveur statique :
 
 ```bash
 cd documentation/api

@@ -19,7 +19,7 @@ struct ProjectWorkspaceView: View {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Portefeuille projets")
+                        Text(localized("Portefeuille projets"))
                             .font(.title2.weight(.semibold))
                         Text(
                             AppLocalizer.localizedFormat(
@@ -57,7 +57,7 @@ struct ProjectWorkspaceView: View {
                         }
                         .disabled(selectedProjectsForExport.isEmpty)
                     } label: {
-                        Label("Exporter", systemImage: "square.and.arrow.up")
+                        Label(localized("Exporter"), systemImage: "square.and.arrow.up")
                     }
 
                     if selectedProjectIDs.isEmpty == false {
@@ -66,7 +66,7 @@ struct ProjectWorkspaceView: View {
                             Button {
                                 projectEditorContext = .edit(selectedID)
                             } label: {
-                                Label("Modifier", systemImage: "pencil")
+                                Label(localized("Modifier"), systemImage: "pencil")
                             }
                         }
 
@@ -91,7 +91,7 @@ struct ProjectWorkspaceView: View {
                     Button {
                         projectEditorContext = .create
                     } label: {
-                        Label("Nouveau projet", systemImage: "plus")
+                        Label(localized("Nouveau projet"), systemImage: "plus")
                     }
                 }
                 .padding(.horizontal, 16)
@@ -99,7 +99,7 @@ struct ProjectWorkspaceView: View {
                 .padding(.bottom, 8)
 
                 HStack(spacing: 12) {
-                    TextField("Recherche projet (nom, synthèse, sponsor, pilote, phase)", text: $searchText)
+                    TextField(localized("Recherche projet (nom, synthèse, sponsor, pilote, phase)"), text: $searchText)
                         .textFieldStyle(.roundedBorder)
                 }
                 .padding(.horizontal, 16)
@@ -128,7 +128,7 @@ struct ProjectWorkspaceView: View {
                     ContentUnavailableView(
                         "Aucun projet",
                         systemImage: "square.grid.2x2",
-                        description: Text("Ajoute un projet pour commencer ton pilotage Samourai.")
+                        description: Text(localized("Ajoute un projet pour commencer ton pilotage Samourai."))
                     )
                 }
             }
@@ -145,15 +145,15 @@ struct ProjectWorkspaceView: View {
             contentType: .commaSeparatedText,
             defaultFilename: exportFilename
         ) { _ in }
-        .alert("Supprimer les projets", isPresented: $isShowingDeleteConfirmation) {
-            Button("Supprimer", role: .destructive) {
+        .alert(localized("Supprimer les projets"), isPresented: $isShowingDeleteConfirmation) {
+            Button(localized("Supprimer"), role: .destructive) {
                 for projectID in selectedProjectIDs {
                     store.deleteProject(projectID: projectID)
                 }
                 selectedProjectIDs.removeAll()
                 appState.selectedProjectID = nil
             }
-            Button("Annuler", role: .cancel) {
+            Button(localized("Annuler"), role: .cancel) {
                 isShowingDeleteConfirmation = false
             }
         } message: {

@@ -71,15 +71,15 @@ struct ProjectActivityEditorSheet: View {
 
         NavigationStack {
             Form {
-                Section("Métadonnées activité") {
-                    TextField("Titre de l'activité", text: $title)
+                Section(localized("Métadonnées activité")) {
+                    TextField(localized("Titre de l'activité"), text: $title)
                     if let resolvedScenario {
                         LabeledContent("Scénario") {
                             Text(resolvedScenario.name)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Picker("Type hiérarchique", selection: $hierarchyLevel) {
+                    Picker(localized("Type hiérarchique"), selection: $hierarchyLevel) {
                         ForEach(ActivityHierarchyLevel.allCases) { level in
                             Text(level.label.appLocalized(language: appState.interfaceLanguage)).tag(level)
                         }
@@ -92,30 +92,30 @@ struct ProjectActivityEditorSheet: View {
                         query: $parentSelectionQuery,
                         itemLabel: { $0.displayTitle }
                     )
-                    Toggle("Marquer comme jalon", isOn: $isMilestone)
+                    Toggle(localized("Marquer comme jalon"), isOn: $isMilestone)
                     if isMilestone {
-                        DatePicker("Date de fin (jalon)", selection: $estimatedEndDate, displayedComponents: .date)
+                        DatePicker(localized("Date de fin (jalon)"), selection: $estimatedEndDate, displayedComponents: .date)
                     } else {
-                        DatePicker("Date de début estimée", selection: $estimatedStartDate, displayedComponents: .date)
+                        DatePicker(localized("Date de début estimée"), selection: $estimatedStartDate, displayedComponents: .date)
                         if !selectedPredecessorIDs.isEmpty {
-                            Label("Date positionnée depuis le prédécesseur", systemImage: "link")
+                            Label(localized("Date positionnée depuis le prédécesseur"), systemImage: "link")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        DatePicker("Date de fin estimée", selection: $estimatedEndDate, displayedComponents: .date)
+                        DatePicker(localized("Date de fin estimée"), selection: $estimatedEndDate, displayedComponents: .date)
                     }
-                    Toggle("Fin réelle renseignée", isOn: $includeActualEndDate)
+                    Toggle(localized("Fin réelle renseignée"), isOn: $includeActualEndDate)
                     if includeActualEndDate {
-                        DatePicker("Date de fin réelle", selection: $actualEndDate, displayedComponents: .date)
+                        DatePicker(localized("Date de fin réelle"), selection: $actualEndDate, displayedComponents: .date)
                     }
                 }
 
-                Section("Actions rattachées") {
+                Section(localized("Actions rattachées")) {
                     if actionLinkingIsAvailable == false {
-                        Text("Les rattachements d'actions restent pilotés sur le scénario principal pour éviter les croisements entre scénarios.")
+                        Text(localized("Les rattachements d'actions restent pilotés sur le scénario principal pour éviter les croisements entre scénarios."))
                             .foregroundStyle(.secondary)
                     } else if projectActions.isEmpty {
-                        Text("Aucune action disponible pour ce projet.")
+                        Text(localized("Aucune action disponible pour ce projet."))
                             .foregroundStyle(.secondary)
                     } else {
                         SearchableMultiSelectDropdown(
@@ -129,11 +129,11 @@ struct ProjectActivityEditorSheet: View {
                     }
                 }
 
-                Section("Livrables justifiés par l'activité") {
+                Section(localized("Livrables justifiés par l'activité")) {
                     let projectDeliverables = store.project(with: projectID)?.deliverables ?? []
                     let majorDeliverables = projectDeliverables.filter(\.isMainDeliverable)
                     if majorDeliverables.isEmpty {
-                        Text("Aucun livrable principal disponible dans le scope.")
+                        Text(localized("Aucun livrable principal disponible dans le scope."))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(majorDeliverables) { deliverable in
@@ -154,9 +154,9 @@ struct ProjectActivityEditorSheet: View {
                     }
                 }
 
-                Section("Dépendances (A terminé avant B)") {
+                Section(localized("Dépendances (A terminé avant B)")) {
                     if projectActivities.isEmpty {
-                        Text("Aucune autre activité disponible.")
+                        Text(localized("Aucune autre activité disponible."))
                             .foregroundStyle(.secondary)
                     } else {
                         SearchableMultiSelectDropdown(
@@ -197,7 +197,7 @@ struct ProjectActivityEditorSheet: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
@@ -215,18 +215,18 @@ struct ProjectActivityEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if formIsInvalid == false {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     submit()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             captureInitialSnapshotIfNeeded()
@@ -310,5 +310,9 @@ struct ProjectActivityEditorSheet: View {
             )
         }
         dismiss()
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

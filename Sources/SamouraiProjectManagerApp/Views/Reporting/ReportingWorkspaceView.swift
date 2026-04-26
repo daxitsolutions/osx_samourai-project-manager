@@ -44,8 +44,7 @@ struct ReportingWorkspaceView: View {
                 contentType: .pdf,
                 defaultFilename: "\(exportFilename).pdf"
             ) { _ in }
-            .confirmationDialog(
-                "Supprimer ce rapport ?",
+            .confirmationDialog(localized("Supprimer ce rapport ?"),
                 isPresented: Binding(
                     get: { reportPendingDeletion != nil },
                     set: { if $0 == false { reportPendingDeletion = nil } }
@@ -53,14 +52,14 @@ struct ReportingWorkspaceView: View {
                 titleVisibility: .visible
             ) {
                 if let record = reportPendingDeletion {
-                    Button("Supprimer", role: .destructive) {
+                    Button(localized("Supprimer"), role: .destructive) {
                         store.deleteGovernanceReportRecord(reportID: record.id)
                         reportPendingDeletion = nil
                     }
                 }
-                Button("Annuler", role: .cancel) { reportPendingDeletion = nil }
+                Button(localized("Annuler"), role: .cancel) { reportPendingDeletion = nil }
             } message: {
-                Text("Cette action est irréversible. Le rapport sera définitivement supprimé de l'archive.")
+                Text(localized("Cette action est irréversible. Le rapport sera définitivement supprimé de l'archive."))
             }
     }
 
@@ -107,25 +106,25 @@ struct ReportingWorkspaceView: View {
                 title: "Paramètres",
                 subtitle: "Choisis la cadence et le périmètre avant génération."
             ) {
-                Picker("Cadence", selection: $cadence) {
+                Picker(localized("Cadence"), selection: $cadence) {
                     ForEach(ReportingCadence.allCases) { value in
                         Text(value.label).tag(value)
                     }
                 }
                 .pickerStyle(.segmented)
 
-                Picker("Périmètre", selection: $selectedScopeKey) {
-                    Text("Portefeuille complet").tag("portfolio")
+                Picker(localized("Périmètre"), selection: $selectedScopeKey) {
+                    Text(localized("Portefeuille complet")).tag("portfolio")
                     if let primary = resolvedPrimaryProject {
-                        Text("Projet principal: \(primary.name)").tag("primary")
+                        Text(appState.localizedFormat("Projet principal: %@", primary.name)).tag("primary")
                     }
                     ForEach(store.projects) { project in
-                        Text("Projet: \(project.name)").tag(projectScopeKey(project.id))
+                        Text(appState.localizedFormat("Projet: %@", project.name)).tag(projectScopeKey(project.id))
                     }
                 }
                 .pickerStyle(.menu)
 
-                Button("Générer le rapport") {
+                Button(localized("Générer le rapport")) {
                     generateOneClickReport()
                 }
                 .buttonStyle(.borderedProminent)
@@ -184,15 +183,15 @@ struct ReportingWorkspaceView: View {
                     )
 
                     HStack(spacing: 10) {
-                        Button("Enregistrer") {
+                        Button(localized("Enregistrer")) {
                             savePMEdits(recordID: record.id)
                         }
                         .buttonStyle(.borderedProminent)
 
-                        Menu("Exporter") {
-                            Button("Markdown (.md)") { exportAsMarkdown(record) }
-                            Button("Texte brut (.txt)") { exportAsText(record) }
-                            Button("PDF professionnel (.pdf)") { exportAsPDF(record) }
+                        Menu(localized("Exporter")) {
+                            Button(localized("Markdown (.md)")) { exportAsMarkdown(record) }
+                            Button(localized("Texte brut (.txt)")) { exportAsText(record) }
+                            Button(localized("PDF professionnel (.pdf)")) { exportAsPDF(record) }
                         }
 
                         Spacer()
@@ -200,7 +199,7 @@ struct ReportingWorkspaceView: View {
                         Button(role: .destructive) {
                             reportPendingDeletion = record
                         } label: {
-                            Label("Supprimer", systemImage: "trash")
+                            Label(localized("Supprimer"), systemImage: "trash")
                         }
                         .buttonStyle(.bordered)
                     }
@@ -210,9 +209,9 @@ struct ReportingWorkspaceView: View {
                         title: "Contexte",
                         subtitle: "Le cadre du rapport reste visible immédiatement pour limiter les ambiguïtés."
                     ) {
-                        Text("Période couverte: \(record.periodLabel)")
-                        Text("Projets concernés: \(record.projectsLabel)")
-                        Text("Généré le: \(record.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                        Text(appState.localizedFormat("Période couverte: %@", record.periodLabel))
+                        Text(appState.localizedFormat("Projets concernés: %@", record.projectsLabel))
+                        Text(appState.localizedFormat("Généré le: %@", record.createdAt.formatted(date: .abbreviated, time: .shortened)))
                             .foregroundStyle(.secondary)
                     }
 
@@ -236,7 +235,7 @@ struct ReportingWorkspaceView: View {
                         subtitle: "Les éléments livrés sont listés de façon simple et scannable."
                     ) {
                         if record.generatedReport.accomplishments.isEmpty {
-                            Text("Aucun accomplissement détecté automatiquement.")
+                            Text(localized("Aucun accomplissement détecté automatiquement."))
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(record.generatedReport.accomplishments.prefix(8), id: \.self) { line in
@@ -271,7 +270,7 @@ struct ReportingWorkspaceView: View {
                         subtitle: "Les prochaines actions attendues sont séparées du diagnostic pour faciliter la lecture."
                     ) {
                         if record.nextPlanningAutoLines.isEmpty {
-                            Text("Aucun jalon/livrable/action à court terme détecté.")
+                            Text(localized("Aucun jalon/livrable/action à court terme détecté."))
                                 .foregroundStyle(.secondary)
                         } else {
                             ForEach(record.nextPlanningAutoLines.prefix(8), id: \.self) { line in
@@ -472,6 +471,10 @@ struct ReportingWorkspaceView: View {
         }
         return mutableData as Data
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private struct ReportingMarkdownDocument: FileDocument {
@@ -538,16 +541,16 @@ private struct ReportPDFContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("RAPPORT GOUVERNANCE")
+                Text(localized("RAPPORT GOUVERNANCE"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.blue)
                     .tracking(0.8)
                 Text(record.title)
                     .font(.largeTitle.weight(.bold))
-                Text("Période: \(record.periodLabel)")
+                Text(appState.localizedFormat("Période: %@", record.periodLabel))
                     .font(.body)
                     .foregroundStyle(.secondary)
-                Text("Projets: \(record.projectsLabel)")
+                Text(appState.localizedFormat("Projets: %@", record.projectsLabel))
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -566,7 +569,7 @@ private struct ReportPDFContent: View {
             pdfSection("2. Accomplissements") {
                 let items = record.generatedReport.accomplishments
                 if items.isEmpty {
-                    Text("Aucun accomplissement détecté automatiquement.").font(.body).foregroundStyle(.secondary)
+                    Text(localized("Aucun accomplissement détecté automatiquement.")).font(.body).foregroundStyle(.secondary)
                 } else {
                     ForEach(items.prefix(8), id: \.self) { line in
                         Label(line, systemImage: "checkmark.circle").font(.body)
@@ -589,7 +592,7 @@ private struct ReportPDFContent: View {
             pdfSection("5. Planification Prochaine") {
                 let items = record.nextPlanningAutoLines
                 if items.isEmpty {
-                    Text("Aucun jalon/livrable/action à court terme détecté.").font(.body).foregroundStyle(.secondary)
+                    Text(localized("Aucun jalon/livrable/action à court terme détecté.")).font(.body).foregroundStyle(.secondary)
                 } else {
                     ForEach(items.prefix(8), id: \.self) { line in
                         Label(line, systemImage: "calendar").font(.body)
@@ -602,7 +605,7 @@ private struct ReportPDFContent: View {
 
             pdfSection("6. Commentaire du Chef de Projet") {
                 if record.conclusionPMMessage.isEmpty {
-                    Text("Aucun commentaire.").font(.body).foregroundStyle(.secondary)
+                    Text(localized("Aucun commentaire.")).font(.body).foregroundStyle(.secondary)
                 } else {
                     Text(record.conclusionPMMessage).font(.body)
                 }
@@ -620,5 +623,11 @@ private struct ReportPDFContent: View {
                 .font(.headline)
             content()
         }
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

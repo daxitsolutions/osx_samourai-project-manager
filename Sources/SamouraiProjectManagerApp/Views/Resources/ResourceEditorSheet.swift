@@ -54,14 +54,14 @@ struct ResourceEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Colonnes source") {
-                    TextField("Nom", text: $nom)
-                    TextField("Parent Description", text: $parentDescription)
-                    TextField("Primary Resource Role", text: $primaryResourceRole)
-                    TextField("Resource Roles", text: $resourceRoles)
-                    TextField("Organizational Resource", text: $organizationalResource)
-                    TextField("Compétence 1", text: $competence1)
-                    TextField("Resource Calendar", text: $resourceCalendar)
+                Section(localized("Colonnes source")) {
+                    TextField(localized("Nom"), text: $nom)
+                    TextField(localized("Parent Description"), text: $parentDescription)
+                    TextField(localized("Primary Resource Role"), text: $primaryResourceRole)
+                    TextField(localized("Resource Roles"), text: $resourceRoles)
+                    TextField(localized("Organizational Resource"), text: $organizationalResource)
+                    TextField(localized("Compétence 1"), text: $competence1)
+                    TextField(localized("Resource Calendar"), text: $resourceCalendar)
 
                     DatePicker(
                         "Resource Start Date",
@@ -75,21 +75,21 @@ struct ResourceEditorSheet: View {
                         displayedComponents: .date
                     )
 
-                    TextField("Responsable Opérationnel", text: $responsableOperationnel)
-                    TextField("Responsable Interne", text: $responsableInterne)
-                    TextField("Localisation", text: $localisation)
-                    TextField("Type de Ressource", text: $typeDeRessource)
-                    TextField("Journée(s) temps partiel", text: $journeesTempsPartiel)
+                    TextField(localized("Responsable Opérationnel"), text: $responsableOperationnel)
+                    TextField(localized("Responsable Interne"), text: $responsableInterne)
+                    TextField(localized("Localisation"), text: $localisation)
+                    TextField(localized("Type de Ressource"), text: $typeDeRessource)
+                    TextField(localized("Journée(s) temps partiel"), text: $journeesTempsPartiel)
                 }
 
-                Section("Application") {
-                    TextField("E-mail", text: $email)
-                    TextField("Téléphone", text: $phone)
+                Section(localized("Application")) {
+                    TextField(localized("E-mail"), text: $email)
+                    TextField(localized("Téléphone"), text: $phone)
                 }
 
-                Section("Projets affectés") {
+                Section(localized("Projets affectés")) {
                     if store.projects.isEmpty {
-                        Text("Aucun projet disponible")
+                        Text(localized("Aucun projet disponible"))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(store.projects) { project in
@@ -111,18 +111,18 @@ struct ResourceEditorSheet: View {
                     }
 
                     if appState.resolvedPrimaryProjectID(in: store) == nil {
-                        Text("Aucun Projet Principal défini: affectation manuelle requise.")
+                        Text(localized("Aucun Projet Principal défini: affectation manuelle requise."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Projet principal préaffecté automatiquement, modifiable à tout moment.")
+                        Text(localized("Projet principal préaffecté automatiquement, modifiable à tout moment."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Section("Notes") {
-                    TextField("Notes opérationnelles", text: $notes, axis: .vertical)
+                Section(localized("Notes")) {
+                    TextField(localized("Notes opérationnelles"), text: $notes, axis: .vertical)
                         .lineLimit(4...8)
                 }
             }
@@ -130,7 +130,7 @@ struct ResourceEditorSheet: View {
             .navigationTitle(resource == nil ? "Nouvelle ressource" : "Modifier la ressource")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
@@ -148,18 +148,18 @@ struct ResourceEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if formIsInvalid == false {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     save()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
@@ -306,5 +306,9 @@ struct ResourceEditorSheet: View {
         if let primaryProjectID = appState.resolvedPrimaryProjectID(in: store) {
             assignedProjectIDs.insert(primaryProjectID)
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

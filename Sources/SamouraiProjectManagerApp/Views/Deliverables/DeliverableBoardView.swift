@@ -71,7 +71,7 @@ struct DeliverableBoardView: View {
                 deliverableEditorContext = DeliverableEditorContext(parentDeliverableID: nil, suggestedPhase: .delivery)
                 isShowingDeliverableEditor = true
             } label: {
-                Label("Livrable principal", systemImage: "plus")
+                Label(localized("Livrable principal"), systemImage: "plus")
             }
             .buttonStyle(.borderedProminent)
         }
@@ -88,11 +88,11 @@ struct DeliverableBoardView: View {
         ) {
             HStack(alignment: .top, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("In scope")
+                    Text(localized("In scope"))
                         .font(.headline)
 
                     if inScopeItems.isEmpty {
-                        Text("Aucun élément in scope")
+                        Text(localized("Aucun élément in scope"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
@@ -114,7 +114,7 @@ struct DeliverableBoardView: View {
                     }
 
                     HStack {
-                        TextField("Ajouter un élément in scope", text: $newInScopeItemDraft)
+                        TextField(localized("Ajouter un élément in scope"), text: $newInScopeItemDraft)
                             .textFieldStyle(.roundedBorder)
                             .onSubmit {
                                 let trimmed = newInScopeItemDraft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -137,11 +137,11 @@ struct DeliverableBoardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Out of scope")
+                    Text(localized("Out of scope"))
                         .font(.headline)
 
                     if outOfScopeItems.isEmpty {
-                        Text("Aucun élément out of scope")
+                        Text(localized("Aucun élément out of scope"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
@@ -163,7 +163,7 @@ struct DeliverableBoardView: View {
                     }
 
                     HStack {
-                        TextField("Ajouter un élément out of scope", text: $newOutOfScopeItemDraft)
+                        TextField(localized("Ajouter un élément out of scope"), text: $newOutOfScopeItemDraft)
                             .textFieldStyle(.roundedBorder)
                             .onSubmit {
                                 let trimmed = newOutOfScopeItemDraft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -263,13 +263,13 @@ struct DeliverableBoardView: View {
                     Text(deliverable.title)
                         .font(level == 0 ? .headline : .subheadline.weight(.semibold))
                     if deliverable.isMilestone {
-                        Text("Jalon")
+                        Text(localized("Jalon"))
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
                             .background(Color.secondary.opacity(0.14), in: Capsule())
                     }
-                    Text("Owner: \(deliverable.owner) • Échéance: \(deliverable.dueDate.formatted(date: .abbreviated, time: .omitted))")
+                    Text(appState.localizedFormat("Owner: %@ • Échéance: %@", deliverable.owner, deliverable.dueDate.formatted(date: .abbreviated, time: .omitted)))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(deliverable.details)
@@ -280,7 +280,7 @@ struct DeliverableBoardView: View {
                 Spacer()
 
                 if level == 0 {
-                    Button("Sous-livrable") {
+                    Button(localized("Sous-livrable")) {
                         deliverableEditorContext = DeliverableEditorContext(parentDeliverableID: deliverable.id, suggestedPhase: deliverable.phase)
                         isShowingDeliverableEditor = true
                     }
@@ -301,16 +301,16 @@ struct DeliverableBoardView: View {
     private func acceptanceCriteriaSection(projectID: UUID, deliverable: Deliverable) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("Critères d'acceptation")
+                Text(localized("Critères d'acceptation"))
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text("\(deliverable.validatedAcceptanceCount)/\(deliverable.acceptanceCriteria.count) validés")
+                Text(appState.localizedFormat("%d/%d validés", deliverable.validatedAcceptanceCount, deliverable.acceptanceCriteria.count))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             if deliverable.acceptanceCriteria.isEmpty {
-                Text("Aucun critère défini")
+                Text(localized("Aucun critère défini"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -355,7 +355,7 @@ struct DeliverableBoardView: View {
                 )
                 .textFieldStyle(.roundedBorder)
 
-                Button("Ajouter") {
+                Button(localized("Ajouter")) {
                     let value = (acceptanceDraftByDeliverable[deliverable.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                     guard value.isEmpty == false else { return }
                     store.addAcceptanceCriterion(projectID: projectID, deliverableID: deliverable.id, criterionText: value)
@@ -366,6 +366,10 @@ struct DeliverableBoardView: View {
         }
     }
 
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private struct DeliverableEditorContext {
@@ -413,28 +417,28 @@ private struct DeliverableScopeEditorSheet: View {
         NavigationStack {
             Form {
                 if let primaryProject {
-                    Text("Projet principal: \(primaryProject.name)")
+                    Text(appState.localizedFormat("Projet principal: %@", primaryProject.name))
                         .foregroundStyle(.secondary)
                 }
 
-                Picker("Phase", selection: $phase) {
+                Picker(localized("Phase"), selection: $phase) {
                     ForEach(DeliverablePhase.allCases) { phase in
                         Text(phase.label).tag(phase)
                     }
                 }
 
                 TextField(context.parentDeliverableID == nil ? "Livrable principal" : "Sous-livrable", text: $title)
-                TextField("Description", text: $details, axis: .vertical)
+                TextField(localized("Description"), text: $details, axis: .vertical)
                     .lineLimit(3...6)
-                TextField("Owner", text: $owner)
-                DatePicker("Échéance", selection: $dueDate, displayedComponents: .date)
+                TextField(localized("Owner"), text: $owner)
+                DatePicker(localized("Échéance"), selection: $dueDate, displayedComponents: .date)
                 if context.parentDeliverableID == nil {
-                    Toggle("Traiter ce livrable comme un jalon", isOn: $isMilestone)
+                    Toggle(localized("Traiter ce livrable comme un jalon"), isOn: $isMilestone)
                 }
 
                 if context.parentDeliverableID == nil {
-                    Section("Critères d'acceptation") {
-                        TextField("Un critère par ligne", text: $acceptanceCriteriaRaw, axis: .vertical)
+                    Section(localized("Critères d'acceptation")) {
+                        TextField(localized("Un critère par ligne"), text: $acceptanceCriteriaRaw, axis: .vertical)
                             .lineLimit(4...8)
                     }
                 }
@@ -443,10 +447,10 @@ private struct DeliverableScopeEditorSheet: View {
             .navigationTitle(context.parentDeliverableID == nil ? "Nouveau livrable" : "Nouveau sous-livrable")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { requestDismiss() }
+                    Button(localized("Annuler")) { requestDismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Créer") {
+                    Button(localized("Créer")) {
                         onSave(
                             DeliverableScopeEditorPayload(
                                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -470,18 +474,18 @@ private struct DeliverableScopeEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if formIsInvalid == false {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     submit()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             phase = context.suggestedPhase
@@ -548,6 +552,12 @@ private struct DeliverableScopeEditorSheet: View {
         )
         dismiss()
     }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private struct ScopeChangeRequestEditorSheet: View {
@@ -568,36 +578,36 @@ private struct ScopeChangeRequestEditorSheet: View {
         NavigationStack {
             Form {
                 if let project {
-                    Text("Projet principal: \(project.name)")
+                    Text(appState.localizedFormat("Projet principal: %@", project.name))
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Description du changement") {
-                    TextField("Décris précisément l'évolution demandée", text: $descriptionText, axis: .vertical)
+                Section(localized("Description du changement")) {
+                    TextField(localized("Décris précisément l'évolution demandée"), text: $descriptionText, axis: .vertical)
                         .lineLimit(3...8)
                 }
 
-                Section("Analyse d'impact") {
-                    TextField("Impact Planning", text: $impactPlanning, axis: .vertical)
+                Section(localized("Analyse d'impact")) {
+                    TextField(localized("Impact Planning"), text: $impactPlanning, axis: .vertical)
                         .lineLimit(2...4)
-                    TextField("Impact Ressources", text: $impactResources, axis: .vertical)
+                    TextField(localized("Impact Ressources"), text: $impactResources, axis: .vertical)
                         .lineLimit(2...4)
-                    TextField("Impact Risques", text: $impactRisks, axis: .vertical)
+                    TextField(localized("Impact Risques"), text: $impactRisks, axis: .vertical)
                         .lineLimit(2...4)
                 }
 
-                Section("Émetteur") {
-                    TextField("Requested by", text: $requestedBy)
+                Section(localized("Émetteur")) {
+                    TextField(localized("Requested by"), text: $requestedBy)
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Nouvelle Change Request")
+            .navigationTitle(localized("Nouvelle Change Request"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { requestDismiss() }
+                    Button(localized("Annuler")) { requestDismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Soumettre") {
+                    Button(localized("Soumettre")) {
                         onSubmit(
                             ScopeChangeRequestPayload(
                                 description: descriptionText.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -618,18 +628,18 @@ private struct ScopeChangeRequestEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     submit()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             captureInitialSnapshotIfNeeded()
@@ -676,5 +686,11 @@ private struct ScopeChangeRequestEditorSheet: View {
             )
         )
         dismiss()
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

@@ -38,7 +38,7 @@ struct ProjectDetailView: View {
                 ContentUnavailableView(
                     "Projet introuvable",
                     systemImage: "exclamationmark.circle",
-                    description: Text("Le projet sélectionné n'existe plus dans le stockage local.")
+                    description: Text(localized("Le projet sélectionné n'existe plus dans le stockage local."))
                 )
             }
         }
@@ -66,27 +66,27 @@ struct ProjectDetailView: View {
                 )
             }
         }
-        .alert("Supprimer l'activité", isPresented: Binding(
+        .alert(localized("Supprimer l'activité"), isPresented: Binding(
             get: { activityPendingDeletion != nil },
             set: { if $0 == false { activityPendingDeletion = nil } }
         )) {
-            Button("Supprimer", role: .destructive) {
+            Button(localized("Supprimer"), role: .destructive) {
                 if let activity = activityPendingDeletion {
                     store.deleteActivity(activityID: activity.id)
                 }
                 activityPendingDeletion = nil
             }
-            Button("Annuler", role: .cancel) {
+            Button(localized("Annuler"), role: .cancel) {
                 activityPendingDeletion = nil
             }
         } message: {
-            Text("L'activité sera supprimée et les actions associées resteront disponibles sans rattachement.")
+            Text(localized("L'activité sera supprimée et les actions associées resteront disponibles sans rattachement."))
         }
-        .alert("Planning Engine", isPresented: Binding(
+        .alert(localized("Planning Engine"), isPresented: Binding(
             get: { planningFeedbackMessage != nil },
             set: { if $0 == false { planningFeedbackMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(localized("OK"), role: .cancel) {}
         } message: {
             Text(planningFeedbackMessage ?? "")
         }
@@ -161,17 +161,17 @@ struct ProjectDetailView: View {
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Ressources affectées")
+                Text(localized("Ressources affectées"))
                     .font(.title2.weight(.semibold))
                 Spacer()
-                Picker("Favoris", selection: $resourceFavoriteFilter) {
+                Picker(localized("Favoris"), selection: $resourceFavoriteFilter) {
                     ForEach(ProjectResourceFavoriteFilter.allCases) { filter in
                         Text(filter.label.appLocalized(language: appState.interfaceLanguage)).tag(filter)
                     }
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 220)
-                Button("Gérer les ressources") {
+                Button(localized("Gérer les ressources")) {
                     appState.selectedSection = .resources
                 }
             }
@@ -180,13 +180,13 @@ struct ProjectDetailView: View {
                 ContentUnavailableView(
                     "Aucune ressource affectée",
                     systemImage: "person.crop.circle.badge.questionmark",
-                    description: Text("Assigne des ressources à ce projet pour matérialiser la capacité réellement disponible.")
+                    description: Text(localized("Assigne des ressources à ce projet pour matérialiser la capacité réellement disponible."))
                 )
             } else if displayedResources.isEmpty {
                 ContentUnavailableView(
                     "Aucune ressource favorite",
                     systemImage: "star.slash",
-                    description: Text("Active l'étoile jaune sur les ressources clés pour les retrouver plus vite.")
+                    description: Text(localized("Active l'étoile jaune sur les ressources clés pour les retrouver plus vite."))
                 )
             } else {
                 ForEach(displayedResources) { resource in
@@ -246,10 +246,10 @@ struct ProjectDetailView: View {
     private func testingSection(project: Project) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Tests & Contrôle Qualité")
+                Text(localized("Tests & Contrôle Qualité"))
                     .font(.title2.weight(.semibold))
                 Spacer()
-                Text("\(project.testingRAGStatus.symbol) \(project.testingRAGStatus.label.appLocalized(language: appState.interfaceLanguage))")
+                Text(appState.localizedFormat("%@ %@", project.testingRAGStatus.symbol, project.testingRAGStatus.label.appLocalized(language: appState.interfaceLanguage)))
                     .font(.callout.weight(.semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -265,10 +265,10 @@ struct ProjectDetailView: View {
 
             if store.shouldSuggestGoNoGoDecision(projectID: project.id) {
                 HStack {
-                    Text("UAT à 100% : proposer automatiquement une décision de lancement.")
+                    Text(localized("UAT à 100% : proposer automatiquement une décision de lancement."))
                         .font(.callout)
                     Spacer()
-                    Button("Créer décision Go / No-Go") {
+                    Button(localized("Créer décision Go / No-Go")) {
                         guard let decisionID = store.createGoNoGoDecision(projectID: project.id) else { return }
                         appState.openDecision(decisionID)
                     }
@@ -281,14 +281,14 @@ struct ProjectDetailView: View {
             ScrollView(.horizontal) {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     GridRow {
-                        Text("Phase").font(.caption.weight(.semibold))
-                        Text("Statut").font(.caption.weight(.semibold))
-                        Text("%").font(.caption.weight(.semibold))
-                        Text("Fin estimée").font(.caption.weight(.semibold))
-                        Text("Fin réelle").font(.caption.weight(.semibold))
-                        Text("Owner").font(.caption.weight(.semibold))
-                        Text("Notes / Blocages").font(.caption.weight(.semibold))
-                        Text("URL externe").font(.caption.weight(.semibold))
+                        Text(localized("Phase")).font(.caption.weight(.semibold))
+                        Text(localized("Statut")).font(.caption.weight(.semibold))
+                        Text(localized("%")).font(.caption.weight(.semibold))
+                        Text(localized("Fin estimée")).font(.caption.weight(.semibold))
+                        Text(localized("Fin réelle")).font(.caption.weight(.semibold))
+                        Text(localized("Owner")).font(.caption.weight(.semibold))
+                        Text(localized("Notes / Blocages")).font(.caption.weight(.semibold))
+                        Text(localized("URL externe")).font(.caption.weight(.semibold))
                     }
 
                     ForEach(project.orderedTestingPhases) { phase in
@@ -434,10 +434,10 @@ struct ProjectDetailView: View {
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Project Plan · Activités")
+                Text(localized("Project Plan · Activités"))
                     .font(.title2.weight(.semibold))
                 Spacer()
-                Picker("Vue", selection: $planningViewMode) {
+                Picker(localized("Vue"), selection: $planningViewMode) {
                     ForEach(PlanningViewMode.allCases) { mode in
                         Text(mode.label.appLocalized(language: appState.interfaceLanguage)).tag(mode)
                     }
@@ -445,17 +445,17 @@ struct ProjectDetailView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 280)
 
-                Button("Nouvelle activité") {
+                Button(localized("Nouvelle activité")) {
                     activityEditorContext = .create
                 }
             }
 
             HStack(spacing: 10) {
-                TextField("Label baseline planning", text: $planningBaselineLabel)
+                TextField(localized("Label baseline planning"), text: $planningBaselineLabel)
                     .textFieldStyle(.roundedBorder)
-                TextField("Validé par", text: $planningValidatedBy)
+                TextField(localized("Validé par"), text: $planningValidatedBy)
                     .textFieldStyle(.roundedBorder)
-                Button("Enregistrer baseline planning") {
+                Button(localized("Enregistrer baseline planning")) {
                     planningFeedbackMessage = store.createPlanningBaseline(
                         projectID: project.id,
                         label: planningBaselineLabel,
@@ -488,7 +488,7 @@ struct ProjectDetailView: View {
                 ContentUnavailableView(
                     "Aucune activité planifiée",
                     systemImage: "calendar.badge.clock",
-                    description: Text("Définis les activités macro pour cadencer le projet et rattacher les actions opérationnelles.")
+                    description: Text(localized("Définis les activités macro pour cadencer le projet et rattacher les actions opérationnelles."))
                 )
             } else if planningViewMode == .timeline || planningViewMode == .ganttLite {
                 ProjectTimelineView(
@@ -556,14 +556,14 @@ struct ProjectDetailView: View {
                     .background(levelColor.opacity(depth == 0 ? 0.25 : 0.15), in: Capsule())
 
                 if activity.isMilestone {
-                    Text("Jalon")
+                    Text(localized("Jalon"))
                         .font(.caption2)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
                         .background(Color(red: 163 / 255, green: 53 / 255, blue: 238 / 255).opacity(0.2), in: Capsule())
                 }
 
-                Button("Associer actions/livrables") {
+                Button(localized("Associer actions/livrables")) {
                     activityEditorContext = .edit(activity.id)
                 }
                 .buttonStyle(.bordered)
@@ -571,7 +571,7 @@ struct ProjectDetailView: View {
                 Button {
                     activityEditorContext = .createChild(parentActivityID: activity.id)
                 } label: {
-                    Label("Nouvelle activité", systemImage: "plus")
+                    Label(localized("Nouvelle activité"), systemImage: "plus")
                 }
                 .buttonStyle(.bordered)
 
@@ -661,7 +661,7 @@ struct ProjectDetailView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Avancement macro")
+                    Text(localized("Avancement macro"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -695,11 +695,11 @@ struct ProjectDetailView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Justification périmètre")
+                Text(localized("Justification périmètre"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if linkedDeliverables.isEmpty {
-                    Text("⚠️ Aucune liaison livrable: activité non justifiée par le scope")
+                    Text(localized("⚠️ Aucune liaison livrable: activité non justifiée par le scope"))
                         .font(.caption)
                         .foregroundStyle(.orange)
                 } else {
@@ -765,10 +765,10 @@ struct ProjectDetailView: View {
     private func risksSection(project: Project) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Registre des risques")
+                Text(localized("Registre des risques"))
                     .font(.title2.weight(.semibold))
                 Spacer()
-                Button("Ajouter un risque") {
+                Button(localized("Ajouter un risque")) {
                     isShowingRiskEditor = true
                 }
             }
@@ -777,7 +777,7 @@ struct ProjectDetailView: View {
                 ContentUnavailableView(
                     "Aucun risque",
                     systemImage: "checkmark.shield",
-                    description: Text("Ajoute les points de tension pour garder une vision réaliste de l'exécution.")
+                    description: Text(localized("Ajoute les points de tension pour garder une vision réaliste de l'exécution."))
                 )
             } else {
                 ForEach(project.sortedRisks) { risk in
@@ -818,10 +818,10 @@ struct ProjectDetailView: View {
     private func deliverablesSection(project: Project) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Livrables")
+                Text(localized("Livrables"))
                     .font(.title2.weight(.semibold))
                 Spacer()
-                Button("Ajouter un livrable") {
+                Button(localized("Ajouter un livrable")) {
                     isShowingDeliverableEditor = true
                 }
             }
@@ -830,7 +830,7 @@ struct ProjectDetailView: View {
                 ContentUnavailableView(
                     "Aucun livrable",
                     systemImage: "doc.badge.plus",
-                    description: Text("Crée les livrables de contrôle et de delivery pour matérialiser l'avancement.")
+                    description: Text(localized("Crée les livrables de contrôle et de delivery pour matérialiser l'avancement."))
                 )
             } else {
                 ForEach(project.sortedDeliverables) { deliverable in

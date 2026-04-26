@@ -17,12 +17,12 @@ struct DashboardView: View {
                     subtitle: "Les signaux clés, les arbitrages urgents et les prochains engagements sont regroupés ici pour aider l’utilisateur à décider vite."
                 ) {
                     HStack(spacing: 10) {
-                        Button("Reporting hebdomadaire") {
+                        Button(localized("Reporting hebdomadaire")) {
                             appState.openReporting(.weekly)
                         }
                         .buttonStyle(.borderedProminent)
 
-                        Button("Reporting mensuel") {
+                        Button(localized("Reporting mensuel")) {
                             appState.openReporting(.monthly)
                         }
                         .buttonStyle(.bordered)
@@ -176,6 +176,10 @@ struct DashboardView: View {
     private var blockedTestingPhases: Int {
         projects.reduce(0) { $0 + $1.blockedTestingPhaseCount }
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private struct ProjectOverviewRow: View {
@@ -207,7 +211,7 @@ private struct ProjectOverviewRow: View {
                 HStack {
                     Label(project.deliveryMode.label, systemImage: "point.3.connected.trianglepath.dotted")
                     Spacer()
-                    Text("Échéance \(project.targetDate.formatted(date: .abbreviated, time: .omitted))")
+                    Text(appState.localizedFormat("Échéance %@", project.targetDate.formatted(date: .abbreviated, time: .omitted)))
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -215,6 +219,12 @@ private struct ProjectOverviewRow: View {
         }
         .padding(16)
         .samouraiCardSurface()
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 

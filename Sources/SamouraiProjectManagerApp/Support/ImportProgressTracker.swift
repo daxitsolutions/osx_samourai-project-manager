@@ -86,13 +86,14 @@ struct ImportProgressReporter: Sendable {
 }
 
 struct SamouraiImportProgressSheet: View {
+    @Environment(AppState.self) private var appState
     @Bindable var tracker: ImportProgressTracker
     let onCancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(tracker.title)
+                Text(localized(tracker.title))
                     .font(.title3.weight(.semibold))
                 if tracker.fileName.isEmpty == false {
                     Text(tracker.fileName)
@@ -104,7 +105,7 @@ struct SamouraiImportProgressSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(tracker.stage.label)
+                Text(localized(tracker.stage.label))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
@@ -140,7 +141,7 @@ struct SamouraiImportProgressSheet: View {
                 Button(role: .cancel) {
                     onCancel()
                 } label: {
-                    Text("Annuler l'import")
+                    Text(localized("Annuler l'import"))
                 }
                 .keyboardShortcut(.cancelAction)
             }
@@ -151,43 +152,49 @@ struct SamouraiImportProgressSheet: View {
 
     private var totalLabel: String {
         if tracker.totalRecords == 0 {
-            return "Total détecté : calcul en cours"
+            return localized("Total détecté : calcul en cours")
         }
-        return "Total détecté : \(tracker.totalRecords)"
+        return appState.localizedFormat("Total détecté : %d", tracker.totalRecords)
     }
 
     private var progressLabel: String {
-        let verb: String
+        let verbKey: String
 
         switch tracker.stage {
         case .reading:
-            verb = "lus"
+            verbKey = "lus"
         case .parsing:
-            verb = "analysés"
+            verbKey = "analysés"
         case .analyzing:
-            verb = "préparés"
+            verbKey = "préparés"
         case .importing:
-            verb = "traités"
+            verbKey = "traités"
         case .finalizing:
-            verb = "finalisés"
+            verbKey = "finalisés"
         }
+
+        let verb = localized(verbKey)
 
         if tracker.totalRecords == 0 {
-            return "\(tracker.processedRecords) enregistrement(s) \(verb)"
+            return appState.localizedFormat("%d enregistrement(s) %@", tracker.processedRecords, verb)
         }
 
-        return "\(tracker.processedRecords) / \(tracker.totalRecords) enregistrement(s) \(verb)"
+        return appState.localizedFormat("%d / %d enregistrement(s) %@", tracker.processedRecords, tracker.totalRecords, verb)
     }
 
     private var importedLabel: String {
         if tracker.importedRecords == 0 {
-            return "Déjà intégrés : 0"
+            return localized("Déjà intégrés : 0")
         }
-        return "Déjà intégrés : \(tracker.importedRecords)"
+        return appState.localizedFormat("Déjà intégrés : %d", tracker.importedRecords)
     }
 
     private var percentLabel: String {
         let percent = Int((tracker.progress * 100).rounded())
         return "\(percent) %"
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

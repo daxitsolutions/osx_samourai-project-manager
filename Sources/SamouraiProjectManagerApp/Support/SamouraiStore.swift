@@ -108,7 +108,7 @@ enum SamouraiBackupError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidFormat:
-            "Fichier de sauvegarde invalide ou non reconnu."
+            AppLocalizer.localized("Fichier de sauvegarde invalide ou non reconnu.")
         case .unsupportedSchemaVersion(let version):
             "Version de schéma non supportée (\(version)). Mets à jour l'application pour restaurer ce backup."
         case .invalidPayload(let details):
@@ -1074,7 +1074,7 @@ final class SamouraiStore {
             appendActionHistoryEntry(
                 actionIndex: index,
                 kind: .automatic,
-                text: "Statut modifié : \(previousStatus.label) → \(status.label)"
+                text: AppLocalizer.localizedFormat("Statut modifié : %@ → %@", previousStatus.label, status.label)
             )
         }
         actions = sortActions(actions)
@@ -1100,7 +1100,7 @@ final class SamouraiStore {
             appendActionHistoryEntry(
                 actionIndex: index,
                 kind: .automatic,
-                text: "Statut modifié : \(previousStatus.label) → \(actions[index].status.label)"
+                text: AppLocalizer.localizedFormat("Statut modifié : %@ → %@", previousStatus.label, actions[index].status.label)
             )
         }
         actions = sortActions(actions)
@@ -1126,7 +1126,7 @@ final class SamouraiStore {
             appendActionHistoryEntry(
                 actionIndex: actionIndex,
                 kind: .automatic,
-                text: "Activité associée modifiée : \(previousLabel) → \(currentLabel)"
+                text: AppLocalizer.localizedFormat("Activité associée modifiée : %@ → %@", previousLabel, currentLabel)
             )
         }
         actions = sortActions(actions)
@@ -1166,7 +1166,7 @@ final class SamouraiStore {
         }
 
         if previous.details != current.details {
-            messages.append("Description détaillée modifiée")
+            messages.append(AppLocalizer.localized("Description détaillée modifiée"))
         }
 
         if previous.priority != current.priority {
@@ -1174,11 +1174,11 @@ final class SamouraiStore {
         }
 
         if previous.status != current.status {
-            messages.append("Statut modifié : \(previous.status.label) → \(current.status.label)")
+            messages.append(AppLocalizer.localizedFormat("Statut modifié : %@ → %@", previous.status.label, current.status.label))
         }
 
         if previous.flow != current.flow {
-            messages.append("Flux modifié : \(previous.flow.label) → \(current.flow.label)")
+            messages.append(AppLocalizer.localizedFormat("Flux modifié : %@ → %@", previous.flow.label, current.flow.label))
         }
 
         if previous.dueDate != current.dueDate {
@@ -1198,7 +1198,7 @@ final class SamouraiStore {
         if previous.activityID != current.activityID {
             let previousLabel = activityDisplayName(for: previous.activityID)
             let currentLabel = activityDisplayName(for: current.activityID)
-            messages.append("Activité associée modifiée : \(previousLabel) → \(currentLabel)")
+            messages.append(AppLocalizer.localizedFormat("Activité associée modifiée : %@ → %@", previousLabel, currentLabel))
         }
 
         return messages
@@ -1206,12 +1206,12 @@ final class SamouraiStore {
 
     private func projectDisplayName(for id: UUID?) -> String {
         guard let id else { return "Sans projet" }
-        return project(with: id)?.name ?? "Projet inconnu"
+        return project(with: id)?.name ?? AppLocalizer.localized("Projet inconnu")
     }
 
     private func activityDisplayName(for id: UUID?) -> String {
-        guard let id else { return "Sans activité" }
-        return activity(with: id)?.title ?? "Activité inconnue"
+        guard let id else { return AppLocalizer.localized("Sans activité") }
+        return activity(with: id)?.title ?? AppLocalizer.localized("Activité inconnue")
     }
 
     func addActivity(
@@ -1749,7 +1749,7 @@ final class SamouraiStore {
 
         let initialHistory = DecisionHistoryEntry(
             revision: 1,
-            summary: "Création de la décision",
+            summary: AppLocalizer.localized("Création de la décision"),
             status: status,
             snapshotTitle: cleanedTitle,
             snapshotDetails: cleanedDetails,
@@ -1809,7 +1809,7 @@ final class SamouraiStore {
         decisions[index].history.append(
             DecisionHistoryEntry(
                 revision: nextRevision,
-                summary: normalizedSummary.isEmpty ? "Mise à jour de la décision" : normalizedSummary,
+                summary: normalizedSummary.isEmpty ? AppLocalizer.localized("Mise à jour de la décision") : normalizedSummary,
                 status: status,
                 snapshotTitle: cleanedTitle,
                 snapshotDetails: cleanedDetails,
@@ -1846,7 +1846,7 @@ final class SamouraiStore {
 
     func projectName(for id: UUID?) -> String {
         guard let id else { return "Sans projet" }
-        return project(with: id)?.name ?? "Projet supprimé"
+        return project(with: id)?.name ?? AppLocalizer.localized("Projet supprimé")
     }
 
     func resourceNames(for ids: [UUID]) -> [String] {
@@ -2085,7 +2085,7 @@ final class SamouraiStore {
                 riskIndex: riskIndex,
                 projectIndex: projectIndex,
                 kind: .automatic,
-                text: "Statut modifié : \(previousStatus) → \(status.label)"
+                text: AppLocalizer.localizedFormat("Statut modifié : %@ → %@", previousStatus, status.label)
             )
             projects[projectIndex].updatedAt = .now
             projects = sortProjects(projects)
@@ -2101,7 +2101,7 @@ final class SamouraiStore {
             riskIndex: riskIndex,
             projectIndex: nil,
             kind: .automatic,
-            text: "Statut modifié : \(previousStatus) → \(status.label)"
+            text: AppLocalizer.localizedFormat("Statut modifié : %@ → %@", previousStatus, status.label)
         )
         unassignedRisks = sortStandaloneRisks(unassignedRisks)
         persist()
@@ -2338,7 +2338,7 @@ final class SamouraiStore {
         let previousMitigation = previous.displayMitigation
         let currentMitigation = current.displayMitigation
         if previousMitigation != currentMitigation {
-            messages.append("Mitigation modifiée")
+            messages.append(AppLocalizer.localized("Mitigation modifiée"))
         }
 
         if previous.severity != current.severity {
@@ -2348,7 +2348,7 @@ final class SamouraiStore {
         let previousStatus = previous.displayStatus
         let currentStatus = current.displayStatus
         if previousStatus != currentStatus {
-            messages.append("Statut modifié : \(previousStatus) → \(currentStatus)")
+            messages.append(AppLocalizer.localizedFormat("Statut modifié : %@ → %@", previousStatus, currentStatus))
         }
 
         if previous.dueDate != current.dueDate {
@@ -2356,9 +2356,9 @@ final class SamouraiStore {
             formatter.locale = Locale(identifier: "fr_FR")
             formatter.dateStyle = .medium
             formatter.timeStyle = .none
-            let previousLabel = previous.dueDate.map(formatter.string(from:)) ?? "non renseignée"
-            let currentLabel = current.dueDate.map(formatter.string(from:)) ?? "non renseignée"
-            messages.append("Date d'action cible modifiée : \(previousLabel) → \(currentLabel)")
+            let previousLabel = previous.dueDate.map(formatter.string(from:)) ?? AppLocalizer.localized("non renseignée")
+            let currentLabel = current.dueDate.map(formatter.string(from:)) ?? AppLocalizer.localized("non renseignée")
+            messages.append(AppLocalizer.localizedFormat("Date d\'action cible modifiée : %@ → %@", previousLabel, currentLabel))
         }
 
         return messages
@@ -2680,7 +2680,7 @@ final class SamouraiStore {
                 ScopeChangeRequestHistoryEntry(
                     status: .proposed,
                     actor: cleanedRequestedBy.isEmpty ? "Chef de Projet" : cleanedRequestedBy,
-                    note: "Demande créée"
+                    note: AppLocalizer.localized("Demande créée")
                 )
             ]
         )
@@ -2690,7 +2690,7 @@ final class SamouraiStore {
         projects[projectIndex].updatedAt = .now
         projects = sortProjects(projects)
         persist()
-        return "Change Request créée au statut Proposed."
+        return AppLocalizer.localized("Change Request créée au statut Proposed.")
     }
 
     func transitionScopeChangeRequest(
@@ -2737,7 +2737,7 @@ final class SamouraiStore {
         projects[projectIndex].updatedAt = .now
         projects = sortProjects(projects)
         persist()
-        return "Change Request passée à \(targetStatus.label)."
+        return AppLocalizer.localizedFormat("Change Request passée à %@.", targetStatus.label)
     }
 
     func addAcceptanceCriterion(projectID: UUID, deliverableID: UUID, criterionText: String) {
@@ -3129,40 +3129,40 @@ final class SamouraiStore {
     private func validatedDatabase(from database: SamouraiDatabase) throws -> SamouraiDatabase {
         let projectIDs = database.projects.map(\.id)
         guard Set(projectIDs).count == projectIDs.count else {
-            throw SamouraiBackupError.invalidPayload("IDs projets dupliqués.")
+            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs projets dupliqués."))
         }
 
         let resourceIDs = database.resources.map(\.id)
         guard Set(resourceIDs).count == resourceIDs.count else {
-            throw SamouraiBackupError.invalidPayload("IDs ressources dupliqués.")
+            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs ressources dupliqués."))
         }
 
         let projectRiskIDs = database.projects.flatMap(\.risks).map(\.id)
         let orphanRiskIDs = database.unassignedRisks.map(\.id)
         let allRiskIDs = projectRiskIDs + orphanRiskIDs
         guard Set(allRiskIDs).count == allRiskIDs.count else {
-            throw SamouraiBackupError.invalidPayload("IDs risques dupliqués.")
+            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs risques dupliqués."))
         }
 
         let eventIDs = database.events.map(\.id)
         guard Set(eventIDs).count == eventIDs.count else {
-            throw SamouraiBackupError.invalidPayload("IDs événements dupliqués.")
+            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs événements dupliqués."))
         }
 
         let actionIDs = database.actions.map(\.id)
         guard Set(actionIDs).count == actionIDs.count else {
-            throw SamouraiBackupError.invalidPayload("IDs actions dupliqués.")
+            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs actions dupliqués."))
         }
 
         let activityIDs = database.activities.map(\.id)
         guard Set(activityIDs).count == activityIDs.count else {
-            throw SamouraiBackupError.invalidPayload("IDs activités dupliqués.")
+            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs activités dupliqués."))
         }
 
         let validProjectIDs = Set(projectIDs)
         let invalidActivityProjects = database.activities.contains { validProjectIDs.contains($0.projectID) == false }
         guard invalidActivityProjects == false else {
-            throw SamouraiBackupError.invalidPayload("Activité rattachée à un projet inexistant.")
+            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("Activité rattachée à un projet inexistant."))
         }
 
         let activitiesByID = Dictionary(uniqueKeysWithValues: database.activities.map { ($0.id, $0) })
@@ -3172,17 +3172,17 @@ final class SamouraiStore {
             return activity.projectID != actionProjectID
         }
         guard invalidActionActivityLink == false else {
-            throw SamouraiBackupError.invalidPayload("Lien action-activité invalide.")
+            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("Lien action-activité invalide."))
         }
 
         let meetingIDs = database.meetings.map(\.id)
         guard Set(meetingIDs).count == meetingIDs.count else {
-            throw SamouraiBackupError.invalidPayload("IDs réunions dupliqués.")
+            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs réunions dupliqués."))
         }
 
         let decisionIDs = database.decisions.map(\.id)
         guard Set(decisionIDs).count == decisionIDs.count else {
-            throw SamouraiBackupError.invalidPayload("IDs décisions dupliqués.")
+            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs décisions dupliqués."))
         }
 
         return database

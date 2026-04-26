@@ -164,3 +164,5 @@ else
   log "Bundle prêt: $APP_BUNDLE"
   log "Option --no-install active: aucune copie vers /Applications."
 fi
+
+say "build terminé"

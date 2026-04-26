@@ -29,7 +29,7 @@ struct MeetingWorkspaceView: View {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Registre des réunions")
+                        Text(localized("Registre des réunions"))
                             .font(.title2.weight(.semibold))
                         Text(appState.localizedFormat("%d / %d réunion(s)", filteredMeetings.count, scopedMeetings.count))
                             .foregroundStyle(.secondary)
@@ -43,7 +43,7 @@ struct MeetingWorkspaceView: View {
                                 editorContext = .edit(selectedMeetingID)
                             }
                         } label: {
-                            Label("Modifier", systemImage: "pencil")
+                            Label(localized("Modifier"), systemImage: "pencil")
                         }
                         .disabled(selectedMeetingIDs.count != 1)
 
@@ -70,13 +70,13 @@ struct MeetingWorkspaceView: View {
                         }
                         .disabled(selectedMeetingsForExport.isEmpty)
                     } label: {
-                        Label("Exporter", systemImage: "square.and.arrow.up")
+                        Label(localized("Exporter"), systemImage: "square.and.arrow.up")
                     }
 
                     Button {
                         editorContext = .create(nil)
                     } label: {
-                        Label("Nouvelle réunion", systemImage: "plus")
+                        Label(localized("Nouvelle réunion"), systemImage: "plus")
                     }
                 }
                 .padding(.horizontal, 16)
@@ -85,7 +85,7 @@ struct MeetingWorkspaceView: View {
 
                 VStack(spacing: 8) {
                     HStack(spacing: 12) {
-                        TextField("Recherche (titre, transcript, résumé IA, participants, projet)", text: $searchText)
+                        TextField(localized("Recherche (titre, transcript, résumé IA, participants, projet)"), text: $searchText)
                             .textFieldStyle(.roundedBorder)
                     }
 
@@ -98,14 +98,14 @@ struct MeetingWorkspaceView: View {
                     ContentUnavailableView(
                         "Aucune réunion",
                         systemImage: "person.2.badge.gearshape",
-                        description: Text("Ajoute des réunions manuellement ou en glisser-déposer depuis ton calendrier.")
+                        description: Text(localized("Ajoute des réunions manuellement ou en glisser-déposer depuis ton calendrier."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredMeetings.isEmpty {
                     ContentUnavailableView(
                         "Aucun résultat",
                         systemImage: "line.3.horizontal.decrease.circle",
-                        description: Text("Ajuste la recherche pour retrouver une réunion.")
+                        description: Text(localized("Ajuste la recherche pour retrouver une réunion."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -223,8 +223,8 @@ struct MeetingWorkspaceView: View {
             contentType: .commaSeparatedText,
             defaultFilename: exportFilename
         ) { _ in }
-        .alert("Supprimer la réunion", isPresented: $isShowingDeleteConfirmation) {
-            Button("Supprimer", role: .destructive) {
+        .alert(localized("Supprimer la réunion"), isPresented: $isShowingDeleteConfirmation) {
+            Button(localized("Supprimer"), role: .destructive) {
                 if selectedMeetingIDs.isEmpty == false {
                     for meetingID in selectedMeetingIDs {
                         store.deleteMeeting(meetingID: meetingID)
@@ -236,7 +236,7 @@ struct MeetingWorkspaceView: View {
                 }
                 meetingPendingDeletion = nil
             }
-            Button("Annuler", role: .cancel) {
+            Button(localized("Annuler"), role: .cancel) {
                 isShowingDeleteConfirmation = false
             }
         } message: {
@@ -248,11 +248,11 @@ struct MeetingWorkspaceView: View {
                 )
             )
         }
-        .alert("Import glisser-déposer", isPresented: Binding(
+        .alert(localized("Import glisser-déposer"), isPresented: Binding(
             get: { dropFeedbackMessage != nil },
             set: { if $0 == false { dropFeedbackMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(localized("OK"), role: .cancel) {}
         } message: {
             Text(appState.localized(dropFeedbackMessage ?? ""))
         }
@@ -274,10 +274,10 @@ struct MeetingWorkspaceView: View {
 
     private var dropZone: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Glisser-déposer depuis calendrier ou texte", systemImage: "square.and.arrow.down.on.square")
+            Label(localized("Glisser-déposer depuis calendrier ou texte"), systemImage: "square.and.arrow.down.on.square")
                 .font(.headline)
 
-            Text("Dépose un fichier .ics, .txt ou du texte brut pour préremplir une réunion avant validation.")
+            Text(localized("Dépose un fichier .ics, .txt ou du texte brut pour préremplir une réunion avant validation."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -385,6 +385,10 @@ struct MeetingWorkspaceView: View {
         exportFilename = "samourai-reunions-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
         isShowingFileExporter = true
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private extension ProjectMeeting {
@@ -455,35 +459,35 @@ private struct MeetingEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Informations réunion") {
-                    TextField("Titre", text: $title)
+                Section(localized("Informations réunion")) {
+                    TextField(localized("Titre"), text: $title)
 
-                    Picker("Projet", selection: $projectID) {
-                        Text("Sans projet")
+                    Picker(localized("Projet"), selection: $projectID) {
+                        Text(localized("Sans projet"))
                             .tag(Optional<UUID>.none)
                         ForEach(store.projects) { project in
                             Text(project.name).tag(Optional(project.id))
                         }
                     }
 
-                    DatePicker("Date et heure", selection: $meetingAt)
+                    DatePicker(localized("Date et heure"), selection: $meetingAt)
 
-                    TextField("Durée (minutes)", text: $durationMinutesText)
+                    TextField(localized("Durée (minutes)"), text: $durationMinutesText)
 
-                    Picker("Type", selection: $mode) {
+                    Picker(localized("Type"), selection: $mode) {
                         ForEach(MeetingMode.allCases) { value in
                             Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
                         }
                     }
 
-                    TextField("Organisateur", text: $organizer)
-                    TextField("Participants", text: $participants)
-                    TextField("Lieu ou lien visio", text: $locationOrLink)
-                    TextField("Notes", text: $notes, axis: .vertical)
+                    TextField(localized("Organisateur"), text: $organizer)
+                    TextField(localized("Participants"), text: $participants)
+                    TextField(localized("Lieu ou lien visio"), text: $locationOrLink)
+                    TextField(localized("Notes"), text: $notes, axis: .vertical)
                         .lineLimit(2...4)
                 }
 
-                Section("Compte Rendu Synthétique (IA)") {
+                Section(localized("Compte Rendu Synthétique (IA)")) {
                     TextEditor(text: $aiSummary)
                         .frame(minHeight: 140)
                         .focused($focusedField, equals: .aiSummary)
@@ -493,18 +497,18 @@ private struct MeetingEditorSheet: View {
                         }
                 }
 
-                Section("Transcript Brut") {
+                Section(localized("Transcript Brut")) {
                     TextEditor(text: $transcript)
                         .frame(minHeight: 180)
                         .focused($focusedField, equals: .transcript)
                 }
 
                 if appState.resolvedPrimaryProjectID(in: store) == nil {
-                    Text("Aucun Projet Principal défini: sélection projet manuelle.")
+                    Text(localized("Aucun Projet Principal défini: sélection projet manuelle."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Projet principal propagé automatiquement, modifiable si nécessaire.")
+                    Text(localized("Projet principal propagé automatiquement, modifiable si nécessaire."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -512,7 +516,7 @@ private struct MeetingEditorSheet: View {
             .navigationTitle(appState.localized(meeting == nil ? "Nouvelle réunion" : "Modifier la réunion"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
@@ -523,11 +527,11 @@ private struct MeetingEditorSheet: View {
                     }
                 }
             }
-            .alert("Validation", isPresented: Binding(
+            .alert(localized("Validation"), isPresented: Binding(
                 get: { validationMessage != nil },
                 set: { if $0 == false { validationMessage = nil } }
             )) {
-                Button("OK", role: .cancel) {}
+                Button(localized("OK"), role: .cancel) {}
             } message: {
                 Text(appState.localized(validationMessage ?? ""))
             }
@@ -537,18 +541,18 @@ private struct MeetingEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if canSave {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     save()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
@@ -652,6 +656,10 @@ private struct MeetingEditorSheet: View {
         didApplyPrimaryProjectDefault = true
         guard meeting == nil, projectID == nil else { return }
         projectID = appState.resolvedPrimaryProjectID(in: store)
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 

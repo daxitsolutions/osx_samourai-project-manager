@@ -9,13 +9,13 @@ enum ResourceExportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptyDataset:
-            "Aucune ressource à exporter."
+            AppLocalizer.localized("Aucune ressource à exporter.")
         case .unableToCreateTemporaryDirectory:
-            "Impossible de préparer le dossier temporaire d'export."
+            AppLocalizer.localized("Impossible de préparer le dossier temporaire d'export.")
         case .unableToCreateArchive(let message):
-            "Impossible de générer le fichier Excel : \(message)"
+            AppLocalizer.localizedFormat("Impossible de générer le fichier Excel : %@", message)
         case .unableToReadArchive:
-            "Le fichier Excel exporté est introuvable."
+            AppLocalizer.localized("Le fichier Excel exporté est introuvable.")
         }
     }
 }
@@ -86,7 +86,7 @@ enum ResourceExportService {
 
         guard zipProcess.terminationStatus == 0 else {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Erreur zip inconnue."
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? AppLocalizer.localized("Erreur zip inconnue.")
             throw ResourceExportError.unableToCreateArchive(errorMessage)
         }
 
@@ -211,7 +211,7 @@ enum ResourceExportService {
     }
 
     private static func write(_ data: Data?, to url: URL) throws {
-        guard let data else { throw ResourceExportError.unableToCreateArchive("Contenu vide pour \(url.lastPathComponent).") }
+        guard let data else { throw ResourceExportError.unableToCreateArchive(AppLocalizer.localizedFormat("Contenu vide pour %@.", url.lastPathComponent)) }
         try data.write(to: url, options: [.atomic])
     }
 

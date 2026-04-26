@@ -23,7 +23,7 @@ struct EventWorkspaceView: View {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Événements projet")
+                        Text(localized("Événements projet"))
                             .font(.title2.weight(.semibold))
                         Text(appState.localizedFormat("%d / %d événement(s) affiché(s)", filteredEvents.count, scopedEvents.count))
                             .foregroundStyle(.secondary)
@@ -37,7 +37,7 @@ struct EventWorkspaceView: View {
                                 editorContext = .edit(selectedEventID)
                             }
                         } label: {
-                            Label("Modifier", systemImage: "pencil")
+                            Label(localized("Modifier"), systemImage: "pencil")
                         }
                         .disabled(selectedEventIDs.count != 1)
 
@@ -64,13 +64,13 @@ struct EventWorkspaceView: View {
                         }
                         .disabled(selectedEventsForExport.isEmpty)
                     } label: {
-                        Label("Exporter", systemImage: "square.and.arrow.up")
+                        Label(localized("Exporter"), systemImage: "square.and.arrow.up")
                     }
 
                     Button {
                         editorContext = .create
                     } label: {
-                        Label("Nouvel événement", systemImage: "plus")
+                        Label(localized("Nouvel événement"), systemImage: "plus")
                     }
                 }
                 .padding(.horizontal, 16)
@@ -78,7 +78,7 @@ struct EventWorkspaceView: View {
                 .padding(.bottom, 8)
 
                 HStack(spacing: 12) {
-                    TextField("Recherche texte (titre, détails, source, projet, ressources)", text: $searchText)
+                    TextField(localized("Recherche texte (titre, détails, source, projet, ressources)"), text: $searchText)
                         .textFieldStyle(.roundedBorder)
                 }
                 .padding(.horizontal, 16)
@@ -88,14 +88,14 @@ struct EventWorkspaceView: View {
                     ContentUnavailableView(
                         "Aucun événement",
                         systemImage: "bell.slash",
-                        description: Text("Ajoute manuellement les événements pour constituer l'historique centralisé du projet.")
+                        description: Text(localized("Ajoute manuellement les événements pour constituer l'historique centralisé du projet."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredEvents.isEmpty {
                     ContentUnavailableView(
                         "Aucun résultat",
                         systemImage: "line.3.horizontal.decrease.circle",
-                        description: Text("Ajuste la recherche pour retrouver un événement existant.")
+                        description: Text(localized("Ajuste la recherche pour retrouver un événement existant."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -207,8 +207,8 @@ struct EventWorkspaceView: View {
             contentType: .commaSeparatedText,
             defaultFilename: exportFilename
         ) { _ in }
-        .alert("Supprimer l'événement", isPresented: $isShowingDeleteConfirmation) {
-            Button("Supprimer", role: .destructive) {
+        .alert(localized("Supprimer l'événement"), isPresented: $isShowingDeleteConfirmation) {
+            Button(localized("Supprimer"), role: .destructive) {
                 if selectedEventIDs.isEmpty == false {
                     for eventID in selectedEventIDs {
                         store.deleteEvent(eventID: eventID)
@@ -220,7 +220,7 @@ struct EventWorkspaceView: View {
                 }
                 eventPendingDeletion = nil
             }
-            Button("Annuler", role: .cancel) {
+            Button(localized("Annuler"), role: .cancel) {
                 isShowingDeleteConfirmation = false
             }
         } message: {
@@ -327,6 +327,10 @@ struct EventWorkspaceView: View {
         exportFilename = "samourai-evenements-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
         isShowingFileExporter = true
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private extension ProjectEvent {
@@ -370,19 +374,19 @@ private struct EventEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Informations") {
-                    TextField("Titre de l'événement", text: $title)
+                Section(localized("Informations")) {
+                    TextField(localized("Titre de l'événement"), text: $title)
 
-                    DatePicker("Date et heure", selection: $happenedAt)
+                    DatePicker(localized("Date et heure"), selection: $happenedAt)
 
-                    Picker("Priorité", selection: $priority) {
+                    Picker(localized("Priorité"), selection: $priority) {
                         ForEach(EventPriority.allCases) { value in
                             Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
                         }
                     }
 
-                    Picker("Projet", selection: $projectID) {
-                        Text("Sans projet")
+                    Picker(localized("Projet"), selection: $projectID) {
+                        Text(localized("Sans projet"))
                             .tag(Optional<UUID>.none)
                         ForEach(store.projects) { project in
                             Text(project.name).tag(Optional(project.id))
@@ -390,24 +394,24 @@ private struct EventEditorSheet: View {
                     }
 
                     if appState.resolvedPrimaryProjectID(in: store) == nil {
-                        Text("Aucun Projet Principal défini: sélection projet manuelle.")
+                        Text(localized("Aucun Projet Principal défini: sélection projet manuelle."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Projet principal propagé automatiquement, modifiable si nécessaire.")
+                        Text(localized("Projet principal propagé automatiquement, modifiable si nécessaire."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
-                    TextField("Source (email, réunion, chat, directive, ...)", text: $source)
+                    TextField(localized("Source (email, réunion, chat, directive, ...)"), text: $source)
                 }
 
-                Section("Ressources associées") {
-                    TextField("Filtrer les ressources", text: $resourceSearchText)
+                Section(localized("Ressources associées")) {
+                    TextField(localized("Filtrer les ressources"), text: $resourceSearchText)
                         .textFieldStyle(.roundedBorder)
 
                     if filteredResources.isEmpty {
-                        Text("Aucune ressource")
+                        Text(localized("Aucune ressource"))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(filteredResources) { resource in
@@ -431,7 +435,7 @@ private struct EventEditorSheet: View {
                     }
                 }
 
-                Section("Détails") {
+                Section(localized("Détails")) {
                     TextEditor(text: $details)
                         .frame(minHeight: 140)
                 }
@@ -439,7 +443,7 @@ private struct EventEditorSheet: View {
             .navigationTitle(appState.localized(event == nil ? "Nouvel événement" : "Modifier l'événement"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
@@ -450,11 +454,11 @@ private struct EventEditorSheet: View {
                     }
                 }
             }
-            .alert("Validation", isPresented: Binding(
+            .alert(localized("Validation"), isPresented: Binding(
                 get: { validationMessage != nil },
                 set: { if $0 == false { validationMessage = nil } }
             )) {
-                Button("OK", role: .cancel) {}
+                Button(localized("OK"), role: .cancel) {}
             } message: {
                 Text(appState.localized(validationMessage ?? ""))
             }
@@ -464,18 +468,18 @@ private struct EventEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if canSave {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     save()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
@@ -585,6 +589,10 @@ private struct EventEditorSheet: View {
         didApplyPrimaryProjectDefault = true
         guard event == nil, projectID == nil else { return }
         projectID = appState.resolvedPrimaryProjectID(in: store)
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 

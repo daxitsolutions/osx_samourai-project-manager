@@ -37,7 +37,7 @@ struct ActionWorkspaceView: View {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Liste d'actions PM")
+                        Text(localized("Liste d'actions PM"))
                             .font(.title2.weight(.semibold))
                         Text(appState.localizedFormat("%d / %d action(s)", filteredActions.count, scopedActions.count))
                             .foregroundStyle(.secondary)
@@ -51,7 +51,7 @@ struct ActionWorkspaceView: View {
                                 editorContext = .edit(selectedActionID)
                             }
                         } label: {
-                            Label("Modifier", systemImage: "pencil")
+                            Label(localized("Modifier"), systemImage: "pencil")
                         }
                         .disabled(selectedActionIDs.count != 1)
 
@@ -78,13 +78,13 @@ struct ActionWorkspaceView: View {
                         }
                         .disabled(selectedActionsForExport.isEmpty)
                     } label: {
-                        Label("Exporter", systemImage: "square.and.arrow.up")
+                        Label(localized("Exporter"), systemImage: "square.and.arrow.up")
                     }
 
                     Button {
                         editorContext = .create
                     } label: {
-                        Label("Nouvelle action", systemImage: "plus")
+                        Label(localized("Nouvelle action"), systemImage: "plus")
                     }
                 }
                 .padding(.horizontal, 16)
@@ -92,10 +92,10 @@ struct ActionWorkspaceView: View {
                 .padding(.bottom, 8)
 
                 HStack(spacing: 12) {
-                    TextField("Recherche (titre, description, priorité, flux)", text: $searchText)
+                    TextField(localized("Recherche (titre, description, priorité, flux)"), text: $searchText)
                         .textFieldStyle(.roundedBorder)
 
-                    Picker("Flux", selection: $selectedFlow) {
+                    Picker(localized("Flux"), selection: $selectedFlow) {
                         ForEach(ActionFlowFilter.allCases) { filter in
                             Text(filter.label.appLocalized(language: appState.interfaceLanguage)).tag(filter)
                         }
@@ -110,14 +110,14 @@ struct ActionWorkspaceView: View {
                     ContentUnavailableView(
                         "Aucune action PM",
                         systemImage: "list.clipboard",
-                        description: Text("Saisis les directives reçues pour les convertir en tâches opérationnelles du Chef de Projet.")
+                        description: Text(localized("Saisis les directives reçues pour les convertir en tâches opérationnelles du Chef de Projet."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredActions.isEmpty {
                     ContentUnavailableView(
                         "Aucun résultat",
                         systemImage: "line.3.horizontal.decrease.circle",
-                        description: Text("Ajuste la recherche ou le filtre de flux.")
+                        description: Text(localized("Ajuste la recherche ou le filtre de flux."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -143,8 +143,8 @@ struct ActionWorkspaceView: View {
             contentType: .commaSeparatedText,
             defaultFilename: exportFilename
         ) { _ in }
-        .alert("Supprimer l'action", isPresented: $isShowingDeleteConfirmation) {
-            Button("Supprimer", role: .destructive) {
+        .alert(localized("Supprimer l'action"), isPresented: $isShowingDeleteConfirmation) {
+            Button(localized("Supprimer"), role: .destructive) {
                 if selectedActionIDs.isEmpty == false {
                     for actionID in selectedActionIDs {
                         store.deleteAction(actionID: actionID)
@@ -156,7 +156,7 @@ struct ActionWorkspaceView: View {
                 }
                 actionPendingDeletion = nil
             }
-            Button("Annuler", role: .cancel) {
+            Button(localized("Annuler"), role: .cancel) {
                 isShowingDeleteConfirmation = false
             }
         } message: {
@@ -383,7 +383,7 @@ struct ActionWorkspaceView: View {
                             set: { store.assignActionToActivity(actionID: action.id, activityID: $0) }
                         )
                     ) {
-                        Text("Aucune").tag(Optional<UUID>.none)
+                        Text(localized("Aucune")).tag(Optional<UUID>.none)
                         ForEach(store.activities(for: projectID)) { activity in
                             Text(activity.displayTitle).tag(Optional(activity.id))
                         }
@@ -528,6 +528,10 @@ struct ActionWorkspaceView: View {
         exportFilename = "samourai-actions-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
         isShowingFileExporter = true
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private extension ProjectAction {
@@ -611,11 +615,11 @@ private struct ActionHistoryInlinePanel: View {
                     .padding(.horizontal, 10)
             } else {
                 HStack(spacing: 8) {
-                    Text("Type")
+                    Text(localized("Type"))
                         .frame(width: SubCol.kind, alignment: .leading)
-                    Text("Description")
+                    Text(localized("Description"))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("Date")
+                    Text(localized("Date"))
                         .frame(width: SubCol.date, alignment: .leading)
                 }
                 .font(.caption2.weight(.semibold))
@@ -667,6 +671,10 @@ private struct ActionHistoryInlinePanel: View {
         .padding(.top, 4)
         .padding(.bottom, 8)
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private struct ActionEditorSheet: View {
@@ -704,12 +712,12 @@ private struct ActionEditorSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Titre", text: $title)
+                    TextField(localized("Titre"), text: $title)
 
-                    DatePicker("Date d'échéance", selection: $dueDate, displayedComponents: [.date])
+                    DatePicker(localized("Date d'échéance"), selection: $dueDate, displayedComponents: [.date])
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Description détaillée")
+                        Text(localized("Description détaillée"))
                             .foregroundStyle(.secondary)
                         TextEditor(text: $details)
                             .frame(minHeight: 140)
@@ -717,7 +725,7 @@ private struct ActionEditorSheet: View {
 
                     severitySlider
 
-                    Picker("Statut", selection: $status) {
+                    Picker(localized("Statut"), selection: $status) {
                         ForEach(ActionStatus.allCases) { value in
                             HStack(spacing: 6) {
                                 Circle()
@@ -730,15 +738,15 @@ private struct ActionEditorSheet: View {
                     }
 
                     if action != nil {
-                        Picker("Flux", selection: $flow) {
+                        Picker(localized("Flux"), selection: $flow) {
                             ForEach(ActionFlow.allCases) { value in
                                 Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
                             }
                         }
                     }
 
-                    Picker("Projet", selection: $projectID) {
-                        Text("Sans projet")
+                    Picker(localized("Projet"), selection: $projectID) {
+                        Text(localized("Sans projet"))
                             .tag(Optional<UUID>.none)
                         ForEach(store.projects) { project in
                             Text(project.name).tag(Optional(project.id))
@@ -746,11 +754,11 @@ private struct ActionEditorSheet: View {
                     }
 
                     if appState.resolvedPrimaryProjectID(in: store) == nil {
-                        Text("Aucun Projet Principal défini: sélection projet manuelle.")
+                        Text(localized("Aucun Projet Principal défini: sélection projet manuelle."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Projet principal propagé automatiquement, modifiable si nécessaire.")
+                        Text(localized("Projet principal propagé automatiquement, modifiable si nécessaire."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -763,7 +771,7 @@ private struct ActionEditorSheet: View {
             .navigationTitle(appState.localized(action == nil ? "Nouvelle action PM" : "Modifier l'action PM"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
@@ -774,11 +782,11 @@ private struct ActionEditorSheet: View {
                     }
                 }
             }
-            .alert("Validation", isPresented: Binding(
+            .alert(localized("Validation"), isPresented: Binding(
                 get: { validationMessage != nil },
                 set: { if $0 == false { validationMessage = nil } }
             )) {
-                Button("OK", role: .cancel) {}
+                Button(localized("OK"), role: .cancel) {}
             } message: {
                 Text(appState.localized(validationMessage ?? ""))
             }
@@ -788,18 +796,18 @@ private struct ActionEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if canSave {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     save()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
@@ -815,7 +823,7 @@ private struct ActionEditorSheet: View {
 
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("Sévérité")
+                Text(localized("Sévérité"))
                 Spacer()
                 HStack(spacing: 6) {
                     Circle()
@@ -926,15 +934,15 @@ private struct ActionEditorSheet: View {
         let currentAction = store.action(with: actionID)
         let entries = currentAction?.historyEntriesChronological ?? []
 
-        Section("Historique") {
+        Section(localized("Historique")) {
             VStack(alignment: .leading, spacing: 8) {
-                TextField("Ajouter un commentaire", text: $newCommentText, axis: .vertical)
+                TextField(localized("Ajouter un commentaire"), text: $newCommentText, axis: .vertical)
                     .lineLimit(2...4)
                     .textFieldStyle(.roundedBorder)
 
                 HStack {
                     Spacer()
-                    Button("Ajouter au journal") {
+                    Button(localized("Ajouter au journal")) {
                         let trimmed = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard trimmed.isEmpty == false else { return }
                         store.addActionComment(actionID: actionID, text: trimmed)
@@ -945,7 +953,7 @@ private struct ActionEditorSheet: View {
             }
 
             if entries.isEmpty {
-                Text("Aucune entrée d'historique pour le moment.")
+                Text(localized("Aucune entrée d'historique pour le moment."))
                     .foregroundStyle(.secondary)
                     .font(.callout)
             } else {
@@ -982,6 +990,10 @@ private struct ActionEditorSheet: View {
         didApplyPrimaryProjectDefault = true
         guard action == nil, projectID == nil else { return }
         projectID = appState.resolvedPrimaryProjectID(in: store)
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 

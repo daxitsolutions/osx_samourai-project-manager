@@ -26,7 +26,7 @@ struct DecisionWorkspaceView: View {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Registre des décisions")
+                        Text(localized("Registre des décisions"))
                             .font(.title2.weight(.semibold))
                         Text(appState.localizedFormat("%d / %d décision(s)", filteredDecisions.count, scopedDecisions.count))
                             .foregroundStyle(.secondary)
@@ -40,7 +40,7 @@ struct DecisionWorkspaceView: View {
                                 editorContext = .edit(selectedDecisionID)
                             }
                         } label: {
-                            Label("Modifier", systemImage: "pencil")
+                            Label(localized("Modifier"), systemImage: "pencil")
                         }
                         .disabled(selectedDecisionIDs.count != 1)
 
@@ -67,13 +67,13 @@ struct DecisionWorkspaceView: View {
                         }
                         .disabled(selectedDecisionsForExport.isEmpty)
                     } label: {
-                        Label("Exporter", systemImage: "square.and.arrow.up")
+                        Label(localized("Exporter"), systemImage: "square.and.arrow.up")
                     }
 
                     Button {
                         editorContext = .create
                     } label: {
-                        Label("Nouvelle décision", systemImage: "plus")
+                        Label(localized("Nouvelle décision"), systemImage: "plus")
                     }
                 }
                 .padding(.horizontal, 16)
@@ -81,7 +81,7 @@ struct DecisionWorkspaceView: View {
                 .padding(.bottom, 8)
 
                 HStack(spacing: 12) {
-                    TextField("Recherche (titre, statut, commentaires, réunions, événements)", text: $searchText)
+                    TextField(localized("Recherche (titre, statut, commentaires, réunions, événements)"), text: $searchText)
                         .textFieldStyle(.roundedBorder)
                 }
                 .padding(.horizontal, 16)
@@ -91,14 +91,14 @@ struct DecisionWorkspaceView: View {
                     ContentUnavailableView(
                         "Aucune décision formelle",
                         systemImage: "scale.3d",
-                        description: Text("Consigne les décisions majeures et leurs itérations pour obtenir une traçabilité complète.")
+                        description: Text(localized("Consigne les décisions majeures et leurs itérations pour obtenir une traçabilité complète."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredDecisions.isEmpty {
                     ContentUnavailableView(
                         "Aucun résultat",
                         systemImage: "line.3.horizontal.decrease.circle",
-                        description: Text("Ajuste la recherche pour retrouver une décision.")
+                        description: Text(localized("Ajuste la recherche pour retrouver une décision."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -222,8 +222,8 @@ struct DecisionWorkspaceView: View {
             contentType: .commaSeparatedText,
             defaultFilename: exportFilename
         ) { _ in }
-        .alert("Supprimer la décision", isPresented: $isShowingDeleteConfirmation) {
-            Button("Supprimer", role: .destructive) {
+        .alert(localized("Supprimer la décision"), isPresented: $isShowingDeleteConfirmation) {
+            Button(localized("Supprimer"), role: .destructive) {
                 if selectedDecisionIDs.isEmpty == false {
                     for decisionID in selectedDecisionIDs {
                         store.deleteDecision(decisionID: decisionID)
@@ -235,7 +235,7 @@ struct DecisionWorkspaceView: View {
                 }
                 decisionPendingDeletion = nil
             }
-            Button("Annuler", role: .cancel) {
+            Button(localized("Annuler"), role: .cancel) {
                 isShowingDeleteConfirmation = false
             }
         } message: {
@@ -247,11 +247,11 @@ struct DecisionWorkspaceView: View {
                 )
             )
         }
-        .alert("Commentaire", isPresented: Binding(
+        .alert(localized("Commentaire"), isPresented: Binding(
             get: { commentValidationMessage != nil },
             set: { if $0 == false { commentValidationMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(localized("OK"), role: .cancel) {}
         } message: {
             Text(appState.localized(commentValidationMessage ?? ""))
         }
@@ -365,6 +365,10 @@ struct DecisionWorkspaceView: View {
         store.addDecisionComment(decisionID: decisionID, author: newCommentAuthor, body: cleanedBody)
         newCommentBody = ""
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private extension ProjectDecision {
@@ -413,28 +417,28 @@ private struct DecisionEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Décision") {
-                    TextField("Titre", text: $title)
+                Section(localized("Décision")) {
+                    TextField(localized("Titre"), text: $title)
 
-                    Picker("Statut", selection: $status) {
+                    Picker(localized("Statut"), selection: $status) {
                         ForEach(DecisionStatus.allCases) { value in
                             Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
                         }
                     }
 
-                    Picker("Projet", selection: $projectID) {
-                        Text("Sans projet")
+                    Picker(localized("Projet"), selection: $projectID) {
+                        Text(localized("Sans projet"))
                             .tag(Optional<UUID>.none)
                         ForEach(store.projects) { project in
                             Text(project.name).tag(Optional(project.id))
                         }
                     }
 
-                    TextField("Description détaillée", text: $details, axis: .vertical)
+                    TextField(localized("Description détaillée"), text: $details, axis: .vertical)
                         .lineLimit(4...8)
                 }
 
-                Section("Liens contextuels") {
+                Section(localized("Liens contextuels")) {
                     meetingPickerSection()
 
                     contextToggleSection(title: "Événements liés", items: store.events, selectedIDs: $selectedEventIDs) { event in
@@ -445,17 +449,17 @@ private struct DecisionEditorSheet: View {
                 }
 
                 if decision != nil {
-                    Section("Journal de modification") {
-                        TextField("Résumé du changement (optionnel)", text: $changeSummary)
+                    Section(localized("Journal de modification")) {
+                        TextField(localized("Résumé du changement (optionnel)"), text: $changeSummary)
                     }
                 }
 
                 if appState.resolvedPrimaryProjectID(in: store) == nil {
-                    Text("Aucun Projet Principal défini: sélection projet manuelle.")
+                    Text(localized("Aucun Projet Principal défini: sélection projet manuelle."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Projet principal propagé automatiquement, modifiable si nécessaire.")
+                    Text(localized("Projet principal propagé automatiquement, modifiable si nécessaire."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -463,7 +467,7 @@ private struct DecisionEditorSheet: View {
             .navigationTitle(appState.localized(decision == nil ? "Nouvelle décision" : "Modifier la décision"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
@@ -474,11 +478,11 @@ private struct DecisionEditorSheet: View {
                     }
                 }
             }
-            .alert("Validation", isPresented: Binding(
+            .alert(localized("Validation"), isPresented: Binding(
                 get: { validationMessage != nil },
                 set: { if $0 == false { validationMessage = nil } }
             )) {
-                Button("OK", role: .cancel) {}
+                Button(localized("OK"), role: .cancel) {}
             } message: {
                 Text(appState.localized(validationMessage ?? ""))
             }
@@ -488,18 +492,18 @@ private struct DecisionEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if canSave {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     save()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
@@ -584,7 +588,7 @@ private struct DecisionEditorSheet: View {
                 Text(appState.localized("Aucune réunion disponible"))
                     .foregroundStyle(.secondary)
             } else {
-                TextField("Rechercher une réunion…", text: $meetingSearchText)
+                TextField(localized("Rechercher une réunion…"), text: $meetingSearchText)
                     .textFieldStyle(.roundedBorder)
 
                 ForEach(visibleMeetings) { meeting in
@@ -611,7 +615,7 @@ private struct DecisionEditorSheet: View {
             Text(appState.localized("Ressources impactées"))
                 .font(.headline)
 
-            TextField("Rechercher une ressource…", text: $resourceSearchText)
+            TextField(localized("Rechercher une ressource…"), text: $resourceSearchText)
                 .textFieldStyle(.roundedBorder)
 
             if visibleResources.isEmpty {
@@ -726,6 +730,10 @@ private struct DecisionEditorSheet: View {
         didApplyPrimaryProjectDefault = true
         guard decision == nil, projectID == nil else { return }
         projectID = appState.resolvedPrimaryProjectID(in: store)
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 

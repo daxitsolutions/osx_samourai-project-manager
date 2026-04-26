@@ -18,7 +18,11 @@
       "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager status)",
       "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager diff --stat)",
       "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager diff Sources/SamouraiProjectManagerApp/Views/Actions/ActionWorkspaceView.swift)",
-      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager checkout -- Sources/SamouraiProjectManagerApp/Views/Actions/ActionWorkspaceView.swift)"
+      "Bash(git -C /Users/Dax/Documents/GitHub/osx_samourai-project-manager checkout -- Sources/SamouraiProjectManagerApp/Views/Actions/ActionWorkspaceView.swift)",
+      "Bash(python3)",
+      "Read(//tmp/**)",
+      "Bash(python3 /tmp/localize_views.py --dry-run Views/App/BackupWorkspaceView.swift)",
+      "Bash(python3 /tmp/collect_all_strings.py)"
     ]
   }
 }

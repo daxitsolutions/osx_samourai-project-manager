@@ -37,7 +37,7 @@ struct RiskRegisterView: View {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Registre global des risques")
+                        Text(localized("Registre global des risques"))
                             .font(.title2.weight(.semibold))
                         Text(appState.localizedFormat("%d / %d risque(s) suivi(s)", filteredRisks.count, scopedRisks.count))
                             .foregroundStyle(.secondary)
@@ -56,7 +56,7 @@ struct RiskRegisterView: View {
                         }
                         .disabled(selectedRisksForExport.isEmpty)
                     } label: {
-                        Label("Exporter", systemImage: "square.and.arrow.up")
+                        Label(localized("Exporter"), systemImage: "square.and.arrow.up")
                     }
 
                     if selectedRiskIDs.isEmpty == false {
@@ -65,7 +65,7 @@ struct RiskRegisterView: View {
                                 riskEditorContext = .edit(selectedRiskID)
                             }
                         } label: {
-                            Label("Modifier", systemImage: "pencil")
+                            Label(localized("Modifier"), systemImage: "pencil")
                         }
                         .disabled(selectedRiskIDs.count != 1)
 
@@ -84,14 +84,14 @@ struct RiskRegisterView: View {
                     Button {
                         riskEditorContext = .create
                     } label: {
-                        Label("Nouveau risque", systemImage: "plus")
+                        Label(localized("Nouveau risque"), systemImage: "plus")
                     }
                     .disabled(store.projects.isEmpty)
 
                     Button {
                         isShowingFileImporter = true
                     } label: {
-                        Label("Importer", systemImage: "square.and.arrow.down")
+                        Label(localized("Importer"), systemImage: "square.and.arrow.down")
                     }
                     .disabled(isImporting)
                 }
@@ -100,7 +100,7 @@ struct RiskRegisterView: View {
                 .padding(.bottom, 8)
 
                 HStack(spacing: 12) {
-                    TextField("Recherche (titre, owner, projet, severite, statut)", text: $searchText)
+                    TextField(localized("Recherche (titre, owner, projet, severite, statut)"), text: $searchText)
                         .textFieldStyle(.roundedBorder)
                 }
                 .padding(.horizontal, 16)
@@ -110,7 +110,7 @@ struct RiskRegisterView: View {
                     ContentUnavailableView(
                         "Aucun risque",
                         systemImage: "checkmark.shield",
-                        description: Text("Les risques créés ou importés apparaîtront ici.")
+                        description: Text(localized("Les risques créés ou importés apparaîtront ici."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -166,25 +166,25 @@ struct RiskRegisterView: View {
             contentType: .commaSeparatedText,
             defaultFilename: exportFilename
         ) { _ in }
-        .alert("Supprimer les risques", isPresented: $isShowingDeleteConfirmation) {
-            Button("Supprimer", role: .destructive) {
+        .alert(localized("Supprimer les risques"), isPresented: $isShowingDeleteConfirmation) {
+            Button(localized("Supprimer"), role: .destructive) {
                 for riskID in selectedRiskIDs {
                     deleteRisk(riskID)
                 }
                 selectedRiskIDs.removeAll()
                 appState.selectedRiskID = nil
             }
-            Button("Annuler", role: .cancel) {
+            Button(localized("Annuler"), role: .cancel) {
                 isShowingDeleteConfirmation = false
             }
         } message: {
             Text(appState.localized(selectedRiskIDs.count > 1 ? "Les risques sélectionnés seront supprimés." : "Le risque sélectionné sera supprimé."))
         }
-        .alert("Import des risques", isPresented: Binding(
+        .alert(localized("Import des risques"), isPresented: Binding(
             get: { importFeedbackMessage != nil },
             set: { if $0 == false { importFeedbackMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(localized("OK"), role: .cancel) {}
         } message: {
             Text(appState.localized(importFeedbackMessage ?? ""))
         }
@@ -468,6 +468,10 @@ struct RiskRegisterView: View {
     private func deleteRisk(_ riskID: UUID) {
         store.deleteRisk(riskID: riskID)
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 // MARK: - Sort header
@@ -671,8 +675,8 @@ private struct ManualRiskEditorSheet: View {
         NavigationStack {
             Form {
                 if entry == nil {
-                    Picker("Projet", selection: $projectID) {
-                        Text("Sélectionner").tag(Optional<UUID>.none)
+                    Picker(localized("Projet"), selection: $projectID) {
+                        Text(localized("Sélectionner")).tag(Optional<UUID>.none)
                         ForEach(store.projects) { project in
                             Text(project.name).tag(Optional(project.id))
                         }
@@ -684,18 +688,18 @@ private struct ManualRiskEditorSheet: View {
                     }
                 }
 
-                TextField("Risque", text: $title)
-                TextField("Mitigation", text: $mitigation, axis: .vertical)
+                TextField(localized("Risque"), text: $title)
+                TextField(localized("Mitigation"), text: $mitigation, axis: .vertical)
                     .lineLimit(3...5)
-                TextField("Owner", text: $owner)
+                TextField(localized("Owner"), text: $owner)
 
-                Picker("Sévérité", selection: $severity) {
+                Picker(localized("Sévérité"), selection: $severity) {
                     ForEach(RiskSeverity.allCases) { s in
                         Text(s.label.appLocalized(language: appState.interfaceLanguage)).tag(s)
                     }
                 }
 
-                Picker("Statut", selection: $status) {
+                Picker(localized("Statut"), selection: $status) {
                     ForEach(RiskStatus.allCases) { s in
                         HStack {
                             Circle()
@@ -707,7 +711,7 @@ private struct ManualRiskEditorSheet: View {
                     }
                 }
 
-                DatePicker("Date d'action cible", selection: $dueDate, displayedComponents: .date)
+                DatePicker(localized("Date d'action cible"), selection: $dueDate, displayedComponents: .date)
 
                 if let entry {
                     historySection(for: entry.risk.id)
@@ -717,7 +721,7 @@ private struct ManualRiskEditorSheet: View {
             .navigationTitle(appState.localized(entry == nil ? "Nouveau risque" : "Modifier le risque"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
@@ -735,18 +739,18 @@ private struct ManualRiskEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if formIsInvalid == false {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     save()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             if projectID == nil {
@@ -761,15 +765,15 @@ private struct ManualRiskEditorSheet: View {
         let currentRisk = store.risks.first(where: { $0.risk.id == riskID })?.risk
         let entries = currentRisk?.historyEntriesChronological ?? []
 
-        Section("Historique") {
+        Section(localized("Historique")) {
             VStack(alignment: .leading, spacing: 8) {
-                TextField("Ajouter un commentaire", text: $newCommentText, axis: .vertical)
+                TextField(localized("Ajouter un commentaire"), text: $newCommentText, axis: .vertical)
                     .lineLimit(2...4)
                     .textFieldStyle(.roundedBorder)
 
                 HStack {
                     Spacer()
-                    Button("Ajouter au journal") {
+                    Button(localized("Ajouter au journal")) {
                         let trimmed = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard trimmed.isEmpty == false else { return }
                         store.addRiskComment(riskID: riskID, text: trimmed)
@@ -780,7 +784,7 @@ private struct ManualRiskEditorSheet: View {
             }
 
             if entries.isEmpty {
-                Text("Aucune entrée d'historique pour le moment.")
+                Text(localized("Aucune entrée d'historique pour le moment."))
                     .foregroundStyle(.secondary)
                     .font(.callout)
             } else {
@@ -880,6 +884,10 @@ private struct ManualRiskEditorSheet: View {
             appState.selectedSection = .risks
         }
         dismiss()
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 

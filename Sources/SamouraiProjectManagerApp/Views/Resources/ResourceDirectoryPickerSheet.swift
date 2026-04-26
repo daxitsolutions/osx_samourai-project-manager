@@ -20,10 +20,10 @@ struct ResourceDirectoryPickerSheet: View {
                 footer
             }
             .frame(minWidth: 560, idealWidth: 680, minHeight: 480, idealHeight: 620)
-            .navigationTitle("Ajouter depuis l'annuaire")
+            .navigationTitle(localized("Ajouter depuis l'annuaire"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Fermer") { dismiss() }
+                    Button(localized("Fermer")) { dismiss() }
                 }
             }
         }
@@ -31,20 +31,20 @@ struct ResourceDirectoryPickerSheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Sélectionner une ou plusieurs ressources de l'annuaire global à affecter à \(projectName).")
+            Text(localized("Sélectionner une ou plusieurs ressources de l'annuaire global à affecter à \\(projectName)."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            TextField("Rechercher dans l'annuaire", text: $searchText)
+            TextField(localized("Rechercher dans l'annuaire"), text: $searchText)
                 .textFieldStyle(.roundedBorder)
 
             HStack {
-                Text("\(availableResources.count) ressource(s) disponible(s) — \(selectedResourceIDs.count) sélectionnée(s)")
+                Text(localized("\\(availableResources.count) ressource(s) disponible(s) — \\(selectedResourceIDs.count) sélectionnée(s)"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 if selectedResourceIDs.isEmpty == false {
-                    Button("Tout désélectionner") { selectedResourceIDs.removeAll() }
+                    Button(localized("Tout désélectionner")) { selectedResourceIDs.removeAll() }
                         .buttonStyle(.plain)
                         .font(.caption)
                 }
@@ -59,19 +59,19 @@ struct ResourceDirectoryPickerSheet: View {
             ContentUnavailableView(
                 "Annuaire vide",
                 systemImage: "person.3",
-                description: Text("Ajoute des ressources dans l'annuaire global avant de les affecter à un projet.")
+                description: Text(localized("Ajoute des ressources dans l'annuaire global avant de les affecter à un projet."))
             )
         } else if availableResources.isEmpty {
             ContentUnavailableView(
                 "Toutes les ressources sont déjà affectées",
                 systemImage: "checkmark.seal",
-                description: Text("Aucune ressource disponible dans l'annuaire n'est actuellement libre pour ce projet.")
+                description: Text(localized("Aucune ressource disponible dans l'annuaire n'est actuellement libre pour ce projet."))
             )
         } else if filteredResources.isEmpty {
             ContentUnavailableView(
                 "Aucun résultat",
                 systemImage: "magnifyingglass",
-                description: Text("Ajuste la recherche pour retrouver une ressource.")
+                description: Text(localized("Ajuste la recherche pour retrouver une ressource."))
             )
         } else {
             List(filteredResources, id: \.id) { resource in
@@ -111,7 +111,7 @@ struct ResourceDirectoryPickerSheet: View {
 
             Spacer()
 
-            Text("\(resource.assignedProjectIDs.count) projet(s)")
+            Text(localized("\\(resource.assignedProjectIDs.count) projet(s)"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -121,9 +121,9 @@ struct ResourceDirectoryPickerSheet: View {
     private var footer: some View {
         HStack {
             Spacer()
-            Button("Annuler") { dismiss() }
+            Button(localized("Annuler")) { dismiss() }
                 .keyboardShortcut(.cancelAction)
-            Button("Ajouter au projet") { applySelection() }
+            Button(localized("Ajouter au projet")) { applySelection() }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
                 .disabled(selectedResourceIDs.isEmpty)
@@ -161,5 +161,11 @@ struct ResourceDirectoryPickerSheet: View {
             store.assignResource(resourceID: resourceID, to: projectID)
         }
         dismiss()
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

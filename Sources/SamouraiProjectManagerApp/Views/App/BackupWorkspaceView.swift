@@ -28,12 +28,12 @@ struct BackupWorkspaceView: View {
                 ) {
                     HStack(spacing: 12) {
                         Button(action: onExportBackup) {
-                            Label("Sauvegarder l'état complet", systemImage: "square.and.arrow.up")
+                            Label(localized("Sauvegarder l'état complet"), systemImage: "square.and.arrow.up")
                         }
                         .buttonStyle(.borderedProminent)
 
                         Button(action: onImportBackup) {
-                            Label("Restaurer depuis un backup", systemImage: "arrow.clockwise")
+                            Label(localized("Restaurer depuis un backup"), systemImage: "arrow.clockwise")
                         }
                         .buttonStyle(.bordered)
                     }
@@ -42,5 +42,11 @@ struct BackupWorkspaceView: View {
             .padding(SamouraiLayout.pagePadding)
         }
         .scrollIndicators(.visible)
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

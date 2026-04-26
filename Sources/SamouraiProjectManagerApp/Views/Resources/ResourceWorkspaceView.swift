@@ -63,14 +63,14 @@ struct ResourceWorkspaceView: View {
                             Button {
                                 assignSelectedResourceToScopedProject()
                             } label: {
-                                Label("Ajouter au projet", systemImage: "plus.circle")
+                                Label(localized("Ajouter au projet"), systemImage: "plus.circle")
                             }
                             .disabled(isImporting)
                         } else if canRemoveSelectedResourceFromScopedProject {
                             Button {
                                 removeSelectedResourceFromScopedProject()
                             } label: {
-                                Label("Retirer du projet", systemImage: "minus.circle")
+                                Label(localized("Retirer du projet"), systemImage: "minus.circle")
                             }
                             .disabled(isImporting)
                         }
@@ -79,7 +79,7 @@ struct ResourceWorkspaceView: View {
                             Button {
                                 evaluationContext = .init(resourceID: selectedResource.id)
                             } label: {
-                                Label("Évaluer", systemImage: "waveform.path.ecg.rectangle")
+                                Label(localized("Évaluer"), systemImage: "waveform.path.ecg.rectangle")
                             }
                             .disabled(isImporting)
                         }
@@ -87,20 +87,20 @@ struct ResourceWorkspaceView: View {
                         Button {
                             editorContext = .edit(selectedResource.id)
                         } label: {
-                            Label("Modifier", systemImage: "pencil")
+                            Label(localized("Modifier"), systemImage: "pencil")
                         }
                         .disabled(isImporting)
 
                         Button(role: .destructive) {
                             resourcePendingDeletion = selectedResource
                         } label: {
-                            Label("Supprimer", systemImage: "trash")
+                            Label(localized("Supprimer"), systemImage: "trash")
                         }
                         .disabled(isImporting)
                     }
 
                     Menu {
-                        Button("Exporter toutes les ressources") {
+                        Button(localized("Exporter toutes les ressources")) {
                             prepareExport(
                                 resources: scopedResources,
                                 defaultFilename: "ressources-\(Date.now.formatted(.dateTime.year().month().day()))"
@@ -115,7 +115,7 @@ struct ResourceWorkspaceView: View {
                         }
                         .disabled(selectedResourcesForExport.isEmpty)
                     } label: {
-                        Label("Exporter", systemImage: "square.and.arrow.up")
+                        Label(localized("Exporter"), systemImage: "square.and.arrow.up")
                     }
                     .disabled(isImporting || scopedResources.isEmpty)
 
@@ -123,21 +123,21 @@ struct ResourceWorkspaceView: View {
                         Button {
                             isShowingFileImporter = true
                         } label: {
-                            Label("Importer", systemImage: "square.and.arrow.down")
+                            Label(localized("Importer"), systemImage: "square.and.arrow.down")
                         }
                         .disabled(isImporting)
 
                         Button {
                             editorContext = .create
                         } label: {
-                            Label("Nouvelle", systemImage: "plus")
+                            Label(localized("Nouvelle"), systemImage: "plus")
                         }
                         .disabled(isImporting)
                     } else if scopedProjectID != nil {
                         Button {
                             isShowingDirectoryPicker = true
                         } label: {
-                            Label("Ajouter depuis l'annuaire", systemImage: "person.crop.circle.badge.plus")
+                            Label(localized("Ajouter depuis l'annuaire"), systemImage: "person.crop.circle.badge.plus")
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(isImporting)
@@ -173,7 +173,7 @@ struct ResourceWorkspaceView: View {
                             .textFieldStyle(.roundedBorder)
 
                         if scopedProjectID != nil {
-                            Picker("Favoris", selection: $projectFavoriteFilter) {
+                            Picker(localized("Favoris"), selection: $projectFavoriteFilter) {
                                 ForEach(ResourceProjectFavoriteFilter.allCases) { filter in
                                     Text(filter.label.appLocalized(language: appState.interfaceLanguage)).tag(filter)
                                 }
@@ -182,7 +182,7 @@ struct ResourceWorkspaceView: View {
                             .frame(width: 220)
                         }
 
-                        Picker("Affichage", selection: displayModeBinding) {
+                        Picker(localized("Affichage"), selection: displayModeBinding) {
                             ForEach(ResourceDisplayMode.allCases) { mode in
                                 Label(mode.label.appLocalized(language: appState.interfaceLanguage), systemImage: mode.iconName).tag(mode)
                             }
@@ -193,9 +193,9 @@ struct ResourceWorkspaceView: View {
                         Button {
                             appState.selectedSection = .configuration
                         } label: {
-                            Label("Colonnes", systemImage: "slider.horizontal.3")
+                            Label(localized("Colonnes"), systemImage: "slider.horizontal.3")
                         }
-                        .help("Configurer les colonnes dans le volet Configuration")
+                        .help(localized("Configurer les colonnes dans le volet Configuration"))
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 4)
@@ -221,7 +221,7 @@ struct ResourceWorkspaceView: View {
                         ContentUnavailableView(
                             "Aucun résultat",
                             systemImage: "line.3.horizontal.decrease.circle",
-                            description: Text("Ajuste la recherche pour retrouver une ressource de l'annuaire ou l'ajouter au projet en cours.")
+                            description: Text(localized("Ajuste la recherche pour retrouver une ressource de l'annuaire ou l'ajouter au projet en cours."))
                         )
                     }
                 }
@@ -262,7 +262,7 @@ struct ResourceWorkspaceView: View {
                         }
                     )
                 } else {
-                    Text("Ressource introuvable.")
+                    Text(localized("Ressource introuvable."))
                         .padding(24)
                 }
             }
@@ -307,11 +307,11 @@ struct ResourceWorkspaceView: View {
                 exportFeedbackMessage = error.localizedDescription
             }
         }
-        .alert("Supprimer la ressource", isPresented: Binding(
+        .alert(localized("Supprimer la ressource"), isPresented: Binding(
             get: { resourcePendingDeletion != nil },
             set: { if $0 == false { resourcePendingDeletion = nil } }
         )) {
-            Button("Supprimer", role: .destructive) {
+            Button(localized("Supprimer"), role: .destructive) {
                 if let resource = resourcePendingDeletion {
                     if appState.selectedResourceID == resource.id {
                         appState.selectedResourceID = nil
@@ -321,41 +321,41 @@ struct ResourceWorkspaceView: View {
                 }
                 resourcePendingDeletion = nil
             }
-            Button("Annuler", role: .cancel) {
+            Button(localized("Annuler"), role: .cancel) {
                 resourcePendingDeletion = nil
             }
         } message: {
-            Text("Cette action retirera la ressource du référentiel local.")
+            Text(localized("Cette action retirera la ressource du référentiel local."))
         }
-        .alert("Import des ressources", isPresented: Binding(
+        .alert(localized("Import des ressources"), isPresented: Binding(
             get: { importFeedbackMessage != nil },
             set: { if $0 == false { importFeedbackMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(localized("OK"), role: .cancel) {}
         } message: {
             Text(importFeedbackMessage ?? "")
         }
-        .alert("Export des ressources", isPresented: Binding(
+        .alert(localized("Export des ressources"), isPresented: Binding(
             get: { exportFeedbackMessage != nil },
             set: { if $0 == false { exportFeedbackMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(localized("OK"), role: .cancel) {}
         } message: {
             Text(exportFeedbackMessage ?? "")
         }
-        .alert("Mise à jour rapide", isPresented: Binding(
+        .alert(localized("Mise à jour rapide"), isPresented: Binding(
             get: { inlineEditFeedbackMessage != nil },
             set: { if $0 == false { inlineEditFeedbackMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(localized("OK"), role: .cancel) {}
         } message: {
             Text(inlineEditFeedbackMessage ?? "")
         }
-        .alert("Évaluation des ressources", isPresented: Binding(
+        .alert(localized("Évaluation des ressources"), isPresented: Binding(
             get: { evaluationFeedbackMessage != nil },
             set: { if $0 == false { evaluationFeedbackMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(localized("OK"), role: .cancel) {}
         } message: {
             Text(evaluationFeedbackMessage ?? "")
         }
@@ -559,11 +559,11 @@ struct ResourceWorkspaceView: View {
                             selectedResourceID.wrappedValue = resource.id
                         }
                         .contextMenu {
-                            Button("Modifier") {
+                            Button(localized("Modifier")) {
                                 editorContext = .edit(resource.id)
                             }
 
-                            Button("Supprimer", role: .destructive) {
+                            Button(localized("Supprimer"), role: .destructive) {
                                 resourcePendingDeletion = resource
                             }
                         }
@@ -1156,6 +1156,10 @@ struct ResourceWorkspaceView: View {
             }
         }
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private struct ResourceProfilingSummaryCard: View {
@@ -1319,7 +1323,7 @@ private struct ResourceComparativePerformanceCard: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Button("Évaluer") {
+                                Button(localized("Évaluer")) {
                                     onEvaluate(snapshot.resourceID)
                                 }
                                 .buttonStyle(.borderless)
@@ -1348,6 +1352,10 @@ private struct ResourceComparativePerformanceCard: View {
             ? appState.localized("Aucune alerte")
             : snapshot.alerts.map { $0.kind.label.appLocalized(language: appState.interfaceLanguage) }.joined(separator: " • ")
         return "\(scoreText) • \(snapshot.trend.label.appLocalized(language: appState.interfaceLanguage)) • \(alertsText)"
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 
@@ -1515,17 +1523,17 @@ private struct ResourceImportReviewSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("Validation ligne par ligne")
+                    Text(localized("Validation ligne par ligne"))
                         .font(.title2.weight(.semibold))
                     Spacer()
-                    Button("Tout conserver") {
+                    Button(localized("Tout conserver")) {
                         for index in decisions.indices where decisions[index].reviewItem.action == .update {
                             decisions[index].shouldApply = false
                         }
                     }
                     .buttonStyle(.bordered)
 
-                    Button("Tout écraser") {
+                    Button(localized("Tout écraser")) {
                         for index in decisions.indices where decisions[index].reviewItem.action == .update {
                             decisions[index].shouldApply = true
                         }
@@ -1540,7 +1548,7 @@ private struct ResourceImportReviewSheet: View {
                     ForEach($decisions) { $decision in
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(alignment: .firstTextBaseline) {
-                                Text("Ligne \(decision.reviewItem.sourceRowNumber)")
+                                Text(localized("Ligne \\(decision.reviewItem.sourceRowNumber)"))
                                     .font(.headline)
                                 Text(decision.reviewItem.displayName)
                                     .foregroundStyle(.secondary)
@@ -1559,10 +1567,10 @@ private struct ResourceImportReviewSheet: View {
                                 )
                                     .toggleStyle(.checkbox)
                             case .noChange:
-                                Text("Aucune modification détectée.")
+                                Text(localized("Aucune modification détectée."))
                                     .foregroundStyle(.secondary)
                             case .skipped:
-                                Text("Ligne ignorée (données insuffisantes).")
+                                Text(localized("Ligne ignorée (données insuffisantes)."))
                                     .foregroundStyle(.secondary)
                             }
 
@@ -1593,16 +1601,16 @@ private struct ResourceImportReviewSheet: View {
                 .scrollIndicators(.visible)
             }
             .padding(16)
-            .navigationTitle("Revue d'import")
+            .navigationTitle(localized("Revue d'import"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         onCancel()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Appliquer") {
+                    Button(localized("Appliquer")) {
                         onApply()
                     }
                     .disabled(decisions.contains(where: { ($0.reviewItem.action == .update || $0.reviewItem.action == .create) && $0.shouldApply }) == false)
@@ -1644,6 +1652,12 @@ private struct ResourceImportReviewSheet: View {
         case .skipped:
             .secondary
         }
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 
@@ -1826,23 +1840,23 @@ private struct ResourceEvaluationSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Contexte") {
+                Section(localized("Contexte")) {
                     Text(resource.displayName)
-                    DatePicker("Date", selection: $draft.evaluatedAt, displayedComponents: .date)
-                    TextField("Jalon / Milestone", text: $draft.milestone)
-                    TextField("Évaluateur", text: $draft.evaluator)
+                    DatePicker(localized("Date"), selection: $draft.evaluatedAt, displayedComponents: .date)
+                    TextField(localized("Jalon / Milestone"), text: $draft.milestone)
+                    TextField(localized("Évaluateur"), text: $draft.evaluator)
                     if let scopedProject {
                         Text(appState.localizedFormat("Projet: %@ • Phase: %@", scopedProject.name, scopedProject.phase.label.appLocalized(language: appState.interfaceLanguage)))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Portée multi-projet (pondération standard)")
+                        Text(localized("Portée multi-projet (pondération standard)"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Section("Notation structurée (1..5)") {
+                Section(localized("Notation structurée (1..5)")) {
                     ForEach(ResourceEvaluationCriterion.allCases) { criterion in
                         Picker(criterion.label.appLocalized(language: appState.interfaceLanguage), selection: scoreBinding(for: criterion)) {
                             ForEach(ResourceEvaluationScale.allCases) { level in
@@ -1853,8 +1867,8 @@ private struct ResourceEvaluationSheet: View {
                     }
                 }
 
-                Section("Commentaire justificatif (obligatoire)") {
-                    TextField("Observations détaillées", text: $draft.comment, axis: .vertical)
+                Section(localized("Commentaire justificatif (obligatoire)")) {
+                    TextField(localized("Observations détaillées"), text: $draft.comment, axis: .vertical)
                         .lineLimit(4...10)
                 }
             }
@@ -1862,13 +1876,13 @@ private struct ResourceEvaluationSheet: View {
             .navigationTitle(appState.localized("Nouvelle évaluation"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Enregistrer") {
+                    Button(localized("Enregistrer")) {
                         submit()
                     }
                     .disabled(draft.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -1880,18 +1894,18 @@ private struct ResourceEvaluationSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if draft.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     submit()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             captureInitialSnapshotIfNeeded()
@@ -1953,5 +1967,9 @@ private struct ResourceEvaluationSheet: View {
             comment: draft.comment,
             criterionScores: criterionScores
         )
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

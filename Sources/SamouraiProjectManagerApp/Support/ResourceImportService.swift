@@ -292,7 +292,7 @@ enum ResourceImportService {
 
     private static func unzipEntry(at archiveURL: URL, entryPath: String) throws -> Data {
         guard let data = try unzipEntryIfAvailable(at: archiveURL, entryPath: entryPath) else {
-            throw ResourceImportError.invalidWorkbook("Entrée Excel introuvable: \(entryPath)")
+            throw ResourceImportError.invalidWorkbook(AppLocalizer.localizedFormat("Entrée Excel introuvable: %@", entryPath))
         }
 
         return data
@@ -323,7 +323,7 @@ enum ResourceImportService {
             return nil
         }
 
-        throw ResourceImportError.invalidWorkbook(errorMessage.isEmpty ? "Impossible de lire le fichier Excel." : errorMessage)
+        throw ResourceImportError.invalidWorkbook(errorMessage.isEmpty ? AppLocalizer.localized("Impossible de lire le fichier Excel.") : errorMessage)
     }
 }
 
@@ -434,13 +434,13 @@ enum ResourceImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unsupportedFileType:
-            "Type de fichier non supporté. Utilise un fichier Excel .xlsx, .csv ou .tsv."
+            AppLocalizer.localized("Type de fichier non supporté. Utilise un fichier Excel .xlsx, .csv ou .tsv.")
         case .emptyFile:
-            "Le fichier importé est vide."
+            AppLocalizer.localized("Le fichier importé est vide.")
         case .missingRequiredColumn(let column):
-            "Colonne obligatoire absente : \(column)."
+            AppLocalizer.localizedFormat("Colonne obligatoire absente : %@.", column)
         case .invalidWorkbook(let message):
-            "Fichier Excel invalide : \(message)"
+            AppLocalizer.localizedFormat("Fichier Excel invalide : %@", message)
         }
     }
 }

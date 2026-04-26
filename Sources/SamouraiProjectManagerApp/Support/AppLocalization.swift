@@ -33,6 +33,21 @@ enum AppLanguage: String, CaseIterable, Codable, Identifiable {
 enum AppLocalizer {
     static let tableName = "Localizable"
 
+    /// Process-wide current language used by non-View contexts (errors, services, stores).
+    /// Updated by AppState whenever the user changes language.
+    nonisolated(unsafe) static var ambientLanguage: AppLanguage = .fr
+
+    /// Localize using the ambient (process-wide) language. For use in error
+    /// descriptions, service-layer logs, and other non-View contexts where an
+    /// AppState environment is unavailable.
+    static func localized(_ key: String) -> String {
+        localized(key, language: ambientLanguage)
+    }
+
+    static func localizedFormat(_ key: String, _ arguments: CVarArg...) -> String {
+        localizedFormat(key, language: ambientLanguage, arguments: arguments)
+    }
+
     static func localized(_ key: String, language: AppLanguage) -> String {
         if key.isEmpty {
             return key

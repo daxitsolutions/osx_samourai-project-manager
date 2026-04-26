@@ -26,7 +26,7 @@ struct ProjectTimelineView: View {
                         Text(activity.displayTitle)
                             .font(.subheadline.weight(.semibold))
                         if activity.isMilestone {
-                            Text("Jalon")
+                            Text(localized("Jalon"))
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -69,5 +69,11 @@ struct ProjectTimelineView: View {
                 )
             }
         }
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

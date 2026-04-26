@@ -35,38 +35,38 @@ struct ProjectEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Nom du projet", text: $name)
-                TextField("Résumé opérationnel", text: $summary, axis: .vertical)
+                TextField(localized("Nom du projet"), text: $name)
+                TextField(localized("Résumé opérationnel"), text: $summary, axis: .vertical)
                     .lineLimit(3...5)
-                TextField("Sponsor", text: $sponsor)
-                TextField("Chef de projet", text: $manager)
+                TextField(localized("Sponsor"), text: $sponsor)
+                TextField(localized("Chef de projet"), text: $manager)
 
-                Picker("Phase", selection: $phase) {
+                Picker(localized("Phase"), selection: $phase) {
                     ForEach(ProjectPhase.allCases) { phase in
                         Text(phase.label.appLocalized(language: appState.interfaceLanguage)).tag(phase)
                     }
                 }
 
-                Picker("Santé", selection: $health) {
+                Picker(localized("Santé"), selection: $health) {
                     ForEach(ProjectHealth.allCases) { health in
                         Text(health.label.appLocalized(language: appState.interfaceLanguage)).tag(health)
                     }
                 }
 
-                Picker("Mode de delivery", selection: $deliveryMode) {
+                Picker(localized("Mode de delivery"), selection: $deliveryMode) {
                     ForEach(DeliveryMode.allCases) { mode in
                         Text(mode.label.appLocalized(language: appState.interfaceLanguage)).tag(mode)
                     }
                 }
 
-                DatePicker("Date de démarrage", selection: $startDate, displayedComponents: .date)
-                DatePicker("Date cible", selection: $targetDate, displayedComponents: .date)
+                DatePicker(localized("Date de démarrage"), selection: $startDate, displayedComponents: .date)
+                DatePicker(localized("Date cible"), selection: $targetDate, displayedComponents: .date)
             }
             .formStyle(.grouped)
             .navigationTitle(project == nil ? "Nouveau projet" : "Modifier le projet")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
@@ -84,18 +84,18 @@ struct ProjectEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if formIsInvalid == false {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     save()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             captureInitialSnapshotIfNeeded()
@@ -174,6 +174,10 @@ struct ProjectEditorSheet: View {
         }
         dismiss()
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 struct RiskEditorSheet: View {
@@ -194,30 +198,30 @@ struct RiskEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Risque", text: $title)
-                TextField("Mitigation", text: $mitigation, axis: .vertical)
+                TextField(localized("Risque"), text: $title)
+                TextField(localized("Mitigation"), text: $mitigation, axis: .vertical)
                     .lineLimit(3...5)
-                TextField("Owner", text: $owner)
+                TextField(localized("Owner"), text: $owner)
 
-                Picker("Sévérité", selection: $severity) {
+                Picker(localized("Sévérité"), selection: $severity) {
                     ForEach(RiskSeverity.allCases) { severity in
                         Text(severity.label.appLocalized(language: appState.interfaceLanguage)).tag(severity)
                     }
                 }
 
-                DatePicker("Date d'action cible", selection: $dueDate, displayedComponents: .date)
+                DatePicker(localized("Date d'action cible"), selection: $dueDate, displayedComponents: .date)
             }
             .formStyle(.grouped)
-            .navigationTitle("Nouveau risque")
+            .navigationTitle(localized("Nouveau risque"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Ajouter") {
+                    Button(localized("Ajouter")) {
                         store.addRisk(
                             to: projectID,
                             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -237,18 +241,18 @@ struct RiskEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if formIsInvalid == false {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     save()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             captureInitialSnapshotIfNeeded()
@@ -301,6 +305,10 @@ struct RiskEditorSheet: View {
         )
         dismiss()
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 struct DeliverableEditorSheet: View {
@@ -319,23 +327,23 @@ struct DeliverableEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Livrable", text: $title)
-                TextField("Description", text: $details, axis: .vertical)
+                TextField(localized("Livrable"), text: $title)
+                TextField(localized("Description"), text: $details, axis: .vertical)
                     .lineLimit(3...5)
-                TextField("Owner", text: $owner)
-                DatePicker("Échéance", selection: $dueDate, displayedComponents: .date)
+                TextField(localized("Owner"), text: $owner)
+                DatePicker(localized("Échéance"), selection: $dueDate, displayedComponents: .date)
             }
             .formStyle(.grouped)
-            .navigationTitle("Nouveau livrable")
+            .navigationTitle(localized("Nouveau livrable"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") {
+                    Button(localized("Annuler")) {
                         requestDismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Ajouter") {
+                    Button(localized("Ajouter")) {
                         store.addDeliverable(
                             to: projectID,
                             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -354,18 +362,18 @@ struct DeliverableEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if formIsInvalid == false {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     save()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             captureInitialSnapshotIfNeeded()
@@ -415,5 +423,11 @@ struct DeliverableEditorSheet: View {
             dueDate: dueDate
         )
         dismiss()
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

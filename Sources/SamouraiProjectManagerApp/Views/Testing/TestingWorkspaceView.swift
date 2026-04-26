@@ -23,7 +23,7 @@ struct TestingWorkspaceView: View {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Testing")
+                        Text(localized("Testing"))
                             .font(.title2.weight(.semibold))
                         Text(appState.localizedFormat("%d / %d phase(s) de test", filteredRows.count, scopedRows.count))
                             .foregroundStyle(.secondary)
@@ -42,7 +42,7 @@ struct TestingWorkspaceView: View {
                         }
                         .disabled(selectedRowsForExport.isEmpty)
                     } label: {
-                        Label("Exporter", systemImage: "square.and.arrow.up")
+                        Label(localized("Exporter"), systemImage: "square.and.arrow.up")
                     }
 
                     Button(role: .destructive) {
@@ -60,7 +60,7 @@ struct TestingWorkspaceView: View {
                     Button {
                         isShowingAddSheet = true
                     } label: {
-                        Label("Ajouter", systemImage: "plus")
+                        Label(localized("Ajouter"), systemImage: "plus")
                     }
                     .disabled(store.projects.isEmpty)
                 }
@@ -69,11 +69,11 @@ struct TestingWorkspaceView: View {
                 .padding(.bottom, 8)
 
                 HStack(spacing: 12) {
-                    TextField("Recherche (projet, owner, notes, statut)", text: $searchText)
+                    TextField(localized("Recherche (projet, owner, notes, statut)"), text: $searchText)
                         .textFieldStyle(.roundedBorder)
 
-                    Picker("Phase", selection: $selectedPhaseKind) {
-                        Text("Toutes les phases").tag(Optional<ProjectTestingPhaseKind>.none)
+                    Picker(localized("Phase"), selection: $selectedPhaseKind) {
+                        Text(localized("Toutes les phases")).tag(Optional<ProjectTestingPhaseKind>.none)
                         ForEach(ProjectTestingPhaseKind.allCases) { kind in
                             Text(kind.shortLabel).tag(Optional(kind))
                         }
@@ -81,8 +81,8 @@ struct TestingWorkspaceView: View {
                     .pickerStyle(.menu)
                     .frame(width: 170)
 
-                    Picker("Statut", selection: $selectedStatus) {
-                        Text("Tous les statuts").tag(Optional<ProjectTestingPhaseStatus>.none)
+                    Picker(localized("Statut"), selection: $selectedStatus) {
+                        Text(localized("Tous les statuts")).tag(Optional<ProjectTestingPhaseStatus>.none)
                         ForEach(ProjectTestingPhaseStatus.allCases) { status in
                             Text(status.label.appLocalized(language: appState.interfaceLanguage)).tag(Optional(status))
                         }
@@ -96,7 +96,7 @@ struct TestingWorkspaceView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Portée: Tous les projets")
+                        Text(localized("Portée: Tous les projets"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -108,14 +108,14 @@ struct TestingWorkspaceView: View {
                     ContentUnavailableView(
                         "Aucun projet",
                         systemImage: "testtube.2",
-                        description: Text("Crée un projet pour piloter les phases UT, ST, IST et UAT.")
+                        description: Text(localized("Crée un projet pour piloter les phases UT, ST, IST et UAT."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredRows.isEmpty {
                     ContentUnavailableView(
                         "Aucun résultat",
                         systemImage: "line.3.horizontal.decrease.circle",
-                        description: Text("Ajuste la recherche ou les filtres pour retrouver une phase de test.")
+                        description: Text(localized("Ajuste la recherche ou les filtres pour retrouver une phase de test."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -232,8 +232,8 @@ struct TestingWorkspaceView: View {
             contentType: .commaSeparatedText,
             defaultFilename: exportFilename
         ) { _ in }
-        .alert("Supprimer les entrées de testing", isPresented: $isShowingDeleteConfirmation) {
-            Button("Supprimer", role: .destructive) {
+        .alert(localized("Supprimer les entrées de testing"), isPresented: $isShowingDeleteConfirmation) {
+            Button(localized("Supprimer"), role: .destructive) {
                 for rowID in selectedRows {
                     guard let row = rowLookup[rowID] else { continue }
                     var reset = ProjectTestingPhase(kind: row.phase.kind)
@@ -243,7 +243,7 @@ struct TestingWorkspaceView: View {
                 }
                 selectedRows.removeAll()
             }
-            Button("Annuler", role: .cancel) {}
+            Button(localized("Annuler"), role: .cancel) {}
         } message: {
             Text(appState.localized(selectedRows.count > 1 ? "Les entrées sélectionnées seront réinitialisées." : "Cette entrée sera réinitialisée."))
         }
@@ -339,6 +339,10 @@ struct TestingWorkspaceView: View {
         exportFilename = "testing-\(filenameSuffix)-\(Date.now.formatted(.dateTime.year().month().day()))"
         isShowingFileExporter = true
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private struct TestingRow: Identifiable, Hashable {
@@ -422,7 +426,7 @@ private struct TestingRowDetailView: View {
                 }
 
                 HStack(spacing: 12) {
-                    Text("Progression")
+                    Text(localized("Progression"))
                     Slider(
                         value: Binding(
                             get: { Double(row.phase.progressPercent) },
@@ -485,7 +489,7 @@ private struct TestingRowDetailView: View {
                     Button(role: .destructive) {
                         onDelete()
                     } label: {
-                        Label("Supprimer", systemImage: "trash")
+                        Label(localized("Supprimer"), systemImage: "trash")
                     }
 
                     Spacer()
@@ -508,6 +512,10 @@ private struct TestingRowDetailView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 
@@ -546,19 +554,19 @@ private struct TestingPhaseEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Picker("Projet", selection: $selectedProjectID) {
+                Picker(localized("Projet"), selection: $selectedProjectID) {
                     ForEach(projects) { project in
                         Text(project.name).tag(Optional(project.id))
                     }
                 }
 
-                Picker("Phase", selection: $selectedKind) {
+                Picker(localized("Phase"), selection: $selectedKind) {
                     ForEach(ProjectTestingPhaseKind.allCases) { kind in
                         Text(kind.label.appLocalized(language: appState.interfaceLanguage)).tag(kind)
                     }
                 }
 
-                Picker("Statut", selection: $selectedStatus) {
+                Picker(localized("Statut"), selection: $selectedStatus) {
                     ForEach(ProjectTestingPhaseStatus.allCases) { status in
                         Text(status.label.appLocalized(language: appState.interfaceLanguage)).tag(status)
                     }
@@ -566,10 +574,10 @@ private struct TestingPhaseEditorSheet: View {
 
                 Stepper(appState.localizedFormat("Progression: %d%%", progressPercent), value: $progressPercent, in: 0...100)
 
-                TextField("Owner", text: $owner)
-                TextField("Notes", text: $notes, axis: .vertical)
+                TextField(localized("Owner"), text: $owner)
+                TextField(localized("Notes"), text: $notes, axis: .vertical)
                     .lineLimit(2...5)
-                TextField("URL externe", text: $externalURL)
+                TextField(localized("URL externe"), text: $externalURL)
 
                 optionalDatePicker(title: "Fin estimée", value: $estimatedEndDate)
                 optionalDatePicker(title: "Fin réelle", value: $actualEndDate)
@@ -578,11 +586,11 @@ private struct TestingPhaseEditorSheet: View {
             .navigationTitle(appState.localized("Nouvelle entrée Testing"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Annuler") { requestDismiss() }
+                    Button(localized("Annuler")) { requestDismiss() }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Ajouter") {
+                    Button(localized("Ajouter")) {
                         guard let projectID = selectedProjectID else { return }
                         onSave(
                             Payload(
@@ -608,18 +616,18 @@ private struct TestingPhaseEditorSheet: View {
         .onExitCommand {
             requestDismiss()
         }
-        .confirmationDialog("Fermer le formulaire ?", isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
+        .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if selectedProjectID != nil {
-                Button("Enregistrer") {
+                Button(localized("Enregistrer")) {
                     submit()
                 }
             }
-            Button("Ignorer les modifications", role: .destructive) {
+            Button(localized("Ignorer les modifications"), role: .destructive) {
                 dismiss()
             }
-            Button("Continuer l'édition", role: .cancel) {}
+            Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
-            Text("Les informations déjà saisies peuvent être enregistrées ou abandonnées.")
+            Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
         }
         .onAppear {
             if selectedProjectID == nil {
@@ -702,5 +710,9 @@ private struct TestingPhaseEditorSheet: View {
             )
             .datePickerStyle(.compact)
         }
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }

@@ -28,21 +28,21 @@ struct PlanningWorkspaceView: View {
                 )
             }
         }
-        .alert("Supprimer l'activité", isPresented: Binding(
+        .alert(localized("Supprimer l'activité"), isPresented: Binding(
             get: { activityPendingDeletion != nil },
             set: { if $0 == false { activityPendingDeletion = nil } }
         )) {
-            Button("Supprimer", role: .destructive) {
+            Button(localized("Supprimer"), role: .destructive) {
                 if let activity = activityPendingDeletion {
                     store.deleteActivity(activityID: activity.id)
                 }
                 activityPendingDeletion = nil
             }
-            Button("Annuler", role: .cancel) {
+            Button(localized("Annuler"), role: .cancel) {
                 activityPendingDeletion = nil
             }
         } message: {
-            Text("L'activité sera supprimée et les actions associées resteront disponibles sans rattachement.")
+            Text(localized("L'activité sera supprimée et les actions associées resteront disponibles sans rattachement."))
         }
         .confirmationDialog(
             "Supprimer le scénario \"\(scenarioPendingDeletion?.name ?? "")\" ?",
@@ -52,7 +52,7 @@ struct PlanningWorkspaceView: View {
             ),
             titleVisibility: .visible
         ) {
-            Button("Supprimer le scénario et ses activités", role: .destructive) {
+            Button(localized("Supprimer le scénario et ses activités"), role: .destructive) {
                 if let scenario = scenarioPendingDeletion, let project = selectedProject {
                     if primaryScenarioID == scenario.id {
                         primaryScenarioID = projectScenarios.first(where: { $0.id != scenario.id })?.id
@@ -62,11 +62,11 @@ struct PlanningWorkspaceView: View {
                 }
                 scenarioPendingDeletion = nil
             }
-            Button("Annuler", role: .cancel) {
+            Button(localized("Annuler"), role: .cancel) {
                 scenarioPendingDeletion = nil
             }
         } message: {
-            Text("Toutes les activités de ce scénario seront définitivement supprimées. Cette action est irréversible.")
+            Text(localized("Toutes les activités de ce scénario seront définitivement supprimées. Cette action est irréversible."))
         }
         .onAppear {
             ensureProjectSelection()
@@ -128,7 +128,7 @@ struct PlanningWorkspaceView: View {
                     ContentUnavailableView(
                         "Aucun scénario",
                         systemImage: "square.stack.3d.up.slash",
-                        description: Text("Ajoute un scénario pour commencer à comparer plusieurs hypothèses de planning.")
+                        description: Text(localized("Ajoute un scénario pour commencer à comparer plusieurs hypothèses de planning."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if visibleScenarios.count == 1, let scenario = visibleScenarios.first {
@@ -150,7 +150,7 @@ struct PlanningWorkspaceView: View {
             ContentUnavailableView(
                 "Choisissez un projet",
                 systemImage: "target",
-                description: Text("Le projet doit être sélectionné dans la liste déroulante en haut avant de consulter le planning.")
+                description: Text(localized("Le projet doit être sélectionné dans la liste déroulante en haut avant de consulter le planning."))
             )
         }
     }
@@ -159,7 +159,7 @@ struct PlanningWorkspaceView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Planning · \(project.name)")
+                    Text(appState.localizedFormat("Planning · %@", project.name))
                         .font(.title2.weight(.semibold))
                     Text(
                         "\(visibleScenarios.count) scénario(s) affiché(s) · cible \(project.targetDate.formatted(date: .abbreviated, time: .omitted))"
@@ -168,7 +168,7 @@ struct PlanningWorkspaceView: View {
                 }
                 Spacer()
 
-                Picker("Vue", selection: $viewMode) {
+                Picker(localized("Vue"), selection: $viewMode) {
                     ForEach(PlanningViewMode.allCases) { mode in
                         Text(mode.label).tag(mode)
                     }
@@ -180,21 +180,21 @@ struct PlanningWorkspaceView: View {
                     Button {
                         appState.selectedSection = .configuration
                     } label: {
-                        Label("Colonnes", systemImage: "slider.horizontal.3")
+                        Label(localized("Colonnes"), systemImage: "slider.horizontal.3")
                     }
-                    .help("Configurer les colonnes dans le volet Configuration")
+                    .help(localized("Configurer les colonnes dans le volet Configuration"))
                 }
 
                 Button {
                     createScenario(for: project)
                 } label: {
-                    Label("Nouveau scénario", systemImage: "plus.rectangle.on.rectangle")
+                    Label(localized("Nouveau scénario"), systemImage: "plus.rectangle.on.rectangle")
                 }
 
                 Button {
                     duplicatePrimaryScenario(for: project)
                 } label: {
-                    Label("Dupliquer", systemImage: "doc.on.doc")
+                    Label(localized("Dupliquer"), systemImage: "doc.on.doc")
                 }
                 .disabled(primaryScenario == nil)
 
@@ -202,7 +202,7 @@ struct PlanningWorkspaceView: View {
                     guard let scenario = primaryScenario else { return }
                     editorContext = .create(project.id, scenario.id)
                 } label: {
-                    Label("Nouvelle activité", systemImage: "plus")
+                    Label(localized("Nouvelle activité"), systemImage: "plus")
                 }
                 .disabled(primaryScenario == nil)
             }
@@ -249,7 +249,7 @@ struct PlanningWorkspaceView: View {
                             }
                             .buttonStyle(.borderless)
                             .foregroundStyle(.red.opacity(0.7))
-                            .help("Supprimer ce scénario et toutes ses activités")
+                            .help(localized("Supprimer ce scénario et toutes ses activités"))
                         }
                     }
                     .padding(10)
@@ -272,10 +272,10 @@ struct PlanningWorkspaceView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(scenario.name)
                         .font(comparativeMode ? .title3.weight(.semibold) : .headline)
-                    Text("\(scenarioActivities.count) activité(s)")
+                    Text(appState.localizedFormat("%d activité(s)", scenarioActivities.count))
                         .foregroundStyle(.secondary)
                     if let varianceReport {
-                        Text("Baseline: \(varianceReport.baselineLabel) · Retards: \(varianceReport.delayedCount)")
+                        Text(appState.localizedFormat("Baseline: %@ · Retards: %d", varianceReport.baselineLabel, varianceReport.delayedCount))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -284,7 +284,7 @@ struct PlanningWorkspaceView: View {
                 Spacer()
 
                 if primaryScenarioID == scenario.id {
-                    Text("Scénario actif")
+                    Text(localized("Scénario actif"))
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
@@ -294,14 +294,14 @@ struct PlanningWorkspaceView: View {
                 Button {
                     focusScenario(scenario.id)
                 } label: {
-                    Label("Focaliser", systemImage: "scope")
+                    Label(localized("Focaliser"), systemImage: "scope")
                 }
                 .buttonStyle(.bordered)
 
                 Button {
                     editorContext = .create(project.id, scenario.id)
                 } label: {
-                    Label("Nouvelle activité", systemImage: "plus")
+                    Label(localized("Nouvelle activité"), systemImage: "plus")
                 }
             }
             .padding(16)
@@ -312,7 +312,7 @@ struct PlanningWorkspaceView: View {
                 ContentUnavailableView(
                     "Scénario vide",
                     systemImage: "calendar.badge.clock",
-                    description: Text("Ajoute des activités dans ce scénario pour comparer cette hypothèse aux autres.")
+                    description: Text(localized("Ajoute des activités dans ce scénario pour comparer cette hypothèse aux autres."))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding()
@@ -469,7 +469,7 @@ struct PlanningWorkspaceView: View {
                     set: { setParent(for: activity, parentID: $0) }
                 )
             ) {
-                Text("Aucun").tag(Optional<UUID>.none)
+                Text(localized("Aucun")).tag(Optional<UUID>.none)
                 ForEach(scenarioActivities.filter {
                     $0.id != activity.id && $0.hierarchyLevel.sortRank < activity.hierarchyLevel.sortRank
                 }) { candidate in
@@ -570,7 +570,7 @@ struct PlanningWorkspaceView: View {
 
         case .edit:
             HStack(spacing: 6) {
-                Button("Ouvrir") {
+                Button(localized("Ouvrir")) {
                     editorContext = .edit(project.id, activity.id)
                 }
                 .buttonStyle(.link)
@@ -651,7 +651,7 @@ struct PlanningWorkspaceView: View {
                                 .background(levelColor.opacity(0.2), in: Capsule())
 
                             if activity.isMilestone {
-                                Text("Jalon")
+                                Text(localized("Jalon"))
                                     .font(.caption2)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 3)
@@ -662,7 +662,7 @@ struct PlanningWorkspaceView: View {
 
                     Spacer()
 
-                    Button("Éditer") {
+                    Button(localized("Éditer")) {
                         editorContext = .edit(activity.projectID, activity.id)
                     }
                     .buttonStyle(.bordered)
@@ -676,8 +676,8 @@ struct PlanningWorkspaceView: View {
                 }
 
                 HStack(spacing: 18) {
-                    Label("Début: \(activity.estimatedStartDate.formatted(date: .abbreviated, time: .omitted))", systemImage: "calendar")
-                    Label("Fin: \(activity.estimatedEndDate.formatted(date: .abbreviated, time: .omitted))", systemImage: "calendar.badge.clock")
+                    Label(appState.localizedFormat("Début: %@", activity.estimatedStartDate.formatted(date: .abbreviated, time: .omitted)), systemImage: "calendar")
+                    Label(appState.localizedFormat("Fin: %@", activity.estimatedEndDate.formatted(date: .abbreviated, time: .omitted)), systemImage: "calendar.badge.clock")
                     Label(activity.actualEndDate == nil ? "Ouverte" : "Clôturée", systemImage: activity.actualEndDate == nil ? "clock" : "checkmark.circle")
                 }
                 .font(.caption)
@@ -797,6 +797,10 @@ struct PlanningWorkspaceView: View {
         selectedScenarioIDs.insert(duplicatedScenarioID)
         primaryScenarioID = duplicatedScenarioID
     }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
 }
 
 private enum PlanningTableColumn: String, CaseIterable, Identifiable, Hashable {
@@ -889,7 +893,7 @@ private struct ProjectPlanningTimelineView: View {
             // Key dates section
             if !milestones.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Dates clés")
+                    Text(localized("Dates clés"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
@@ -937,7 +941,7 @@ private struct ProjectPlanningTimelineView: View {
                         Text(activity.displayTitle)
                             .font(.subheadline.weight(.semibold))
                         if activity.isMilestone {
-                            Text("Jalon")
+                            Text(localized("Jalon"))
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -983,6 +987,12 @@ private struct ProjectPlanningTimelineView: View {
                 }
             }
         }
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 
@@ -1030,7 +1040,7 @@ private struct ProjectPlanningDailyGridView: View {
             ContentUnavailableView(
                 "Aucune activité",
                 systemImage: "calendar.badge.exclamationmark",
-                description: Text("Ajoutez des activités pour afficher la grille journalière.")
+                description: Text(localized("Ajoutez des activités pour afficher la grille journalière."))
             )
         } else {
             ScrollView([.vertical, .horizontal]) {
@@ -1064,7 +1074,7 @@ private struct ProjectPlanningDailyGridView: View {
             }
             // Day numbers
             HStack(spacing: 0) {
-                Text("Activité")
+                Text(localized("Activité"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: Self.labelWidth, alignment: .leading)
@@ -1176,6 +1186,12 @@ private struct ProjectPlanningDailyGridView: View {
     private func isWeekend(_ day: Date) -> Bool {
         let weekday = Self.calendar.component(.weekday, from: day)
         return weekday == 1 || weekday == 7
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
 }
 

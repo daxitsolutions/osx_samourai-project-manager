@@ -52,6 +52,7 @@ final class AppState {
     var interfaceLanguage: AppLanguage = .fr {
         didSet {
             UserDefaults.standard.set(interfaceLanguage.rawValue, forKey: StorageKeys.interfaceLanguage)
+            AppLocalizer.ambientLanguage = interfaceLanguage
         }
     }
 
@@ -122,6 +123,7 @@ final class AppState {
         } else {
             interfaceLanguage = .fr
         }
+        AppLocalizer.ambientLanguage = interfaceLanguage
 
         isDebugEnabled = UserDefaults.standard.bool(forKey: StorageKeys.debugEnabled)
         debugKeepFullHistory = UserDefaults.standard.bool(forKey: StorageKeys.debugHistory)

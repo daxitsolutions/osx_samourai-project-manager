@@ -584,17 +584,40 @@ struct ProjectDetailView: View {
             }
 
             HStack(spacing: 16) {
-                if activity.isMilestone == false {
+                if activity.isDateless {
+                    Label(localized("Pas de date (activité chapeau)"), systemImage: "calendar.badge.minus")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    if activity.isMilestone == false {
+                        DatePicker(
+                            "Début estimé",
+                            selection: Binding(
+                                get: { activity.estimatedStartDate },
+                                set: {
+                                    store.updateActivityQuick(
+                                        activityID: activity.id,
+                                        title: activity.title,
+                                        estimatedStartDate: $0,
+                                        estimatedEndDate: activity.estimatedEndDate,
+                                        actualEndDate: activity.actualEndDate
+                                    )
+                                }
+                            ),
+                            displayedComponents: .date
+                        )
+                    }
+
                     DatePicker(
-                        "Début estimé",
+                        activity.isMilestone ? "Date jalon (fin)" : "Fin estimée",
                         selection: Binding(
-                            get: { activity.estimatedStartDate },
+                            get: { activity.estimatedEndDate },
                             set: {
                                 store.updateActivityQuick(
                                     activityID: activity.id,
                                     title: activity.title,
-                                    estimatedStartDate: $0,
-                                    estimatedEndDate: activity.estimatedEndDate,
+                                    estimatedStartDate: activity.estimatedStartDate,
+                                    estimatedEndDate: $0,
                                     actualEndDate: activity.actualEndDate
                                 )
                             }
@@ -602,60 +625,45 @@ struct ProjectDetailView: View {
                         displayedComponents: .date
                     )
                 }
-
-                DatePicker(
-                    activity.isMilestone ? "Date jalon (fin)" : "Fin estimée",
-                    selection: Binding(
-                        get: { activity.estimatedEndDate },
-                        set: {
-                            store.updateActivityQuick(
-                                activityID: activity.id,
-                                title: activity.title,
-                                estimatedStartDate: activity.estimatedStartDate,
-                                estimatedEndDate: $0,
-                                actualEndDate: activity.actualEndDate
-                            )
-                        }
-                    ),
-                    displayedComponents: .date
-                )
             }
 
-            HStack(spacing: 16) {
-                Toggle(
-                    "Clôturée",
-                    isOn: Binding(
-                        get: { activity.actualEndDate != nil },
-                        set: { isClosed in
-                            store.updateActivityQuick(
-                                activityID: activity.id,
-                                title: activity.title,
-                                estimatedStartDate: activity.estimatedStartDate,
-                                estimatedEndDate: activity.estimatedEndDate,
-                                actualEndDate: isClosed ? (activity.actualEndDate ?? .now) : nil
-                            )
-                        }
-                    )
-                )
-                .toggleStyle(.switch)
-
-                if activity.actualEndDate != nil {
-                    DatePicker(
-                        "Fin réelle",
-                        selection: Binding(
-                            get: { activity.actualEndDate ?? .now },
-                            set: {
+            if !activity.isDateless {
+                HStack(spacing: 16) {
+                    Toggle(
+                        "Clôturée",
+                        isOn: Binding(
+                            get: { activity.actualEndDate != nil },
+                            set: { isClosed in
                                 store.updateActivityQuick(
                                     activityID: activity.id,
                                     title: activity.title,
                                     estimatedStartDate: activity.estimatedStartDate,
                                     estimatedEndDate: activity.estimatedEndDate,
-                                    actualEndDate: $0
+                                    actualEndDate: isClosed ? (activity.actualEndDate ?? .now) : nil
                                 )
                             }
-                        ),
-                        displayedComponents: .date
+                        )
                     )
+                    .toggleStyle(.switch)
+
+                    if activity.actualEndDate != nil {
+                        DatePicker(
+                            "Fin réelle",
+                            selection: Binding(
+                                get: { activity.actualEndDate ?? .now },
+                                set: {
+                                    store.updateActivityQuick(
+                                        activityID: activity.id,
+                                        title: activity.title,
+                                        estimatedStartDate: activity.estimatedStartDate,
+                                        estimatedEndDate: activity.estimatedEndDate,
+                                        actualEndDate: $0
+                                    )
+                                }
+                            ),
+                            displayedComponents: .date
+                        )
+                    }
                 }
             }
 

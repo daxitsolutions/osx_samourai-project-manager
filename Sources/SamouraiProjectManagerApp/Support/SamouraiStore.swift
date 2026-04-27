@@ -1225,6 +1225,7 @@ final class SamouraiStore {
         parentActivityID: UUID? = nil,
         hierarchyLevel: ActivityHierarchyLevel = .activityTask,
         title: String,
+        isDateless: Bool = false,
         estimatedStartDate: Date,
         estimatedEndDate: Date,
         actualEndDate: Date? = nil,
@@ -1239,11 +1240,13 @@ final class SamouraiStore {
         else { return nil }
 
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedDates = normalizedActivityDates(
-            estimatedStartDate: estimatedStartDate,
-            estimatedEndDate: estimatedEndDate,
-            isMilestone: isMilestone
-        )
+        let normalizedDates = isDateless
+            ? (startDate: Date.now, endDate: Date.now)
+            : normalizedActivityDates(
+                estimatedStartDate: estimatedStartDate,
+                estimatedEndDate: estimatedEndDate,
+                isMilestone: isMilestone
+            )
         let sanitizedParentActivityID = sanitizedParentActivityID(
             projectID: projectID,
             scenarioID: resolvedScenarioID,
@@ -1265,6 +1268,7 @@ final class SamouraiStore {
             displayOrder: nextActivityDisplayOrder(projectID: projectID, scenarioID: resolvedScenarioID),
             hierarchyLevel: hierarchyLevel,
             title: cleanedTitle.isEmpty ? "Activité" : cleanedTitle,
+            isDateless: isDateless,
             estimatedStartDate: normalizedDates.startDate,
             estimatedEndDate: normalizedDates.endDate,
             actualEndDate: actualEndDate,
@@ -1285,6 +1289,7 @@ final class SamouraiStore {
     func updateActivity(
         activityID: UUID,
         title: String,
+        isDateless: Bool = false,
         estimatedStartDate: Date,
         estimatedEndDate: Date,
         actualEndDate: Date?,
@@ -1298,12 +1303,15 @@ final class SamouraiStore {
         guard let index = activities.firstIndex(where: { $0.id == activityID }) else { return }
 
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedDates = normalizedActivityDates(
-            estimatedStartDate: estimatedStartDate,
-            estimatedEndDate: estimatedEndDate,
-            isMilestone: isMilestone
-        )
+        let normalizedDates = isDateless
+            ? (startDate: Date.now, endDate: Date.now)
+            : normalizedActivityDates(
+                estimatedStartDate: estimatedStartDate,
+                estimatedEndDate: estimatedEndDate,
+                isMilestone: isMilestone
+            )
         activities[index].title = cleanedTitle.isEmpty ? activities[index].title : cleanedTitle
+        activities[index].isDateless = isDateless
         activities[index].estimatedStartDate = normalizedDates.startDate
         activities[index].estimatedEndDate = normalizedDates.endDate
         activities[index].actualEndDate = actualEndDate
@@ -1349,20 +1357,27 @@ final class SamouraiStore {
         predecessorActivityIDs: [UUID]? = nil,
         isMilestone: Bool? = nil,
         hierarchyLevel: ActivityHierarchyLevel? = nil,
-        linkedDeliverableIDs: [UUID]? = nil
+        linkedDeliverableIDs: [UUID]? = nil,
+        isDateless: Bool? = nil
     ) {
         guard let index = activities.firstIndex(where: { $0.id == activityID }) else { return }
 
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let targetMilestoneState = isMilestone ?? activities[index].isMilestone
-        let normalizedDates = normalizedActivityDates(
-            estimatedStartDate: estimatedStartDate,
-            estimatedEndDate: estimatedEndDate,
-            isMilestone: targetMilestoneState
-        )
+        let targetIsDateless = isDateless ?? activities[index].isDateless
+        let targetMilestoneState = (isMilestone ?? activities[index].isMilestone) && !targetIsDateless
+        if let isDateless {
+            activities[index].isDateless = isDateless
+        }
+        if !targetIsDateless {
+            let normalizedDates = normalizedActivityDates(
+                estimatedStartDate: estimatedStartDate,
+                estimatedEndDate: estimatedEndDate,
+                isMilestone: targetMilestoneState
+            )
+            activities[index].estimatedStartDate = normalizedDates.startDate
+            activities[index].estimatedEndDate = normalizedDates.endDate
+        }
         activities[index].title = cleanedTitle.isEmpty ? activities[index].title : cleanedTitle
-        activities[index].estimatedStartDate = normalizedDates.startDate
-        activities[index].estimatedEndDate = normalizedDates.endDate
         activities[index].actualEndDate = actualEndDate
         if let predecessorActivityIDs {
             activities[index].predecessorActivityIDs = sanitizedPredecessorActivityIDs(
@@ -1535,7 +1550,7 @@ final class SamouraiStore {
             uniqueKeysWithValues: activities(for: projectID, scenarioID: resolvedScenarioID).map { ($0.id, $0) }
         )
         let variances = baseline.activitySnapshots.compactMap { snapshot -> PlanningActivityVariance? in
-            guard let current = currentActivities[snapshot.id] else { return nil }
+            guard let current = currentActivities[snapshot.id], !current.isDateless else { return nil }
             let plannedEndDate = snapshot.estimatedEndDate
             let currentEndDate = current.estimatedEndDate
             let variance = Calendar.current.dateComponents([.day], from: plannedEndDate, to: currentEndDate).day ?? 0
@@ -3340,13 +3355,15 @@ final class SamouraiStore {
             currentActivityID: id ?? updated.id
         )
         updated.linkedDeliverableIDs = sanitizedDeliverableIDs(projectID: updated.projectID, deliverableIDs: updated.linkedDeliverableIDs)
-        let dates = normalizedActivityDates(
-            estimatedStartDate: updated.estimatedStartDate,
-            estimatedEndDate: updated.estimatedEndDate,
-            isMilestone: updated.isMilestone
-        )
-        updated.estimatedStartDate = dates.startDate
-        updated.estimatedEndDate = dates.endDate
+        if !updated.isDateless {
+            let dates = normalizedActivityDates(
+                estimatedStartDate: updated.estimatedStartDate,
+                estimatedEndDate: updated.estimatedEndDate,
+                isMilestone: updated.isMilestone
+            )
+            updated.estimatedStartDate = dates.startDate
+            updated.estimatedEndDate = dates.endDate
+        }
 
         if let id {
             guard let index = activities.firstIndex(where: { $0.id == id }) else {
@@ -3604,6 +3621,9 @@ final class SamouraiStore {
         if lhs.displayOrder != rhs.displayOrder {
             return lhs.displayOrder < rhs.displayOrder
         }
+        if lhs.isDateless != rhs.isDateless {
+            return lhs.isDateless
+        }
         if lhs.estimatedEndDate != rhs.estimatedEndDate {
             return lhs.estimatedEndDate < rhs.estimatedEndDate
         }
@@ -3802,7 +3822,9 @@ final class SamouraiStore {
         return filteredActivities.map { activity in
                 var normalized = activity
                 normalized.scenarioID = effectiveScenarioIDs[activity.id] ?? activity.scenarioID
-                normalized.estimatedEndDate = max(activity.estimatedEndDate, activity.estimatedStartDate)
+                if !activity.isDateless {
+                    normalized.estimatedEndDate = max(activity.estimatedEndDate, activity.estimatedStartDate)
+                }
                 let projectActivityIDs = Set(
                     filteredActivities
                         .filter { $0.projectID == activity.projectID && effectiveScenarioIDs[$0.id] == normalized.scenarioID }
@@ -4390,7 +4412,7 @@ final class SamouraiStore {
         }
 
         let upcomingActivities = activities.compactMap { activity -> String? in
-            guard activity.isCompleted == false, reportingContains(activity.estimatedEndDate, in: range) else { return nil }
+            guard activity.isCompleted == false, !activity.isDateless, reportingContains(activity.estimatedEndDate, in: range) else { return nil }
             let projectName = project(with: activity.projectID)?.name ?? "Projet"
             let prefix = activity.isMilestone ? "Jalon attendu" : "Activité clé attendue"
             return "[\(projectName)] \(prefix): \(activity.displayTitle) (\(activity.estimatedEndDate.formatted(date: .abbreviated, time: .omitted)))."

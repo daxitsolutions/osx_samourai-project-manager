@@ -55,6 +55,8 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
     var displayOrder: Int
     var hierarchyLevel: ActivityHierarchyLevel
     var title: String
+    /// Activité chapeau sans dates (date de début = null, date de fin = null en BDD).
+    var isDateless: Bool
     var estimatedStartDate: Date
     var estimatedEndDate: Date
     var actualEndDate: Date?
@@ -72,6 +74,7 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
         displayOrder: Int = 0,
         hierarchyLevel: ActivityHierarchyLevel = .activityTask,
         title: String,
+        isDateless: Bool = false,
         estimatedStartDate: Date,
         estimatedEndDate: Date,
         actualEndDate: Date? = nil,
@@ -88,11 +91,12 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
         self.displayOrder = max(displayOrder, 0)
         self.hierarchyLevel = hierarchyLevel
         self.title = title
+        self.isDateless = isDateless
         self.estimatedStartDate = estimatedStartDate
         self.estimatedEndDate = estimatedEndDate
         self.actualEndDate = actualEndDate
         self.predecessorActivityIDs = predecessorActivityIDs.removingDuplicateValues()
-        self.isMilestone = isMilestone
+        self.isMilestone = isDateless ? false : isMilestone
         self.linkedDeliverableIDs = linkedDeliverableIDs.removingDuplicateValues()
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -100,6 +104,7 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, projectID, scenarioID, parentActivityID, displayOrder, hierarchyLevel, title
+        case isDateless
         case estimatedStartDate, estimatedEndDate, actualEndDate
         case predecessorActivityIDs, isMilestone, linkedDeliverableIDs
         case createdAt, updatedAt
@@ -114,11 +119,15 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
         displayOrder = max(try container.decodeIfPresent(Int.self, forKey: .displayOrder) ?? 0, 0)
         hierarchyLevel = try container.decodeIfPresent(ActivityHierarchyLevel.self, forKey: .hierarchyLevel) ?? .activityTask
         title = try container.decode(String.self, forKey: .title)
-        estimatedStartDate = try container.decode(Date.self, forKey: .estimatedStartDate)
-        estimatedEndDate = try container.decode(Date.self, forKey: .estimatedEndDate)
+        let decodedStart = try container.decodeIfPresent(Date.self, forKey: .estimatedStartDate)
+        let decodedEnd = try container.decodeIfPresent(Date.self, forKey: .estimatedEndDate)
+        let explicitDateless = try container.decodeIfPresent(Bool.self, forKey: .isDateless)
+        isDateless = explicitDateless ?? (decodedStart == nil || decodedEnd == nil)
+        estimatedStartDate = decodedStart ?? .now
+        estimatedEndDate = decodedEnd ?? .now
         actualEndDate = try container.decodeIfPresent(Date.self, forKey: .actualEndDate)
         predecessorActivityIDs = (try container.decodeIfPresent([UUID].self, forKey: .predecessorActivityIDs) ?? []).removingDuplicateValues()
-        isMilestone = try container.decodeIfPresent(Bool.self, forKey: .isMilestone) ?? false
+        isMilestone = (try container.decodeIfPresent(Bool.self, forKey: .isMilestone) ?? false) && !isDateless
         linkedDeliverableIDs = (try container.decodeIfPresent([UUID].self, forKey: .linkedDeliverableIDs) ?? []).removingDuplicateValues()
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
@@ -133,8 +142,14 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
         try container.encode(displayOrder, forKey: .displayOrder)
         try container.encode(hierarchyLevel, forKey: .hierarchyLevel)
         try container.encode(title, forKey: .title)
-        try container.encode(estimatedStartDate, forKey: .estimatedStartDate)
-        try container.encode(estimatedEndDate, forKey: .estimatedEndDate)
+        try container.encode(isDateless, forKey: .isDateless)
+        if isDateless {
+            try container.encodeNil(forKey: .estimatedStartDate)
+            try container.encodeNil(forKey: .estimatedEndDate)
+        } else {
+            try container.encode(estimatedStartDate, forKey: .estimatedStartDate)
+            try container.encode(estimatedEndDate, forKey: .estimatedEndDate)
+        }
         try container.encodeIfPresent(actualEndDate, forKey: .actualEndDate)
         try container.encode(predecessorActivityIDs, forKey: .predecessorActivityIDs)
         try container.encode(isMilestone, forKey: .isMilestone)
@@ -155,6 +170,7 @@ extension ProjectActivity {
     }
 
     var estimatedDurationDays: Int {
+        guard !isDateless else { return 0 }
         let days = Calendar.current.dateComponents([.day], from: estimatedStartDate, to: estimatedEndDate).day ?? 0
         return max(days, 0)
     }

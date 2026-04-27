@@ -516,7 +516,10 @@ struct PlanningWorkspaceView: View {
             .pickerStyle(.menu)
 
         case .startDate:
-            if activity.isMilestone {
+            if activity.isDateless {
+                Text(localized("Pas de date"))
+                    .foregroundStyle(.secondary)
+            } else if activity.isMilestone {
                 Text("-")
                     .foregroundStyle(.secondary)
             } else {
@@ -540,23 +543,28 @@ struct PlanningWorkspaceView: View {
             }
 
         case .endDate:
-            DatePicker(
-                "Fin",
-                selection: Binding(
-                    get: { activity.estimatedEndDate },
-                    set: {
-                        store.updateActivityQuick(
-                            activityID: activity.id,
-                            title: activity.title,
-                            estimatedStartDate: activity.estimatedStartDate,
-                            estimatedEndDate: $0,
-                            actualEndDate: activity.actualEndDate
-                        )
-                    }
-                ),
-                displayedComponents: .date
-            )
-            .labelsHidden()
+            if activity.isDateless {
+                Text(localized("Pas de date"))
+                    .foregroundStyle(.secondary)
+            } else {
+                DatePicker(
+                    "Fin",
+                    selection: Binding(
+                        get: { activity.estimatedEndDate },
+                        set: {
+                            store.updateActivityQuick(
+                                activityID: activity.id,
+                                title: activity.title,
+                                estimatedStartDate: activity.estimatedStartDate,
+                                estimatedEndDate: $0,
+                                actualEndDate: activity.actualEndDate
+                            )
+                        }
+                    ),
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+            }
 
         case .milestone:
             Toggle(
@@ -577,6 +585,7 @@ struct PlanningWorkspaceView: View {
             )
             .labelsHidden()
             .toggleStyle(.checkbox)
+            .disabled(activity.isDateless)
 
         case .completed:
             Toggle(
@@ -729,9 +738,13 @@ struct PlanningWorkspaceView: View {
                 }
 
                 HStack(spacing: 18) {
-                    Label(appState.localizedFormat("Début: %@", activity.estimatedStartDate.formatted(date: .abbreviated, time: .omitted)), systemImage: "calendar")
-                    Label(appState.localizedFormat("Fin: %@", activity.estimatedEndDate.formatted(date: .abbreviated, time: .omitted)), systemImage: "calendar.badge.clock")
-                    Label(activity.actualEndDate == nil ? "Ouverte" : "Clôturée", systemImage: activity.actualEndDate == nil ? "clock" : "checkmark.circle")
+                    if activity.isDateless {
+                        Label(localized("Pas de date"), systemImage: "calendar.badge.minus")
+                    } else {
+                        Label(appState.localizedFormat("Début: %@", activity.estimatedStartDate.formatted(date: .abbreviated, time: .omitted)), systemImage: "calendar")
+                        Label(appState.localizedFormat("Fin: %@", activity.estimatedEndDate.formatted(date: .abbreviated, time: .omitted)), systemImage: "calendar.badge.clock")
+                        Label(activity.actualEndDate == nil ? "Ouverte" : "Clôturée", systemImage: activity.actualEndDate == nil ? "clock" : "checkmark.circle")
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -978,8 +991,9 @@ private struct ProjectPlanningTimelineView: View {
     }
 
     var body: some View {
-        let minDate = activities.map(\.estimatedStartDate).min() ?? .now
-        let maxDate = activities.map(\.estimatedEndDate).max() ?? .now
+        let datedActivities = activities.filter { !$0.isDateless }
+        let minDate = datedActivities.map(\.estimatedStartDate).min() ?? .now
+        let maxDate = datedActivities.map(\.estimatedEndDate).max() ?? .now
         let totalInterval = max(maxDate.timeIntervalSince(minDate), 1)
         let nodes = visibleNodes
 
@@ -1045,9 +1059,9 @@ private struct ProjectPlanningTimelineView: View {
         let isExpanded = expandedIDs.contains(activity.id)
         let childList = children(of: activity.id)
 
-        let startRatio = max(0, min(1, activity.estimatedStartDate.timeIntervalSince(minDate) / totalInterval))
-        let endRatio = max(0, min(1, activity.estimatedEndDate.timeIntervalSince(minDate) / totalInterval))
-        let widthRatio = max(endRatio - startRatio, 0.015)
+        let startRatio = activity.isDateless ? 0.0 : max(0, min(1, activity.estimatedStartDate.timeIntervalSince(minDate) / totalInterval))
+        let endRatio = activity.isDateless ? 0.0 : max(0, min(1, activity.estimatedEndDate.timeIntervalSince(minDate) / totalInterval))
+        let widthRatio = activity.isDateless ? 0.0 : max(endRatio - startRatio, 0.015)
         let variance = varianceReport?.activityVariances.first(where: { $0.activityID == activity.id })?.varianceDays ?? 0
 
         VStack(alignment: .leading, spacing: 4) {
@@ -1060,40 +1074,50 @@ private struct ProjectPlanningTimelineView: View {
                     .font(depth == 0 ? .subheadline.weight(.semibold) : .caption.weight(.medium))
                     .lineLimit(1)
 
+                if activity.isDateless {
+                    Label(localized("Pas de date"), systemImage: "calendar.badge.minus")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Spacer()
 
-                Text("Variance: \(variance == 0 ? "0j" : "\(variance > 0 ? "+" : "")\(variance)j")")
-                    .font(.caption)
-                    .foregroundStyle(variance > 0 ? .orange : (variance < 0 ? .green : .secondary))
-            }
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.secondary.opacity(0.12))
-                        .frame(height: depth == 0 ? 14 : 10)
-
-                    if showGanttGrid {
-                        HStack(spacing: 0) {
-                            ForEach(0..<10, id: \.self) { _ in
-                                Rectangle()
-                                    .stroke(Color.secondary.opacity(0.15), lineWidth: 0.5)
-                            }
-                        }
-                        .frame(height: depth == 0 ? 14 : 10)
-                    }
-
-                    if depth > 0 {
-                        Color.clear.frame(width: CGFloat(depth) * 14)
-                    }
-
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isParent ? Color.accentColor.opacity(0.6) : Color.accentColor.opacity(0.85))
-                        .frame(width: proxy.size.width * widthRatio, height: depth == 0 ? 14 : 10)
-                        .offset(x: proxy.size.width * startRatio)
+                if !activity.isDateless {
+                    Text("Variance: \(variance == 0 ? "0j" : "\(variance > 0 ? "+" : "")\(variance)j")")
+                        .font(.caption)
+                        .foregroundStyle(variance > 0 ? .orange : (variance < 0 ? .green : .secondary))
                 }
             }
-            .frame(height: depth == 0 ? 14 : 10)
+
+            if !activity.isDateless {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.secondary.opacity(0.12))
+                            .frame(height: depth == 0 ? 14 : 10)
+
+                        if showGanttGrid {
+                            HStack(spacing: 0) {
+                                ForEach(0..<10, id: \.self) { _ in
+                                    Rectangle()
+                                        .stroke(Color.secondary.opacity(0.15), lineWidth: 0.5)
+                                }
+                            }
+                            .frame(height: depth == 0 ? 14 : 10)
+                        }
+
+                        if depth > 0 {
+                            Color.clear.frame(width: CGFloat(depth) * 14)
+                        }
+
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(isParent ? Color.accentColor.opacity(0.6) : Color.accentColor.opacity(0.85))
+                            .frame(width: proxy.size.width * widthRatio, height: depth == 0 ? 14 : 10)
+                            .offset(x: proxy.size.width * startRatio)
+                    }
+                }
+                .frame(height: depth == 0 ? 14 : 10)
+            }
 
             if isParent {
                 Button(isExpanded
@@ -1147,8 +1171,9 @@ private struct ProjectPlanningDailyGridView: View {
     }
 
     private var days: [Date] {
-        guard let minDate = activities.map(\.estimatedStartDate).min(),
-              let maxDate = activities.map(\.estimatedEndDate).max() else { return [] }
+        let datedActivities = activities.filter { !$0.isDateless }
+        guard let minDate = datedActivities.map(\.estimatedStartDate).min(),
+              let maxDate = datedActivities.map(\.estimatedEndDate).max() else { return [] }
         let start = Self.calendar.startOfDay(for: minDate)
         let end = Self.calendar.startOfDay(for: maxDate)
         var result: [Date] = []
@@ -1233,7 +1258,11 @@ private struct ProjectPlanningDailyGridView: View {
         HStack(spacing: 0) {
             // Activity label
             HStack(spacing: 6) {
-                if activity.isMilestone {
+                if activity.isDateless {
+                    Image(systemName: "calendar.badge.minus")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else if activity.isMilestone {
                     Image(systemName: "diamond.fill")
                         .font(.caption2)
                         .foregroundStyle(.purple)
@@ -1246,7 +1275,11 @@ private struct ProjectPlanningDailyGridView: View {
                     .font(.caption)
                     .lineLimit(1)
                     .foregroundStyle(isCompleted(activity) ? Color.secondary : Color.primary)
-                if isCompleted(activity) {
+                if activity.isDateless {
+                    Text(localized("Pas de date"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else if isCompleted(activity) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption2)
                         .foregroundStyle(.green)
@@ -1260,7 +1293,8 @@ private struct ProjectPlanningDailyGridView: View {
                 onEditActivity?(activity)
             }
 
-            // Day cells
+            // Day cells (skipped for dateless activities)
+            if !activity.isDateless {
             ForEach(days, id: \.self) { day in
                 let active = isActive(activity, on: day)
                 let weekend = isWeekend(day)
@@ -1286,6 +1320,7 @@ private struct ProjectPlanningDailyGridView: View {
                         .frame(width: 0.5)
                 }
             }
+            } // end if !activity.isDateless
         }
         .planningActivityDragSource(activityID: activity.id)
         .planningActivityDropTarget(activityID: activity.id) { sourceID, targetID in
@@ -1351,8 +1386,9 @@ private struct ProjectPlanningMonthlyGridView: View {
     }
 
     private var months: [Date] {
-        guard let minDate = activities.map(\.estimatedStartDate).min(),
-              let maxDate = activities.map(\.estimatedEndDate).max(),
+        let datedActivities = activities.filter { !$0.isDateless }
+        guard let minDate = datedActivities.map(\.estimatedStartDate).min(),
+              let maxDate = datedActivities.map(\.estimatedEndDate).max(),
               let start = monthStart(for: minDate),
               let end = monthStart(for: maxDate) else { return [] }
 
@@ -1416,7 +1452,11 @@ private struct ProjectPlanningMonthlyGridView: View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    if activity.isMilestone {
+                    if activity.isDateless {
+                        Image(systemName: "calendar.badge.minus")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else if activity.isMilestone {
                         Image(systemName: "diamond.fill")
                             .font(.caption2)
                             .foregroundStyle(.purple)
@@ -1429,7 +1469,7 @@ private struct ProjectPlanningMonthlyGridView: View {
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                         .foregroundStyle(isCompleted(activity) ? Color.secondary : Color.primary)
-                    if isCompleted(activity) {
+                    if !activity.isDateless, isCompleted(activity) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.caption2)
                             .foregroundStyle(.green)
@@ -1448,6 +1488,7 @@ private struct ProjectPlanningMonthlyGridView: View {
                 onEditActivity?(activity)
             }
 
+            if !activity.isDateless {
             ForEach(months, id: \.self) { month in
                 let activeLabel = activeDayLabel(for: activity, in: month)
                 ZStack {
@@ -1475,6 +1516,7 @@ private struct ProjectPlanningMonthlyGridView: View {
                         .frame(width: 0.5)
                 }
             }
+            } // end if !activity.isDateless
         }
         .planningActivityDragSource(activityID: activity.id)
         .planningActivityDropTarget(activityID: activity.id) { sourceID, targetID in
@@ -1524,10 +1566,12 @@ private struct ProjectPlanningMonthlyGridView: View {
     }
 
     private func activityDateRange(_ activity: ProjectActivity) -> String {
+        if activity.isDateless {
+            return AppLocalizer.localized("Pas de date", language: appState.interfaceLanguage)
+        }
         if activity.isMilestone {
             return activity.estimatedEndDate.formatted(date: .abbreviated, time: .omitted)
         }
-
         return "\(activity.estimatedStartDate.formatted(date: .abbreviated, time: .omitted)) - \(activity.estimatedEndDate.formatted(date: .abbreviated, time: .omitted))"
     }
 
@@ -1597,6 +1641,9 @@ private extension ProjectActivity {
     static func planningDisplayOrderPrecedes(_ lhs: ProjectActivity, _ rhs: ProjectActivity) -> Bool {
         if lhs.displayOrder != rhs.displayOrder {
             return lhs.displayOrder < rhs.displayOrder
+        }
+        if lhs.isDateless != rhs.isDateless {
+            return lhs.isDateless
         }
         if lhs.estimatedEndDate != rhs.estimatedEndDate {
             return lhs.estimatedEndDate < rhs.estimatedEndDate

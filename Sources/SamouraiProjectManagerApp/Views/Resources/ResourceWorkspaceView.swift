@@ -29,6 +29,9 @@ struct ResourceWorkspaceView: View {
     @State private var selectedResourceIDs: Set<UUID> = []
     @State private var importReviewItems: [ResourceImportReviewDecision] = []
     @State private var isShowingImportReview = false
+    @State private var pendingImportDrafts: [ResourceImportDraft]?
+    @State private var isShowingImportConfirmation = false
+    @State private var activeImportTask: Task<Void, Never>?
     @State private var inlineDrafts: [UUID: ResourceInlineDraft] = [:]
     @State private var inlineEditFeedbackMessage: String?
     @State private var evaluationContext: ResourceEvaluationContext?
@@ -334,6 +337,17 @@ struct ResourceWorkspaceView: View {
             Button(localized("OK"), role: .cancel) {}
         } message: {
             Text(importFeedbackMessage ?? "")
+        }
+        .alert(localized("Confirmer l'import"), isPresented: $isShowingImportConfirmation) {
+            Button(localized("Importer")) {
+                proceedWithPendingImport()
+            }
+            Button(localized("Annuler"), role: .cancel) {
+                cancelActiveImport()
+            }
+        } message: {
+            let count = pendingImportDrafts?.count ?? 0
+            Text(String(format: AppLocalizer.localized("%d ligne(s) détectée(s). Le traitement s'effectuera par lots de 10 lignes. Confirmer l'import ?"), count))
         }
         .alert(localized("Export des ressources"), isPresented: Binding(
             get: { exportFeedbackMessage != nil },
@@ -1065,14 +1079,13 @@ struct ResourceWorkspaceView: View {
         }
 
         let tracker = ImportProgressTracker(
-            title: "Import des ressources",
+            title: "Lecture du fichier",
             fileName: fileURL.lastPathComponent
         )
         appState.showImportProgress(tracker)
         isImporting = true
 
-        let currentStore = store
-        tracker.task = Task { @MainActor in
+        let task = Task { @MainActor in
             let didAccessSecurityScope = fileURL.startAccessingSecurityScopedResource()
             defer {
                 if didAccessSecurityScope {
@@ -1086,11 +1099,54 @@ struct ResourceWorkspaceView: View {
             let importURL = fileURL
 
             do {
-                // Parse off the main actor so the UI stays responsive.
                 let drafts = try await Task.detached(priority: .userInitiated) { () throws -> [ResourceImportDraft] in
                     try ResourceImportService.importResources(from: importURL, reporter: reporter)
                 }.value
 
+                try Task.checkCancellation()
+
+                if drafts.isEmpty {
+                    importFeedbackMessage = "Aucune ligne exploitable à importer."
+                    return
+                }
+
+                pendingImportDrafts = drafts
+                isShowingImportConfirmation = true
+            } catch is CancellationError {
+                // annulation silencieuse
+            } catch {
+                importFeedbackMessage = error.localizedDescription
+            }
+        }
+        tracker.task = task
+        activeImportTask = task
+    }
+
+    private func cancelActiveImport() {
+        activeImportTask?.cancel()
+        activeImportTask = nil
+        pendingImportDrafts = nil
+        isImporting = false
+    }
+
+    private func proceedWithPendingImport() {
+        guard let drafts = pendingImportDrafts else { return }
+        pendingImportDrafts = nil
+
+        let tracker = ImportProgressTracker(title: "Import des ressources")
+        appState.showImportProgress(tracker)
+        isImporting = true
+
+        let currentStore = store
+        let task = Task { @MainActor in
+            defer {
+                isImporting = false
+                appState.clearImportProgress(tracker)
+            }
+
+            let reporter = ImportProgressReporter.forwarding(to: tracker)
+
+            do {
                 try Task.checkCancellation()
 
                 let reviewItems = try await currentStore.prepareResourceImportReviewAsync(
@@ -1111,11 +1167,13 @@ struct ResourceWorkspaceView: View {
                 }
                 isShowingImportReview = true
             } catch is CancellationError {
-                importFeedbackMessage = "Import annulé."
+                // annulation silencieuse
             } catch {
                 importFeedbackMessage = error.localizedDescription
             }
         }
+        tracker.task = task
+        activeImportTask = task
     }
 
     private func applyImportReview() {

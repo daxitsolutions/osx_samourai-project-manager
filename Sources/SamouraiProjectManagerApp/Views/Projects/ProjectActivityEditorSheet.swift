@@ -12,6 +12,7 @@ struct ProjectActivityEditorSheet: View {
     let linkedDeliverableIDs: [UUID]
 
     @State private var title: String
+    @State private var isDateless: Bool
     @State private var estimatedStartDate: Date
     @State private var estimatedEndDate: Date
     @State private var includeActualEndDate: Bool
@@ -42,6 +43,7 @@ struct ProjectActivityEditorSheet: View {
         self.linkedActionIDs = linkedActionIDs
         self.linkedDeliverableIDs = linkedDeliverableIDs
         _title = State(initialValue: activity?.title ?? "")
+        _isDateless = State(initialValue: activity?.isDateless ?? false)
         _estimatedStartDate = State(initialValue: activity?.estimatedStartDate ?? .now)
         _estimatedEndDate = State(initialValue: activity?.estimatedEndDate ?? (Calendar.current.date(byAdding: .day, value: 14, to: .now) ?? .now))
         _includeActualEndDate = State(initialValue: activity?.actualEndDate != nil)
@@ -92,21 +94,28 @@ struct ProjectActivityEditorSheet: View {
                         query: $parentSelectionQuery,
                         itemLabel: { $0.displayTitle }
                     )
-                    Toggle(localized("Marquer comme jalon"), isOn: $isMilestone)
-                    if isMilestone {
-                        DatePicker(localized("Date de fin (jalon)"), selection: $estimatedEndDate, displayedComponents: .date)
+                    Toggle(localized("Pas de date (activité chapeau)"), isOn: $isDateless)
+                    if isDateless {
+                        Label(localized("Cette activité regroupe d'autres activités sans avoir de dates propres."), systemImage: "calendar.badge.minus")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     } else {
-                        DatePicker(localized("Date de début estimée"), selection: $estimatedStartDate, displayedComponents: .date)
-                        if !selectedPredecessorIDs.isEmpty {
-                            Label(localized("Date positionnée depuis le prédécesseur"), systemImage: "link")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        Toggle(localized("Marquer comme jalon"), isOn: $isMilestone)
+                        if isMilestone {
+                            DatePicker(localized("Date de fin (jalon)"), selection: $estimatedEndDate, displayedComponents: .date)
+                        } else {
+                            DatePicker(localized("Date de début estimée"), selection: $estimatedStartDate, displayedComponents: .date)
+                            if !selectedPredecessorIDs.isEmpty {
+                                Label(localized("Date positionnée depuis le prédécesseur"), systemImage: "link")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            DatePicker(localized("Date de fin estimée"), selection: $estimatedEndDate, displayedComponents: .date)
                         }
-                        DatePicker(localized("Date de fin estimée"), selection: $estimatedEndDate, displayedComponents: .date)
-                    }
-                    Toggle(localized("Fin réelle renseignée"), isOn: $includeActualEndDate)
-                    if includeActualEndDate {
-                        DatePicker(localized("Date de fin réelle"), selection: $actualEndDate, displayedComponents: .date)
+                        Toggle(localized("Fin réelle renseignée"), isOn: $includeActualEndDate)
+                        if includeActualEndDate {
+                            DatePicker(localized("Date de fin réelle"), selection: $actualEndDate, displayedComponents: .date)
+                        }
                     }
                 }
 
@@ -173,7 +182,14 @@ struct ProjectActivityEditorSheet: View {
             .navigationTitle(activity == nil ? "Nouvelle activité" : "Modifier activité")
             .onChange(of: isMilestone) { _, isNowMilestone in
                 if isNowMilestone {
+                    isDateless = false
                     estimatedStartDate = estimatedEndDate
+                }
+            }
+            .onChange(of: isDateless) { _, isNowDateless in
+                if isNowDateless {
+                    isMilestone = false
+                    includeActualEndDate = false
                 }
             }
             .onChange(of: selectedPredecessorIDs) { _, newIDs in
@@ -235,22 +251,22 @@ struct ProjectActivityEditorSheet: View {
 
     private var formIsInvalid: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || (isMilestone == false && estimatedEndDate < estimatedStartDate)
+            || (!isDateless && isMilestone == false && estimatedEndDate < estimatedStartDate)
     }
 
     private var snapshot: String {
         [
             title,
-            String(estimatedStartDate.timeIntervalSinceReferenceDate),
-            String(estimatedEndDate.timeIntervalSinceReferenceDate),
-            includeActualEndDate ? "1" : "0",
-            String(actualEndDate.timeIntervalSinceReferenceDate),
+            isDateless ? "dateless" : String(estimatedStartDate.timeIntervalSinceReferenceDate),
+            isDateless ? "dateless" : String(estimatedEndDate.timeIntervalSinceReferenceDate),
+            isDateless ? "0" : (includeActualEndDate ? "1" : "0"),
+            isDateless ? "0" : String(actualEndDate.timeIntervalSinceReferenceDate),
             selectedActionIDs.map(\.uuidString).sorted().joined(separator: ","),
             selectedDeliverableIDs.map(\.uuidString).sorted().joined(separator: ","),
             selectedPredecessorIDs.map(\.uuidString).sorted().joined(separator: ","),
             parentActivityID?.uuidString ?? "",
             hierarchyLevel.rawValue,
-            isMilestone ? "1" : "0",
+            isDateless ? "dateless" : (isMilestone ? "1" : "0"),
             actionSelectionQuery,
             predecessorSelectionQuery,
             parentSelectionQuery
@@ -277,18 +293,19 @@ struct ProjectActivityEditorSheet: View {
     }
 
     private func submit() {
-        let finalEstimatedStartDate = isMilestone ? estimatedEndDate : estimatedStartDate
-        let finalActualEndDate = includeActualEndDate ? actualEndDate : nil
+        let finalEstimatedStartDate = (!isDateless && isMilestone) ? estimatedEndDate : estimatedStartDate
+        let finalActualEndDate = (!isDateless && includeActualEndDate) ? actualEndDate : nil
         if let activity {
             store.updateActivity(
                 activityID: activity.id,
                 title: title,
+                isDateless: isDateless,
                 estimatedStartDate: finalEstimatedStartDate,
                 estimatedEndDate: estimatedEndDate,
                 actualEndDate: finalActualEndDate,
                 linkedActionIDs: Array(selectedActionIDs),
                 predecessorActivityIDs: Array(selectedPredecessorIDs),
-                isMilestone: isMilestone,
+                isMilestone: isDateless ? false : isMilestone,
                 hierarchyLevel: hierarchyLevel,
                 parentActivityID: parentActivityID,
                 linkedDeliverableIDs: Array(selectedDeliverableIDs)
@@ -300,12 +317,13 @@ struct ProjectActivityEditorSheet: View {
                 parentActivityID: parentActivityID,
                 hierarchyLevel: hierarchyLevel,
                 title: title,
+                isDateless: isDateless,
                 estimatedStartDate: finalEstimatedStartDate,
                 estimatedEndDate: estimatedEndDate,
                 actualEndDate: finalActualEndDate,
                 linkedActionIDs: Array(selectedActionIDs),
                 predecessorActivityIDs: Array(selectedPredecessorIDs),
-                isMilestone: isMilestone,
+                isMilestone: isDateless ? false : isMilestone,
                 linkedDeliverableIDs: Array(selectedDeliverableIDs)
             )
         }

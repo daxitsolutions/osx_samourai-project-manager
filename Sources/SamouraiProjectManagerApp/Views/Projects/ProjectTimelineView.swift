@@ -7,8 +7,9 @@ struct ProjectTimelineView: View {
 
     var body: some View {
         let sortedActivities = activities.sorted { $0.estimatedStartDate < $1.estimatedStartDate }
-        let minDate = sortedActivities.map(\.estimatedStartDate).min() ?? .now
-        let maxDate = sortedActivities.map(\.estimatedEndDate).max() ?? .now
+        let datedActivities = sortedActivities.filter { !$0.isDateless }
+        let minDate = datedActivities.map(\.estimatedStartDate).min() ?? .now
+        let maxDate = datedActivities.map(\.estimatedEndDate).max() ?? .now
         let totalInterval = max(maxDate.timeIntervalSince(minDate), 1)
 
         VStack(alignment: .leading, spacing: 8) {

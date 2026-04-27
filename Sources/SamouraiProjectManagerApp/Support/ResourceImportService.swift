@@ -299,49 +299,46 @@ enum ResourceImportService {
     }
 
     private static func unzipEntryIfAvailable(at archiveURL: URL, entryPath: String) throws -> Data? {
+        // Écriture dans un fichier temporaire : évite tout deadlock de buffer pipe
+        // quelle que soit la taille de l'entrée (sheet1.xml peut dépasser plusieurs Mo).
+        let tmpURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        FileManager.default.createFile(atPath: tmpURL.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: tmpURL) }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
         process.arguments = ["-p", archiveURL.path(percentEncoded: false), entryPath]
 
-        let outputPipe = Pipe()
+        let stdoutHandle = try FileHandle(forWritingTo: tmpURL)
         let errorPipe = Pipe()
-        process.standardOutput = outputPipe
+        process.standardOutput = stdoutHandle
         process.standardError = errorPipe
 
         try process.run()
 
-        // Lire stdout dans un thread séparé pour drainer le pipe en continu.
-        // Sans ça, sheet1.xml > ~64 Ko remplit le buffer et déadlocke le process.
-        nonisolated(unsafe) var outputData = Data()
-        let readGroup = DispatchGroup()
-        readGroup.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            readGroup.leave()
-        }
-
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-
-        // Respecter l'annulation Swift Concurrency : terminer le process enfant.
-        if Task.isCancelled {
-            process.terminate()
-        }
-
+        if Task.isCancelled { process.terminate() }
         process.waitUntilExit()
-        readGroup.wait()
+        stdoutHandle.closeFile()
 
         try Task.checkCancellation()
 
         if process.terminationStatus == 0 {
-            return outputData.isEmpty ? nil : outputData
+            let data = (try? Data(contentsOf: tmpURL)) ?? Data()
+            return data.isEmpty ? nil : data
         }
 
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
         let errorMessage = String(data: errorData, encoding: .utf8) ?? ""
         if errorMessage.localizedCaseInsensitiveContains("filename not matched") {
             return nil
         }
 
-        throw ResourceImportError.invalidWorkbook(errorMessage.isEmpty ? AppLocalizer.localized("Impossible de lire le fichier Excel.") : errorMessage)
+        throw ResourceImportError.invalidWorkbook(
+            errorMessage.isEmpty
+                ? AppLocalizer.localized("Impossible de lire le fichier Excel.")
+                : errorMessage
+        )
     }
 }
 

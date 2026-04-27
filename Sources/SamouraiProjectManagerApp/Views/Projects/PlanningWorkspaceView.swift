@@ -20,6 +20,8 @@ struct PlanningWorkspaceView: View {
     @State private var editorContext: PlanningEditorContext?
     @State private var activityPendingDeletion: ProjectActivity?
     @State private var scenarioPendingDeletion: ProjectPlanningScenario?
+    @State private var scenarioPendingRename: ProjectPlanningScenario?
+    @State private var scenarioRenameText: String = ""
     @State private var expandedActivityIDs: Set<UUID> = []
     @State private var viewMode: PlanningViewMode = .tree
 
@@ -78,6 +80,21 @@ struct PlanningWorkspaceView: View {
             }
         } message: {
             Text(localized("Toutes les activités de ce scénario seront définitivement supprimées. Cette action est irréversible."))
+        }
+        .sheet(isPresented: Binding(
+            get: { scenarioPendingRename != nil },
+            set: { if $0 == false { scenarioPendingRename = nil } }
+        )) {
+            if let scenario = scenarioPendingRename, let project = selectedProject {
+                ScenarioRenameSheet(
+                    initialName: scenarioRenameText,
+                    onConfirm: { newName in
+                        store.renamePlanningScenario(projectID: project.id, scenarioID: scenario.id, name: newName)
+                        scenarioPendingRename = nil
+                    },
+                    onCancel: { scenarioPendingRename = nil }
+                )
+            }
         }
         .onAppear {
             ensureProjectSelection()
@@ -251,6 +268,15 @@ struct PlanningWorkspaceView: View {
                         }
                         .buttonStyle(.bordered)
                         .help(isVisible ? "Masquer ce scénario" : "Afficher ce scénario")
+
+                        Button {
+                            scenarioRenameText = scenario.name
+                            scenarioPendingRename = scenario
+                        } label: {
+                            Image(systemName: "pencil")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(localized("Renommer ce scénario"))
 
                         if projectScenarios.count > 1 {
                             Button(role: .destructive) {
@@ -1576,6 +1602,55 @@ private struct ProjectPlanningMonthlyGridView: View {
     }
 
     @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
+}
+
+private struct ScenarioRenameSheet: View {
+    @State private var name: String
+    let onConfirm: (String) -> Void
+    let onCancel: () -> Void
+
+    @Environment(AppState.self) private var appState
+    @FocusState private var fieldFocused: Bool
+
+    init(initialName: String, onConfirm: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+        _name = State(initialValue: initialName)
+        self.onConfirm = onConfirm
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text(localized("Renommer le scénario"))
+                .font(.title3.weight(.semibold))
+
+            TextField(localized("Nom du scénario"), text: $name)
+                .textFieldStyle(.roundedBorder)
+                .focused($fieldFocused)
+                .onSubmit { commitIfValid() }
+
+            HStack {
+                Spacer()
+                Button(localized("Annuler"), role: .cancel) { onCancel() }
+                Button(localized("Renommer")) { commitIfValid() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.return, modifiers: [])
+            }
+        }
+        .padding(24)
+        .frame(width: 380)
+        .onAppear { fieldFocused = true }
+    }
+
+    private func commitIfValid() {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onConfirm(trimmed)
+    }
 
     private func localized(_ key: String) -> String {
         AppLocalizer.localized(key, language: appState.interfaceLanguage)

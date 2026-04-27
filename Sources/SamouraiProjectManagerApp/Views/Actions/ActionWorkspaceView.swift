@@ -582,6 +582,9 @@ private struct ActionHistoryInlinePanel: View {
     @Environment(SamouraiStore.self) private var store
     let actionID: UUID
 
+    @State private var newCommentText: String = ""
+    @FocusState private var isCommentFocused: Bool
+
     private enum SubCol {
         static let kind: CGFloat = 170
         static let date: CGFloat = 150
@@ -658,6 +661,34 @@ private struct ActionHistoryInlinePanel: View {
                     .background(index.isMultiple(of: 2) ? Color.clear : Color(nsColor: .controlBackgroundColor).opacity(0.5))
                 }
             }
+
+            Divider()
+                .padding(.top, 4)
+
+            HStack(spacing: 8) {
+                Image(systemName: "text.bubble")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14)
+                TextField(localized("Ajouter un commentaire…"), text: $newCommentText)
+                    .font(.callout)
+                    .textFieldStyle(.plain)
+                    .focused($isCommentFocused)
+                    .onSubmit { submitComment() }
+                if newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                    Button(action: submitComment) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(Color.accentColor)
+                            .font(.system(size: 16))
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .animation(.easeInOut(duration: 0.15), value: newCommentText.isEmpty)
         }
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -670,6 +701,13 @@ private struct ActionHistoryInlinePanel: View {
         .padding(.horizontal, 4)
         .padding(.top, 4)
         .padding(.bottom, 8)
+    }
+
+    private func submitComment() {
+        let trimmed = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return }
+        store.addActionComment(actionID: actionID, text: trimmed)
+        newCommentText = ""
     }
 
     private func localized(_ key: String) -> String {

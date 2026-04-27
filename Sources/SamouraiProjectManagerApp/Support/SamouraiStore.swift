@@ -1023,6 +1023,10 @@ final class SamouraiStore {
         flow: ActionFlow,
         projectID: UUID?
     ) -> UUID {
+        let creationEntry = ActionHistoryEntry(
+            kind: .automatic,
+            text: "Action PM créée — Sévérité : \(priority.label), Statut : \(status.label), Flux : \(flow.label)"
+        )
         let action = ProjectAction(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             details: details.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1030,7 +1034,8 @@ final class SamouraiStore {
             status: status,
             dueDate: dueDate,
             flow: flow,
-            projectID: sanitizedProjectID(projectID)
+            projectID: sanitizedProjectID(projectID),
+            history: [creationEntry]
         )
         actions.append(action)
         actions = sortActions(actions)

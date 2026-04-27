@@ -24,7 +24,12 @@
       "Bash(python3 /tmp/localize_views.py --dry-run Views/App/BackupWorkspaceView.swift)",
       "Bash(python3 /tmp/collect_all_strings.py)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Read(//private/tmp/**)",
+      "Bash(unzip -p /Users/Dax/Downloads/all-it.xlsx xl/worksheets/sheet1.xml)",
+      "Bash(unzip -p /Users/Dax/Downloads/all-it.xlsx xl/sharedStrings.xml)",
+      "Bash(unzip -p /Users/Dax/Downloads/all-it.xlsx xl/styles.xml)",
+      "Bash(swift -e ' *)"
     ]
   },
   "hooks": {

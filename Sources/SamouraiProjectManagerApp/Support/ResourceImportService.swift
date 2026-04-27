@@ -465,6 +465,7 @@ enum SharedStringsParser {
         let delegate = SharedStringsXMLDelegate()
         let parser = XMLParser(data: data)
         parser.delegate = delegate
+        parser.shouldProcessNamespaces = true
 
         guard parser.parse() else {
             throw ResourceImportError.invalidWorkbook(parser.parserError?.localizedDescription ?? "sharedStrings.xml illisible.")
@@ -511,6 +512,7 @@ enum StylesParser {
         let delegate = StylesXMLDelegate()
         let parser = XMLParser(data: data)
         parser.delegate = delegate
+        parser.shouldProcessNamespaces = true
 
         guard parser.parse() else {
             throw ResourceImportError.invalidWorkbook(parser.parserError?.localizedDescription ?? "styles.xml illisible.")
@@ -586,6 +588,7 @@ enum WorksheetParser {
         )
         let parser = XMLParser(data: data)
         parser.delegate = delegate
+        parser.shouldProcessNamespaces = true
 
         guard parser.parse() else {
             throw ResourceImportError.invalidWorkbook(parser.parserError?.localizedDescription ?? "sheet1.xml illisible.")

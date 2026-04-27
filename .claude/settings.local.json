@@ -22,27 +22,12 @@
       "Bash(python3)",
       "Read(//tmp/**)",
       "Bash(python3 /tmp/localize_views.py --dry-run Views/App/BackupWorkspaceView.swift)",
-      "Bash(python3 /tmp/collect_all_strings.py)"
+      "Bash(python3 /tmp/collect_all_strings.py)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   },
-  "effortLevel": "high",
-  "theme": "auto",
   "hooks": {
-    "Start": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "say 'Claude est prêt'"
-          },
-          {
-            "type": "command",
-            "command": "echo '🚀 Prêt à coder...'"
-          }
-        ]
-      }
-    ],
-
     "Notification": [
       {
         "hooks": [
@@ -61,7 +46,6 @@
         ]
       }
     ],
-
     "Stop": [
       {
         "hooks": [
@@ -80,5 +64,7 @@
         ]
       }
     ]
-  }
+  },
+  "effortLevel": "high",
+  "theme": "auto"
 }

@@ -933,25 +933,61 @@ private struct ProjectPlanningTimelineView: View {
     var onEditActivity: ((ProjectActivity) -> Void)? = nil
     var onMoveActivity: ((UUID, UUID) -> Void)? = nil
 
+    @State private var expandedIDs: Set<UUID> = []
+    @Environment(AppState.self) private var appState
+
     private var milestones: [ProjectActivity] {
         activities.filter { $0.isMilestone }.sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
     }
 
-    private var regularActivities: [ProjectActivity] {
-        activities.filter { !$0.isMilestone }.sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
+    private func children(of id: UUID) -> [ProjectActivity] {
+        activities
+            .filter { $0.parentActivityID == id && !$0.isMilestone }
+            .sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
+    }
+
+    private func hasChildren(_ id: UUID) -> Bool {
+        activities.contains { $0.parentActivityID == id && !$0.isMilestone }
+    }
+
+    // Flatten tree into ordered visible rows respecting expansion state
+    private struct GanttNode: Identifiable {
+        let activity: ProjectActivity
+        let depth: Int
+        let isParent: Bool
+        var id: UUID { activity.id }
+    }
+
+    private var visibleNodes: [GanttNode] {
+        var result: [GanttNode] = []
+        let roots = activities
+            .filter { $0.parentActivityID == nil && !$0.isMilestone }
+            .sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
+        appendNodes(from: roots, depth: 0, into: &result)
+        return result
+    }
+
+    private func appendNodes(from list: [ProjectActivity], depth: Int, into result: inout [GanttNode]) {
+        for activity in list {
+            let isParent = hasChildren(activity.id)
+            result.append(GanttNode(activity: activity, depth: depth, isParent: isParent))
+            if isParent && expandedIDs.contains(activity.id) {
+                appendNodes(from: children(of: activity.id), depth: depth + 1, into: &result)
+            }
+        }
     }
 
     var body: some View {
-        let allActivities = activities.sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
-        let minDate = allActivities.map(\.estimatedStartDate).min() ?? .now
-        let maxDate = allActivities.map(\.estimatedEndDate).max() ?? .now
+        let minDate = activities.map(\.estimatedStartDate).min() ?? .now
+        let maxDate = activities.map(\.estimatedEndDate).max() ?? .now
         let totalInterval = max(maxDate.timeIntervalSince(minDate), 1)
+        let nodes = visibleNodes
 
         VStack(alignment: .leading, spacing: 12) {
             Text(showGanttGrid ? "Vue Gantt Lite" : "Vue Timeline")
                 .font(.headline)
 
-            // Key dates section
+            // Dates clés (jalons)
             if !milestones.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(localized("Dates clés"))
@@ -994,71 +1030,100 @@ private struct ProjectPlanningTimelineView: View {
                 Divider()
             }
 
-            // Activities bars
-            ForEach(allActivities) { activity in
-                let startRatio = max(0, min(1, activity.estimatedStartDate.timeIntervalSince(minDate) / totalInterval))
-                let endRatio = max(0, min(1, activity.estimatedEndDate.timeIntervalSince(minDate) / totalInterval))
-                let widthRatio = max(endRatio - startRatio, 0.015)
-                let variance = varianceReport?.activityVariances.first(where: { $0.activityID == activity.id })?.varianceDays ?? 0
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(activity.displayTitle)
-                            .font(.subheadline.weight(.semibold))
-                        if activity.isMilestone {
-                            Text(localized("Jalon"))
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.purple.opacity(0.14), in: Capsule())
-                        }
-                        Spacer()
-                        Text("Variance: \(variance == 0 ? "0j" : "\(variance > 0 ? "+" : "")\(variance)j")")
-                            .font(.caption)
-                            .foregroundStyle(variance > 0 ? .orange : (variance < 0 ? .green : .secondary))
-                    }
-
-                    GeometryReader { proxy in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color.secondary.opacity(0.12))
-                                .frame(height: 14)
-
-                            if showGanttGrid {
-                                HStack(spacing: 0) {
-                                    ForEach(0..<10, id: \.self) { _ in
-                                        Rectangle()
-                                            .stroke(Color.secondary.opacity(0.15), lineWidth: 0.5)
-                                    }
-                                }
-                                .frame(height: 14)
-                            }
-
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(activity.isMilestone ? Color.purple.opacity(0.8) : Color.accentColor.opacity(0.85))
-                                .frame(width: proxy.size.width * widthRatio, height: 14)
-                                .offset(x: proxy.size.width * startRatio)
-                        }
-                    }
-                    .frame(height: 14)
-                }
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.secondary.opacity(0.08))
-                )
-                .planningActivityDragSource(activityID: activity.id)
-                .planningActivityDropTarget(activityID: activity.id) { sourceID, targetID in
-                    onMoveActivity?(sourceID, targetID)
-                }
-                .onTapGesture(count: 2) {
-                    onEditActivity?(activity)
-                }
+            // Activités (hiérarchie parent/enfant)
+            ForEach(nodes) { node in
+                ganttRow(node: node, minDate: minDate, totalInterval: totalInterval)
             }
         }
     }
 
-    @Environment(AppState.self) private var appState
+    @ViewBuilder
+    private func ganttRow(node: GanttNode, minDate: Date, totalInterval: TimeInterval) -> some View {
+        let activity = node.activity
+        let depth = node.depth
+        let isParent = node.isParent
+        let isExpanded = expandedIDs.contains(activity.id)
+        let childList = children(of: activity.id)
+
+        let startRatio = max(0, min(1, activity.estimatedStartDate.timeIntervalSince(minDate) / totalInterval))
+        let endRatio = max(0, min(1, activity.estimatedEndDate.timeIntervalSince(minDate) / totalInterval))
+        let widthRatio = max(endRatio - startRatio, 0.015)
+        let variance = varianceReport?.activityVariances.first(where: { $0.activityID == activity.id })?.varianceDays ?? 0
+
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                if depth > 0 {
+                    Color.clear.frame(width: CGFloat(depth) * 14)
+                }
+
+                Text(activity.displayTitle)
+                    .font(depth == 0 ? .subheadline.weight(.semibold) : .caption.weight(.medium))
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text("Variance: \(variance == 0 ? "0j" : "\(variance > 0 ? "+" : "")\(variance)j")")
+                    .font(.caption)
+                    .foregroundStyle(variance > 0 ? .orange : (variance < 0 ? .green : .secondary))
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.secondary.opacity(0.12))
+                        .frame(height: depth == 0 ? 14 : 10)
+
+                    if showGanttGrid {
+                        HStack(spacing: 0) {
+                            ForEach(0..<10, id: \.self) { _ in
+                                Rectangle()
+                                    .stroke(Color.secondary.opacity(0.15), lineWidth: 0.5)
+                            }
+                        }
+                        .frame(height: depth == 0 ? 14 : 10)
+                    }
+
+                    if depth > 0 {
+                        Color.clear.frame(width: CGFloat(depth) * 14)
+                    }
+
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isParent ? Color.accentColor.opacity(0.6) : Color.accentColor.opacity(0.85))
+                        .frame(width: proxy.size.width * widthRatio, height: depth == 0 ? 14 : 10)
+                        .offset(x: proxy.size.width * startRatio)
+                }
+            }
+            .frame(height: depth == 0 ? 14 : 10)
+
+            if isParent {
+                Button(isExpanded
+                    ? localized("- masquer les activités enfants (\(childList.count))")
+                    : localized("+ voir les activités enfants (\(childList.count))")
+                ) {
+                    if isExpanded {
+                        expandedIDs.remove(activity.id)
+                    } else {
+                        expandedIDs.insert(activity.id)
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(depth == 0 ? Color.secondary.opacity(0.08) : Color.secondary.opacity(0.04))
+        )
+        .planningActivityDragSource(activityID: activity.id)
+        .planningActivityDropTarget(activityID: activity.id) { sourceID, targetID in
+            onMoveActivity?(sourceID, targetID)
+        }
+        .onTapGesture(count: 2) {
+            onEditActivity?(activity)
+        }
+    }
 
     private func localized(_ key: String) -> String {
         AppLocalizer.localized(key, language: appState.interfaceLanguage)

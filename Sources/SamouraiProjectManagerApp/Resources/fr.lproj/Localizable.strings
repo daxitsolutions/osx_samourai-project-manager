@@ -364,6 +364,7 @@
 "Ajouter un élément in scope" = "Ajouter un élément in scope";
 "Ajouter un élément out of scope" = "Ajouter un élément out of scope";
 "Ajoutez des activités pour afficher la grille journalière." = "Ajoutez des activités pour afficher la grille journalière.";
+"Ajoutez des activités pour afficher la grille mensuelle." = "Ajoutez des activités pour afficher la grille mensuelle.";
 "Ajuste la recherche ou le filtre de flux." = "Ajuste la recherche ou le filtre de flux.";
 "Ajuste la recherche ou les filtres pour retrouver une phase de test." = "Ajuste la recherche ou les filtres pour retrouver une phase de test.";
 "Ajuste la recherche pour retrouver un événement existant." = "Ajuste la recherche pour retrouver un événement existant.";
@@ -739,7 +740,8 @@
 "Fichier de sauvegarde invalide ou non reconnu." = "Fichier de sauvegarde invalide ou non reconnu.";
 "Fin de Phase" = "Fin de Phase";
 "Format non pris en charge. Utilise .ics, .txt, .md ou texte brut." = "Format non pris en charge. Utilise .ics, .txt, .md ou texte brut.";
-"Grille Jours" = "Grille Jours";
+"Grille Jours" = "Grille jour";
+"Grille mois" = "Grille mois";
 "IDs actions dupliqués." = "IDs actions dupliqués.";
 "IDs activités dupliqués." = "IDs activités dupliqués.";
 "IDs décisions dupliqués." = "IDs décisions dupliqués.";

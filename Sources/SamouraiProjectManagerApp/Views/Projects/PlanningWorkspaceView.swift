@@ -352,6 +352,16 @@ struct PlanningWorkspaceView: View {
                         store.moveActivity(activityID: sourceID, to: targetID)
                     }
                 )
+            } else if viewMode == .monthlyGrid {
+                ProjectPlanningMonthlyGridView(
+                    activities: scenarioActivities,
+                    onEditActivity: { activity in
+                        editorContext = .edit(project.id, activity.id)
+                    },
+                    onMoveActivity: { sourceID, targetID in
+                        store.moveActivity(activityID: sourceID, to: targetID)
+                    }
+                )
             } else {
                 scenarioTableView(project: project, activities: scenarioActivities)
             }
@@ -877,6 +887,7 @@ private enum PlanningViewMode: String, CaseIterable, Identifiable {
     case timeline
     case ganttLite
     case dailyGrid
+    case monthlyGrid
 
     var id: String { rawValue }
 
@@ -892,6 +903,8 @@ private enum PlanningViewMode: String, CaseIterable, Identifiable {
             "Gantt Lite"
         case .dailyGrid:
             "Grille Jours"
+        case .monthlyGrid:
+            "Grille mois"
         }
     }
 }
@@ -1230,6 +1243,210 @@ private struct ProjectPlanningDailyGridView: View {
     private func isWeekend(_ day: Date) -> Bool {
         let weekday = Self.calendar.component(.weekday, from: day)
         return weekday == 1 || weekday == 7
+    }
+
+    @Environment(AppState.self) private var appState
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
+}
+
+// MARK: - Monthly Grid View
+
+private struct ProjectPlanningMonthlyGridView: View {
+    let activities: [ProjectActivity]
+    var onEditActivity: ((ProjectActivity) -> Void)? = nil
+    var onMoveActivity: ((UUID, UUID) -> Void)? = nil
+
+    private static let calendar = Calendar.current
+    private static let monthWidth: CGFloat = 96
+    private static let rowHeight: CGFloat = 38
+    private static let labelWidth: CGFloat = 260
+
+    private var sortedActivities: [ProjectActivity] {
+        activities.sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
+    }
+
+    private var months: [Date] {
+        guard let minDate = activities.map(\.estimatedStartDate).min(),
+              let maxDate = activities.map(\.estimatedEndDate).max(),
+              let start = monthStart(for: minDate),
+              let end = monthStart(for: maxDate) else { return [] }
+
+        var result: [Date] = []
+        var current = start
+        while current <= end {
+            result.append(current)
+            current = Self.calendar.date(byAdding: .month, value: 1, to: current)!
+        }
+        return result
+    }
+
+    var body: some View {
+        if activities.isEmpty {
+            ContentUnavailableView(
+                "Aucune activité",
+                systemImage: "calendar.badge.exclamationmark",
+                description: Text(localized("Ajoutez des activités pour afficher la grille mensuelle."))
+            )
+        } else {
+            ScrollView([.vertical, .horizontal]) {
+                VStack(alignment: .leading, spacing: 0) {
+                    headerRow
+                    Divider()
+                    ForEach(Array(sortedActivities.enumerated()), id: \.element.id) { index, activity in
+                        activityRow(activity: activity, isEven: index.isMultiple(of: 2))
+                        Divider().opacity(0.25)
+                    }
+                }
+            }
+            .scrollIndicators(.visible)
+            .padding(16)
+        }
+    }
+
+    private var headerRow: some View {
+        HStack(spacing: 0) {
+            Text(localized("Activité"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: Self.labelWidth, height: Self.rowHeight, alignment: .leading)
+                .padding(.horizontal, 8)
+                .background(Color.secondary.opacity(0.08))
+
+            ForEach(months, id: \.self) { month in
+                Text(monthLabel(for: month))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: Self.monthWidth, height: Self.rowHeight)
+                    .background(Color.secondary.opacity(0.08))
+                    .overlay(alignment: .trailing) {
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.14))
+                            .frame(width: 0.5)
+                    }
+            }
+        }
+    }
+
+    private func activityRow(activity: ProjectActivity, isEven: Bool) -> some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    if activity.isMilestone {
+                        Image(systemName: "diamond.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.purple)
+                    } else {
+                        Circle()
+                            .fill(activity.hierarchyLevel.tintColor.opacity(0.85))
+                            .frame(width: 8, height: 8)
+                    }
+                    Text(activity.displayTitle)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(isCompleted(activity) ? Color.secondary : Color.primary)
+                    if isCompleted(activity) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.green)
+                    }
+                }
+                Text(activityDateRange(activity))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(width: Self.labelWidth, alignment: .leading)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color.secondary.opacity(isEven ? 0.04 : 0.0))
+            .onTapGesture(count: 2) {
+                onEditActivity?(activity)
+            }
+
+            ForEach(months, id: \.self) { month in
+                let activeLabel = activeDayLabel(for: activity, in: month)
+                ZStack {
+                    if isEven {
+                        Color.secondary.opacity(0.03)
+                    }
+                    if let activeLabel {
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(activity.isMilestone
+                                ? Color.purple.opacity(0.75)
+                                : activity.hierarchyLevel.tintColor.opacity(isCompleted(activity) ? 0.35 : 0.72))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 9)
+
+                        Text(activeLabel)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(width: Self.monthWidth, height: Self.rowHeight)
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.10))
+                        .frame(width: 0.5)
+                }
+            }
+        }
+        .planningActivityDragSource(activityID: activity.id)
+        .planningActivityDropTarget(activityID: activity.id) { sourceID, targetID in
+            onMoveActivity?(sourceID, targetID)
+        }
+    }
+
+    private func monthStart(for date: Date) -> Date? {
+        let components = Self.calendar.dateComponents([.year, .month], from: date)
+        return Self.calendar.date(from: components)
+    }
+
+    private func monthEndExclusive(for month: Date) -> Date {
+        Self.calendar.date(byAdding: .month, value: 1, to: month) ?? month
+    }
+
+    private func isCompleted(_ activity: ProjectActivity) -> Bool {
+        activity.actualEndDate != nil
+    }
+
+    private func activeDayLabel(for activity: ProjectActivity, in month: Date) -> String? {
+        let monthStart = Self.calendar.startOfDay(for: month)
+        let monthEndExclusive = monthEndExclusive(for: monthStart)
+        let activityStart = Self.calendar.startOfDay(for: activity.estimatedStartDate)
+        let activityEnd = Self.calendar.startOfDay(for: activity.estimatedEndDate)
+
+        guard activityStart < monthEndExclusive, activityEnd >= monthStart else { return nil }
+
+        if activity.isMilestone {
+            return String(Self.calendar.component(.day, from: activityEnd))
+        }
+
+        let visibleStart = max(activityStart, monthStart)
+        let lastMonthDay = Self.calendar.date(byAdding: .day, value: -1, to: monthEndExclusive) ?? monthStart
+        let visibleEnd = min(activityEnd, lastMonthDay)
+        let startDay = Self.calendar.component(.day, from: visibleStart)
+        let endDay = Self.calendar.component(.day, from: visibleEnd)
+
+        return startDay == endDay ? "\(startDay)" : "\(startDay)-\(endDay)"
+    }
+
+    private func monthLabel(for month: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = appState.interfaceLocale
+        formatter.setLocalizedDateFormatFromTemplate("MMM yy")
+        return formatter.string(from: month)
+    }
+
+    private func activityDateRange(_ activity: ProjectActivity) -> String {
+        if activity.isMilestone {
+            return activity.estimatedEndDate.formatted(date: .abbreviated, time: .omitted)
+        }
+
+        return "\(activity.estimatedStartDate.formatted(date: .abbreviated, time: .omitted)) - \(activity.estimatedEndDate.formatted(date: .abbreviated, time: .omitted))"
     }
 
     @Environment(AppState.self) private var appState

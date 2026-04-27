@@ -364,6 +364,7 @@
 "Ajouter un élément in scope" = "Add an in-scope item";
 "Ajouter un élément out of scope" = "Add an out-of-scope item";
 "Ajoutez des activités pour afficher la grille journalière." = "Add activities to display the daily grid.";
+"Ajoutez des activités pour afficher la grille mensuelle." = "Add activities to display the monthly grid.";
 "Ajuste la recherche ou le filtre de flux." = "Adjust the search or flow filter.";
 "Ajuste la recherche ou les filtres pour retrouver une phase de test." = "Adjust the search or filters to find a test phase.";
 "Ajuste la recherche pour retrouver un événement existant." = "Adjust the search to find an existing event.";
@@ -739,7 +740,8 @@
 "Fichier de sauvegarde invalide ou non reconnu." = "Invalid or unrecognized backup file.";
 "Fin de Phase" = "End of Phase";
 "Format non pris en charge. Utilise .ics, .txt, .md ou texte brut." = "Unsupported format. Use .ics, .txt, .md or plain text.";
-"Grille Jours" = "Excel view";
+"Grille Jours" = "Daily grid";
+"Grille mois" = "Monthly grid";
 "IDs actions dupliqués." = "Duplicate action IDs.";
 "IDs activités dupliqués." = "Duplicate activity IDs.";
 "IDs décisions dupliqués." = "Duplicate decision IDs.";

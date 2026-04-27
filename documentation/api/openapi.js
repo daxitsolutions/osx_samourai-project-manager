@@ -2885,6 +2885,7 @@ window.SAMOURAI_OPENAPI_SPEC = {
           "id",
           "projectID",
           "scenarioID",
+          "displayOrder",
           "hierarchyLevel",
           "title",
           "estimatedStartDate",
@@ -2908,6 +2909,11 @@ window.SAMOURAI_OPENAPI_SPEC = {
           "parentActivityID": {
             "$ref": "#/components/schemas/Uuid",
             "nullable": true
+          },
+          "displayOrder": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Ordre d'affichage manuel de l'activité dans son scénario."
           },
           "hierarchyLevel": {
             "$ref": "#/components/schemas/ActivityHierarchyLevel"

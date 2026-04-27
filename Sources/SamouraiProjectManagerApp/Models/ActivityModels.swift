@@ -52,6 +52,7 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
     var projectID: UUID
     var scenarioID: UUID
     var parentActivityID: UUID?
+    var displayOrder: Int
     var hierarchyLevel: ActivityHierarchyLevel
     var title: String
     var estimatedStartDate: Date
@@ -68,6 +69,7 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
         projectID: UUID,
         scenarioID: UUID,
         parentActivityID: UUID? = nil,
+        displayOrder: Int = 0,
         hierarchyLevel: ActivityHierarchyLevel = .activityTask,
         title: String,
         estimatedStartDate: Date,
@@ -83,6 +85,7 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
         self.projectID = projectID
         self.scenarioID = scenarioID
         self.parentActivityID = parentActivityID
+        self.displayOrder = max(displayOrder, 0)
         self.hierarchyLevel = hierarchyLevel
         self.title = title
         self.estimatedStartDate = estimatedStartDate
@@ -96,7 +99,7 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectID, scenarioID, parentActivityID, hierarchyLevel, title
+        case id, projectID, scenarioID, parentActivityID, displayOrder, hierarchyLevel, title
         case estimatedStartDate, estimatedEndDate, actualEndDate
         case predecessorActivityIDs, isMilestone, linkedDeliverableIDs
         case createdAt, updatedAt
@@ -108,6 +111,7 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
         projectID = try container.decode(UUID.self, forKey: .projectID)
         scenarioID = try container.decodeIfPresent(UUID.self, forKey: .scenarioID) ?? projectID
         parentActivityID = try container.decodeIfPresent(UUID.self, forKey: .parentActivityID)
+        displayOrder = max(try container.decodeIfPresent(Int.self, forKey: .displayOrder) ?? 0, 0)
         hierarchyLevel = try container.decodeIfPresent(ActivityHierarchyLevel.self, forKey: .hierarchyLevel) ?? .activityTask
         title = try container.decode(String.self, forKey: .title)
         estimatedStartDate = try container.decode(Date.self, forKey: .estimatedStartDate)
@@ -126,6 +130,7 @@ struct ProjectActivity: Identifiable, Codable, Hashable {
         try container.encode(projectID, forKey: .projectID)
         try container.encode(scenarioID, forKey: .scenarioID)
         try container.encodeIfPresent(parentActivityID, forKey: .parentActivityID)
+        try container.encode(displayOrder, forKey: .displayOrder)
         try container.encode(hierarchyLevel, forKey: .hierarchyLevel)
         try container.encode(title, forKey: .title)
         try container.encode(estimatedStartDate, forKey: .estimatedStartDate)

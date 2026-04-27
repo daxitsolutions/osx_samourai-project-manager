@@ -2,6 +2,11 @@ import AppKit
 import Foundation
 import Observation
 
+private struct ActivityOrderScope: Hashable {
+    let projectID: UUID
+    let scenarioID: UUID
+}
+
 struct SamouraiDatabase: Codable {
     var projects: [Project]
     var resources: [Resource]
@@ -1257,6 +1262,7 @@ final class SamouraiStore {
             projectID: projectID,
             scenarioID: resolvedScenarioID,
             parentActivityID: sanitizedParentActivityID,
+            displayOrder: nextActivityDisplayOrder(projectID: projectID, scenarioID: resolvedScenarioID),
             hierarchyLevel: hierarchyLevel,
             title: cleanedTitle.isEmpty ? "Activité" : cleanedTitle,
             estimatedStartDate: normalizedDates.startDate,
@@ -1386,6 +1392,42 @@ final class SamouraiStore {
             )
         }
         activities[index].updatedAt = .now
+        activities = sortActivities(activities)
+        persist()
+    }
+
+    func moveActivity(activityID: UUID, to targetActivityID: UUID) {
+        guard activityID != targetActivityID,
+              let sourceActivity = activity(with: activityID),
+              let targetActivity = activity(with: targetActivityID),
+              sourceActivity.projectID == targetActivity.projectID,
+              sourceActivity.scenarioID == targetActivity.scenarioID
+        else {
+            return
+        }
+
+        var orderedActivities = activities
+            .filter { $0.projectID == sourceActivity.projectID && $0.scenarioID == sourceActivity.scenarioID }
+            .sorted(by: activityDisplaySortPrecedes)
+
+        guard let sourceIndex = orderedActivities.firstIndex(where: { $0.id == activityID }),
+              let targetOriginalIndex = orderedActivities.firstIndex(where: { $0.id == targetActivityID })
+        else {
+            return
+        }
+
+        let movedActivity = orderedActivities.remove(at: sourceIndex)
+        guard let targetIndex = orderedActivities.firstIndex(where: { $0.id == targetActivityID }) else { return }
+        let insertionIndex = sourceIndex < targetOriginalIndex ? targetIndex + 1 : targetIndex
+        orderedActivities.insert(movedActivity, at: min(insertionIndex, orderedActivities.count))
+
+        let now = Date.now
+        for (displayOrder, orderedActivity) in orderedActivities.enumerated() {
+            guard let index = activities.firstIndex(where: { $0.id == orderedActivity.id }) else { continue }
+            activities[index].displayOrder = displayOrder
+            activities[index].updatedAt = now
+        }
+
         activities = sortActivities(activities)
         persist()
     }
@@ -1575,6 +1617,7 @@ final class SamouraiStore {
                 projectID: activity.projectID,
                 scenarioID: duplicatedScenario.id,
                 parentActivityID: nil,
+                displayOrder: activity.displayOrder,
                 hierarchyLevel: activity.hierarchyLevel,
                 title: activity.title,
                 estimatedStartDate: activity.estimatedStartDate,
@@ -3293,6 +3336,10 @@ final class SamouraiStore {
             guard activities.contains(where: { $0.id == updated.id }) == false else {
                 throw RESTAPIError.conflict("Une activité avec cet ID existe déjà.")
             }
+            if updated.displayOrder == 0,
+               activities.contains(where: { $0.projectID == updated.projectID && $0.scenarioID == updated.scenarioID }) {
+                updated.displayOrder = nextActivityDisplayOrder(projectID: updated.projectID, scenarioID: updated.scenarioID)
+            }
             activities.append(updated)
         }
         activities = sortActivities(activities)
@@ -3521,12 +3568,59 @@ final class SamouraiStore {
     }
 
     private func sortActivities(_ activities: [ProjectActivity]) -> [ProjectActivity] {
-        activities.sorted {
-            if $0.estimatedEndDate == $1.estimatedEndDate {
-                return $0.displayTitle.localizedStandardCompare($1.displayTitle) == .orderedAscending
-            }
-            return $0.estimatedEndDate < $1.estimatedEndDate
+        normalizedActivityDisplayOrders(activities).sorted(by: activityDisplaySortPrecedes)
+    }
+
+    private func activityDisplaySortPrecedes(_ lhs: ProjectActivity, _ rhs: ProjectActivity) -> Bool {
+        if lhs.projectID != rhs.projectID {
+            return lhs.projectID.uuidString < rhs.projectID.uuidString
         }
+        if lhs.scenarioID != rhs.scenarioID {
+            return lhs.scenarioID.uuidString < rhs.scenarioID.uuidString
+        }
+        if lhs.displayOrder != rhs.displayOrder {
+            return lhs.displayOrder < rhs.displayOrder
+        }
+        if lhs.estimatedEndDate != rhs.estimatedEndDate {
+            return lhs.estimatedEndDate < rhs.estimatedEndDate
+        }
+        if lhs.estimatedStartDate != rhs.estimatedStartDate {
+            return lhs.estimatedStartDate < rhs.estimatedStartDate
+        }
+        let titleComparison = lhs.displayTitle.localizedStandardCompare(rhs.displayTitle)
+        if titleComparison != .orderedSame {
+            return titleComparison == .orderedAscending
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private func normalizedActivityDisplayOrders(_ activities: [ProjectActivity]) -> [ProjectActivity] {
+        var normalizedActivities = activities
+        let groupedIndices = Dictionary(grouping: normalizedActivities.indices) { index in
+            ActivityOrderScope(
+                projectID: normalizedActivities[index].projectID,
+                scenarioID: normalizedActivities[index].scenarioID
+            )
+        }
+
+        for indices in groupedIndices.values {
+            let sortedIndices = indices.sorted {
+                activityDisplaySortPrecedes(normalizedActivities[$0], normalizedActivities[$1])
+            }
+            for (displayOrder, index) in sortedIndices.enumerated() {
+                normalizedActivities[index].displayOrder = displayOrder
+            }
+        }
+
+        return normalizedActivities
+    }
+
+    private func nextActivityDisplayOrder(projectID: UUID, scenarioID: UUID) -> Int {
+        let currentMaximum = activities
+            .filter { $0.projectID == projectID && $0.scenarioID == scenarioID }
+            .map(\.displayOrder)
+            .max()
+        return (currentMaximum ?? -1) + 1
     }
 
     private func sortEvents(_ events: [ProjectEvent]) -> [ProjectEvent] {

@@ -1,5 +1,16 @@
 import SwiftUI
 
+private let planningActivityDragPayloadPrefix = "samourai-project-activity:"
+
+private func planningActivityDragPayload(for activityID: UUID) -> String {
+    planningActivityDragPayloadPrefix + activityID.uuidString
+}
+
+private func planningActivityID(from payload: String) -> UUID? {
+    guard payload.hasPrefix(planningActivityDragPayloadPrefix) else { return nil }
+    return UUID(uuidString: String(payload.dropFirst(planningActivityDragPayloadPrefix.count)))
+}
+
 struct PlanningWorkspaceView: View {
     @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
@@ -325,6 +336,9 @@ struct PlanningWorkspaceView: View {
                     showGanttGrid: viewMode == .ganttLite,
                     onEditActivity: { activity in
                         editorContext = .edit(project.id, activity.id)
+                    },
+                    onMoveActivity: { sourceID, targetID in
+                        store.moveActivity(activityID: sourceID, to: targetID)
                     }
                 )
                 .padding(16)
@@ -333,6 +347,9 @@ struct PlanningWorkspaceView: View {
                     activities: scenarioActivities,
                     onEditActivity: { activity in
                         editorContext = .edit(project.id, activity.id)
+                    },
+                    onMoveActivity: { sourceID, targetID in
+                        store.moveActivity(activityID: sourceID, to: targetID)
                     }
                 )
             } else {
@@ -365,16 +382,14 @@ struct PlanningWorkspaceView: View {
     }
 
     private func scenarioTableView(project: Project, activities: [ProjectActivity]) -> some View {
-        let rows = activities.sorted { lhs, rhs in
-            if lhs.estimatedEndDate == rhs.estimatedEndDate {
-                return lhs.updatedAt > rhs.updatedAt
-            }
-            return lhs.estimatedEndDate > rhs.estimatedEndDate
-        }
+        let rows = activities.sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
 
         return ScrollView([.vertical, .horizontal]) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 0) {
+                    Color.clear
+                        .frame(width: 28, height: 1)
+
                     ForEach(activeTableColumns) { column in
                         Text(localized(column.label))
                             .font(.caption.weight(.semibold))
@@ -388,6 +403,14 @@ struct PlanningWorkspaceView: View {
 
                 ForEach(rows) { activity in
                     HStack(spacing: 0) {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28)
+                            .contentShape(Rectangle())
+                            .planningActivityDragSource(activityID: activity.id)
+                            .help(localized("Glisser pour réordonner"))
+
                         ForEach(activeTableColumns) { column in
                             planningTableCell(
                                 column: column,
@@ -403,6 +426,9 @@ struct PlanningWorkspaceView: View {
                     .background(Color.secondary.opacity(0.03))
                     .overlay(alignment: .bottom) {
                         Divider().opacity(0.35)
+                    }
+                    .planningActivityDropTarget(activityID: activity.id) { sourceID, targetID in
+                        store.moveActivity(activityID: sourceID, to: targetID)
                     }
                 }
             }
@@ -632,7 +658,7 @@ struct PlanningWorkspaceView: View {
     private func treeActivityCard(activity: ProjectActivity, allActivities: [ProjectActivity], depth: Int) -> AnyView {
         let childActivities = allActivities
             .filter { $0.parentActivityID == activity.id && $0.isMilestone == false }
-            .sorted { $0.estimatedStartDate < $1.estimatedStartDate }
+            .sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
 
         let isExpanded = expandedActivityIDs.contains(activity.id)
         let levelColor = activity.hierarchyLevel.tintColor
@@ -716,13 +742,17 @@ struct PlanningWorkspaceView: View {
                     .frame(width: 4)
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
+            .planningActivityDragSource(activityID: activity.id)
+            .planningActivityDropTarget(activityID: activity.id) { sourceID, targetID in
+                store.moveActivity(activityID: sourceID, to: targetID)
+            }
         )
     }
 
     private func rootActivities(in activities: [ProjectActivity]) -> [ProjectActivity] {
         activities
             .filter { $0.parentActivityID == nil || $0.isMilestone }
-            .sorted { $0.estimatedStartDate < $1.estimatedStartDate }
+            .sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
     }
 
     private func ensureProjectSelection() {
@@ -871,17 +901,18 @@ private struct ProjectPlanningTimelineView: View {
     let varianceReport: ProjectPlanningVarianceReport?
     let showGanttGrid: Bool
     var onEditActivity: ((ProjectActivity) -> Void)? = nil
+    var onMoveActivity: ((UUID, UUID) -> Void)? = nil
 
     private var milestones: [ProjectActivity] {
-        activities.filter { $0.isMilestone }.sorted { $0.estimatedEndDate < $1.estimatedEndDate }
+        activities.filter { $0.isMilestone }.sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
     }
 
     private var regularActivities: [ProjectActivity] {
-        activities.filter { !$0.isMilestone }.sorted { $0.estimatedStartDate < $1.estimatedStartDate }
+        activities.filter { !$0.isMilestone }.sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
     }
 
     var body: some View {
-        let allActivities = activities.sorted { $0.estimatedStartDate < $1.estimatedStartDate }
+        let allActivities = activities.sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
         let minDate = allActivities.map(\.estimatedStartDate).min() ?? .now
         let maxDate = allActivities.map(\.estimatedEndDate).max() ?? .now
         let totalInterval = max(maxDate.timeIntervalSince(minDate), 1)
@@ -916,6 +947,10 @@ private struct ProjectPlanningTimelineView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
                                 .background(Color.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .planningActivityDragSource(activityID: milestone.id)
+                                .planningActivityDropTarget(activityID: milestone.id) { sourceID, targetID in
+                                    onMoveActivity?(sourceID, targetID)
+                                }
                                 .onTapGesture(count: 2) {
                                     onEditActivity?(milestone)
                                 }
@@ -982,6 +1017,10 @@ private struct ProjectPlanningTimelineView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(Color.secondary.opacity(0.08))
                 )
+                .planningActivityDragSource(activityID: activity.id)
+                .planningActivityDropTarget(activityID: activity.id) { sourceID, targetID in
+                    onMoveActivity?(sourceID, targetID)
+                }
                 .onTapGesture(count: 2) {
                     onEditActivity?(activity)
                 }
@@ -1001,6 +1040,7 @@ private struct ProjectPlanningTimelineView: View {
 private struct ProjectPlanningDailyGridView: View {
     let activities: [ProjectActivity]
     var onEditActivity: ((ProjectActivity) -> Void)? = nil
+    var onMoveActivity: ((UUID, UUID) -> Void)? = nil
 
     private static let calendar = Calendar.current
     private static let dayWidth: CGFloat = 36
@@ -1008,7 +1048,7 @@ private struct ProjectPlanningDailyGridView: View {
     private static let labelWidth: CGFloat = 220
 
     private var sortedActivities: [ProjectActivity] {
-        activities.sorted { $0.estimatedStartDate < $1.estimatedStartDate }
+        activities.sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
     }
 
     private var days: [Date] {
@@ -1152,6 +1192,10 @@ private struct ProjectPlanningDailyGridView: View {
                 }
             }
         }
+        .planningActivityDragSource(activityID: activity.id)
+        .planningActivityDropTarget(activityID: activity.id) { sourceID, targetID in
+            onMoveActivity?(sourceID, targetID)
+        }
     }
 
     private struct MonthGroup {
@@ -1247,6 +1291,47 @@ private enum PlanningEditorContext: Identifiable {
     func linkedDeliverableIDs(in store: SamouraiStore) -> [UUID] {
         guard let activity = activity(in: store) else { return [] }
         return activity.linkedDeliverableIDs
+    }
+}
+
+private extension ProjectActivity {
+    static func planningDisplayOrderPrecedes(_ lhs: ProjectActivity, _ rhs: ProjectActivity) -> Bool {
+        if lhs.displayOrder != rhs.displayOrder {
+            return lhs.displayOrder < rhs.displayOrder
+        }
+        if lhs.estimatedEndDate != rhs.estimatedEndDate {
+            return lhs.estimatedEndDate < rhs.estimatedEndDate
+        }
+        if lhs.estimatedStartDate != rhs.estimatedStartDate {
+            return lhs.estimatedStartDate < rhs.estimatedStartDate
+        }
+        let titleComparison = lhs.displayTitle.localizedStandardCompare(rhs.displayTitle)
+        if titleComparison != .orderedSame {
+            return titleComparison == .orderedAscending
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+}
+
+private extension View {
+    func planningActivityDragSource(activityID: UUID) -> some View {
+        draggable(planningActivityDragPayload(for: activityID))
+    }
+
+    func planningActivityDropTarget(
+        activityID: UUID,
+        onMoveActivity: @escaping (UUID, UUID) -> Void
+    ) -> some View {
+        dropDestination(for: String.self) { payloads, _ in
+            guard let sourceID = payloads.compactMap(planningActivityID(from:)).first,
+                  sourceID != activityID
+            else {
+                return false
+            }
+
+            onMoveActivity(sourceID, activityID)
+            return true
+        }
     }
 }
 

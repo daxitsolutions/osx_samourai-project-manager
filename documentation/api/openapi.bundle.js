@@ -32230,6 +32230,7 @@ window.SAMOURAI_OPENAPI_BUNDLED_SPEC = {
           "id",
           "projectID",
           "scenarioID",
+          "displayOrder",
           "hierarchyLevel",
           "title",
           "estimatedStartDate",
@@ -32269,6 +32270,11 @@ window.SAMOURAI_OPENAPI_BUNDLED_SPEC = {
               "00000000-0000-0000-0000-000000000000"
             ],
             "nullable": true
+          },
+          "displayOrder": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Ordre d'affichage manuel de l'activité dans son scénario."
           },
           "hierarchyLevel": {
             "type": "string",

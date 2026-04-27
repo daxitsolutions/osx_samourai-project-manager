@@ -309,13 +309,31 @@ enum ResourceImportService {
         process.standardError = errorPipe
 
         try process.run()
-        process.waitUntilExit()
 
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        // Lire stdout dans un thread séparé pour drainer le pipe en continu.
+        // Sans ça, sheet1.xml > ~64 Ko remplit le buffer et déadlocke le process.
+        nonisolated(unsafe) var outputData = Data()
+        let readGroup = DispatchGroup()
+        readGroup.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            readGroup.leave()
+        }
+
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
+        // Respecter l'annulation Swift Concurrency : terminer le process enfant.
+        if Task.isCancelled {
+            process.terminate()
+        }
+
+        process.waitUntilExit()
+        readGroup.wait()
+
+        try Task.checkCancellation()
+
         if process.terminationStatus == 0 {
-            return data.isEmpty ? nil : data
+            return outputData.isEmpty ? nil : outputData
         }
 
         let errorMessage = String(data: errorData, encoding: .utf8) ?? ""

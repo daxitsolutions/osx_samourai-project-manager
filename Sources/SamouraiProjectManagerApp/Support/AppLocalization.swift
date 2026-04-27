@@ -74,7 +74,11 @@ enum AppLocalizer {
 
     static func localizedFormat(_ key: String, language: AppLanguage, arguments: [CVarArg]) -> String {
         let format = localized(key, language: language)
-        return String(format: format, locale: Locale(identifier: language.localeIdentifier), arguments: arguments)
+        return String(
+            format: format,
+            locale: Locale(identifier: language.localeIdentifier),
+            arguments: normalizedFoundationArguments(arguments, format: format)
+        )
     }
 
     private static func bundle(for language: AppLanguage) -> Bundle? {
@@ -82,6 +86,83 @@ enum AppLocalizer {
             return nil
         }
         return Bundle(path: bundlePath)
+    }
+
+    private static func normalizedFoundationArguments(_ arguments: [CVarArg], format: String) -> [CVarArg] {
+        var normalizedArguments = arguments
+        var nextArgumentIndex = 0
+        var index = format.startIndex
+
+        while index < format.endIndex {
+            guard format[index] == "%" else {
+                index = format.index(after: index)
+                continue
+            }
+
+            index = format.index(after: index)
+            guard index < format.endIndex else { break }
+
+            if format[index] == "%" {
+                index = format.index(after: index)
+                continue
+            }
+
+            let positionalStart = index
+            var positionalDigits = ""
+            while index < format.endIndex, let digit = format[index].wholeNumberValue {
+                positionalDigits.append(String(digit))
+                index = format.index(after: index)
+            }
+
+            let explicitArgumentIndex: Int?
+            if index < format.endIndex,
+               format[index] == "$",
+               let position = Int(positionalDigits),
+               position > 0 {
+                explicitArgumentIndex = position - 1
+                index = format.index(after: index)
+            } else {
+                explicitArgumentIndex = nil
+                index = positionalStart
+            }
+
+            while index < format.endIndex {
+                let character = format[index]
+                let targetArgumentIndex = explicitArgumentIndex ?? nextArgumentIndex
+
+                if character == "@" {
+                    if normalizedArguments.indices.contains(targetArgumentIndex) {
+                        normalizedArguments[targetArgumentIndex] = String(describing: normalizedArguments[targetArgumentIndex]) as NSString
+                    }
+                    if explicitArgumentIndex == nil {
+                        nextArgumentIndex += 1
+                    }
+                    index = format.index(after: index)
+                    break
+                }
+
+                if isFormatSpecifierTerminator(character) {
+                    if explicitArgumentIndex == nil {
+                        nextArgumentIndex += 1
+                    }
+                    index = format.index(after: index)
+                    break
+                }
+
+                index = format.index(after: index)
+            }
+        }
+
+        return normalizedArguments
+    }
+
+    private static func isFormatSpecifierTerminator(_ character: Character) -> Bool {
+        switch character {
+        case "A", "C", "D", "E", "F", "G", "O", "S", "U", "X", "a", "c", "d", "e", "f", "g", "i", "n", "o", "p", "s", "u", "x":
+            true
+        default:
+            false
+        }
     }
 }
 

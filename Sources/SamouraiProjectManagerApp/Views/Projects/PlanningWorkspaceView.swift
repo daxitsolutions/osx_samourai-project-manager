@@ -611,6 +611,15 @@ struct PlanningWorkspaceView: View {
                 }
                 .buttonStyle(.link)
 
+                Button {
+                    store.duplicateActivity(activityID: activity.id)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(localized("Dupliquer cette activité"))
+
                 Button(role: .destructive) {
                     activityPendingDeletion = activity
                 } label: {
@@ -702,6 +711,14 @@ struct PlanningWorkspaceView: View {
                         editorContext = .edit(activity.projectID, activity.id)
                     }
                     .buttonStyle(.bordered)
+
+                    Button {
+                        store.duplicateActivity(activityID: activity.id)
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(localized("Dupliquer cette activité"))
 
                     Button(role: .destructive) {
                         activityPendingDeletion = activity

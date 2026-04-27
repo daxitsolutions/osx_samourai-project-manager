@@ -1580,6 +1580,29 @@ final class SamouraiStore {
     }
 
     @discardableResult
+    func duplicateActivity(activityID: UUID) -> UUID? {
+        guard let source = activities.first(where: { $0.id == activityID }) else { return nil }
+        let duplicate = ProjectActivity(
+            projectID: source.projectID,
+            scenarioID: source.scenarioID,
+            parentActivityID: source.parentActivityID,
+            displayOrder: nextActivityDisplayOrder(projectID: source.projectID, scenarioID: source.scenarioID),
+            hierarchyLevel: source.hierarchyLevel,
+            title: "\(source.title) (doublon)",
+            estimatedStartDate: source.estimatedStartDate,
+            estimatedEndDate: source.estimatedEndDate,
+            actualEndDate: source.actualEndDate,
+            predecessorActivityIDs: source.predecessorActivityIDs,
+            isMilestone: source.isMilestone,
+            linkedDeliverableIDs: source.linkedDeliverableIDs
+        )
+        activities.append(duplicate)
+        activities = sortActivities(activities)
+        persist()
+        return duplicate.id
+    }
+
+    @discardableResult
     func addPlanningScenario(projectID: UUID, name: String) -> UUID? {
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return nil }
 

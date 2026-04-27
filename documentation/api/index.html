@@ -19,13 +19,13 @@
   </head>
   <body>
     <div id="swagger-ui"></div>
-    <script src="./openapi.js"></script>
+    <script src="./openapi.bundle.js"></script>
     <script src="https://unpkg.com/swagger-ui-dist@5.32.4/swagger-ui-bundle.js" crossorigin></script>
     <script src="https://unpkg.com/swagger-ui-dist@5.32.4/swagger-ui-standalone-preset.js" crossorigin></script>
     <script>
       window.onload = () => {
         window.ui = SwaggerUIBundle({
-          spec: window.SAMOURAI_OPENAPI_SPEC,
+          spec: window.SAMOURAI_OPENAPI_BUNDLED_SPEC,
           dom_id: "#swagger-ui",
           deepLinking: true,
           displayRequestDuration: true,

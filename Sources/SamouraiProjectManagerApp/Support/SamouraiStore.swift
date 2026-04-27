@@ -1696,6 +1696,17 @@ final class SamouraiStore {
         return duplicatedScenario.id
     }
 
+    func renamePlanningScenario(projectID: UUID, scenarioID: UUID, name: String) {
+        let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedName.isEmpty,
+              let projectIndex = projects.firstIndex(where: { $0.id == projectID }),
+              let scenarioIndex = projects[projectIndex].planningScenarios.firstIndex(where: { $0.id == scenarioID })
+        else { return }
+        projects[projectIndex].planningScenarios[scenarioIndex].name = cleanedName
+        projects[projectIndex].updatedAt = .now
+        persist()
+    }
+
     func deletePlanningScenario(projectID: UUID, scenarioID: UUID) {
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return }
         guard projects[projectIndex].orderedPlanningScenarios.count > 1 else { return }

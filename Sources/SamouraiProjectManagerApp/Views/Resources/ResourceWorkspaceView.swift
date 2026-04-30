@@ -481,10 +481,7 @@ struct ResourceWorkspaceView: View {
     }
 
     private var searchBaseResources: [Resource] {
-        if scopedProjectID != nil, searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-            return store.resources
-        }
-        return scopedResources
+        scopedResources
     }
 
     private var filteredResources: [Resource] {

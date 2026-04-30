@@ -149,4 +149,47 @@ Tu es un expert senior en développement d'applications macOS sur Apple Silicon 
 
 ---
 
-*Prêt. Construisons une application macOS exemplaire.*
+# UI / UX 
+
+## Directives pour les créations des écrans 'modals' de type création et édition des objets.
+1. Architecture de l'Information & Alignement
+
+    Alignement Vertical (Top-Aligned Labels) : Systématisez le placement des libellés au-dessus des champs de saisie. Cela crée un chemin visuel direct et facilite le remplissage sur mobile ou écrans étroits.
+
+    Grille de Proximité : Regroupez les éléments liés par thématique (ex: regrouper "Statut", "Sévérité" et "Échéance" sous une section "Métadonnées") pour réduire la charge cognitive visible dans image_f090b9.jpg.
+
+    Hiérarchie de Titrage : Utilisez une taille de police et une graisse distinctes pour le titre principal de l'action afin qu'il se détache immédiatement du reste du formulaire.
+
+2. Standardisation des Composants de Saisie
+
+    États d'Interaction : Définissez des styles visuels clairs pour chaque état d'un champ (Repos, Survol, Focus, Erreur, Désactivé). Le champ "Titre" dans image_f090b9.jpg montre un focus bleu qui doit être la norme partout.
+
+    Micro-copie Guidée (Placeholders) : Ne laissez aucun champ vide de sens. Utilisez des textes d'exemple (ex: "Décrivez la tâche en quelques mots...") pour inciter à l'action.
+
+    Saisie Prédictive : Pour les champs comme "Projet", privilégiez des listes déroulantes avec recherche intégrée si le nombre d'options dépasse 5 éléments.
+
+3. Système de Feedback et de Validation
+
+    Boutons d'Action (CTAs) :
+
+        Primaire : Un seul bouton dominant par écran (ex: "Créer" en bleu).
+
+        Secondaire : Boutons de contour ou texte seul (ex: "Annuler") pour éviter la compétition visuelle.
+
+    Validation Contextuelle : N'attendez pas le clic sur "Créer" pour signaler une erreur. Validez les champs obligatoires dès que l'utilisateur change de zone (on-blur).
+
+    Confirmation Visuelle : Comme suggéré pour le slider de image_f090b9.jpg, utilisez des codes couleurs sémantiques (Vert = Succès/Faible, Orange = Moyen, Rouge = Critique/Erreur) de manière consistante.
+
+4. Accessibilité et Lisibilité (Dark Mode)
+
+    Contraste des Textes : Assurez-vous que le texte gris sur fond sombre respecte les normes WCAG (contraste minimum de 4.5:1). Le texte secondaire dans le fond de image_f090b9.jpg gagnerait à être plus clair.
+
+    Zones de Clic : Garantissez que chaque élément interactif (bouton, curseur de sévérité) a une zone de frappe d'au moins 44x44 pixels pour éviter les erreurs de manipulation.
+
+    Navigation Clavier : La touche Tab doit permettre de parcourir l'écran dans un ordre logique (de haut en bas, de gauche à droite) et la touche Entrée doit déclencher l'action principale.
+
+5. Cohérence des Espacements (Système de 8px)
+
+    Espacement Standard : Utilisez des multiples de 8px pour toutes vos marges et paddings. Cela crée une harmonie visuelle automatique et simplifie le travail de développement.
+
+        Exemple : 8px entre un libellé et son champ, 24px entre deux groupes de champs.

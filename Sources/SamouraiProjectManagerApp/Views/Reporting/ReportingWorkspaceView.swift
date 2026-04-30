@@ -456,7 +456,7 @@ struct ReportingWorkspaceView: View {
     }
 
     private func renderPDFData(from record: GovernanceReportRecord) -> Data {
-        let content = ReportPDFContent(record: record)
+        let content = ReportPDFContent(record: record, appState: appState)
         let renderer = ImageRenderer(content: content)
         renderer.scale = 2.0
         let mutableData = NSMutableData()
@@ -537,6 +537,7 @@ private struct ReportingBinaryDocument: FileDocument {
 
 private struct ReportPDFContent: View {
     let record: GovernanceReportRecord
+    let appState: AppState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -624,8 +625,6 @@ private struct ReportPDFContent: View {
             content()
         }
     }
-
-    @Environment(AppState.self) private var appState
 
     private func localized(_ key: String) -> String {
         AppLocalizer.localized(key, language: appState.interfaceLanguage)

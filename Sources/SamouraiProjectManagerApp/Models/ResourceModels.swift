@@ -383,6 +383,8 @@ struct Resource: Identifiable, Codable, Hashable {
     var allocationPercent: Int
     var assignedProjectIDs: [UUID]
     var favoriteProjectIDs: [UUID]
+    /// Identifiant de la ressource template dont cette ressource de projet est issue (0..1).
+    var templateResourceID: UUID?
     var performanceEvaluations: [ResourcePerformanceEvaluation]
     var notes: String
     var createdAt: Date
@@ -414,6 +416,7 @@ struct Resource: Identifiable, Codable, Hashable {
         allocationPercent: Int,
         assignedProjectIDs: [UUID] = [],
         favoriteProjectIDs: [UUID] = [],
+        templateResourceID: UUID? = nil,
         performanceEvaluations: [ResourcePerformanceEvaluation] = [],
         notes: String,
         createdAt: Date = .now,
@@ -447,6 +450,7 @@ struct Resource: Identifiable, Codable, Hashable {
         self.favoriteProjectIDs = favoriteProjectIDs
             .removingDuplicateValues()
             .filter { normalizedAssignedProjectIDs.contains($0) }
+        self.templateResourceID = templateResourceID
         self.performanceEvaluations = performanceEvaluations.sorted { $0.evaluatedAt < $1.evaluatedAt }
         self.notes = notes
         self.createdAt = createdAt
@@ -461,6 +465,7 @@ struct Resource: Identifiable, Codable, Hashable {
         case typeDeRessource, journeesTempsPartiel, email, phone
         case engagement, status, allocationPercent
         case assignedProjectIDs, favoriteProjectIDs, assignedProjectID
+        case templateResourceID
         case performanceEvaluations, notes, createdAt, updatedAt
     }
 
@@ -508,6 +513,8 @@ struct Resource: Identifiable, Codable, Hashable {
         favoriteProjectIDs = decodedFavoriteProjectIDs
             .filter { decodedAssignedProjectIDs.contains($0) }
 
+        templateResourceID = try container.decodeIfPresent(UUID.self, forKey: .templateResourceID)
+
         performanceEvaluations = (try container.decodeIfPresent([ResourcePerformanceEvaluation].self, forKey: .performanceEvaluations) ?? [])
             .sorted { $0.evaluatedAt < $1.evaluatedAt }
     }
@@ -541,6 +548,7 @@ struct Resource: Identifiable, Codable, Hashable {
         try container.encode(assignedProjectIDs, forKey: .assignedProjectIDs)
         try container.encode(favoriteProjectIDs, forKey: .favoriteProjectIDs)
         try container.encode(assignedProjectIDs.first, forKey: .assignedProjectID)
+        try container.encodeIfPresent(templateResourceID, forKey: .templateResourceID)
         try container.encode(performanceEvaluations, forKey: .performanceEvaluations)
         try container.encode(notes, forKey: .notes)
         try container.encode(createdAt, forKey: .createdAt)

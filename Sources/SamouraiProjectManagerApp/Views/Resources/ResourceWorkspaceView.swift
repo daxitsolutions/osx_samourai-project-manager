@@ -36,6 +36,7 @@ struct ResourceWorkspaceView: View {
     @State private var inlineEditFeedbackMessage: String?
     @State private var evaluationContext: ResourceEvaluationContext?
     @State private var evaluationFeedbackMessage: String?
+    @State private var templateManagementResourceID: UUID?
     @State private var projectFavoriteFilter: ResourceProjectFavoriteFilter = .all
     @State private var sortOrder: [KeyPathComparator<Resource>] = [
         .init(\.fullName, order: .reverse)
@@ -83,6 +84,15 @@ struct ResourceWorkspaceView: View {
                                 evaluationContext = .init(resourceID: selectedResource.id)
                             } label: {
                                 Label(localized("Évaluer"), systemImage: "waveform.path.ecg.rectangle")
+                            }
+                            .disabled(isImporting)
+                        }
+
+                        if scopeMode == .globalDirectory {
+                            Button {
+                                templateManagementResourceID = selectedResource.id
+                            } label: {
+                                Label(localized("Ressources liées"), systemImage: "doc.on.doc")
                             }
                             .disabled(isImporting)
                         }
@@ -282,6 +292,18 @@ struct ResourceWorkspaceView: View {
                 ResourceDirectoryPickerSheet(
                     projectID: projectID,
                     projectName: scopedProjectName ?? ""
+                )
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { templateManagementResourceID != nil },
+            set: { if $0 == false { templateManagementResourceID = nil } }
+        )) {
+            if let tid = templateManagementResourceID, let template = store.resource(with: tid) {
+                ResourceTemplateManagementSheet(
+                    template: template,
+                    onLink: { resourceID in store.assignTemplate(resourceID: resourceID, templateID: tid) },
+                    onUnlink: { resourceID in store.unassignTemplate(resourceID: resourceID) }
                 )
             }
         }
@@ -560,6 +582,8 @@ struct ResourceWorkspaceView: View {
                             scopedProjectID: scopedProjectID,
                             isSelected: selectedResourceID.wrappedValue == resource.id,
                             isMarkedForExport: selectedResourceIDs.contains(resource.id),
+                            templateName: resource.templateResourceID.flatMap { store.resource(with: $0)?.displayName },
+                            linkedProjectResourceCount: store.projectResourcesLinkedToTemplate(resource.id).count,
                             onToggleExportSelection: {
                                 toggleResourceSelectionForExport(resource.id)
                             },
@@ -1789,6 +1813,94 @@ private enum ResourceDisplayMode: String, CaseIterable, Identifiable {
     }
 }
 
+private struct ResourceTemplateManagementSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
+    @Environment(SamouraiStore.self) private var store
+
+    let template: Resource
+    let onLink: (UUID) -> Void
+    let onUnlink: (UUID) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    LabeledContent(localized("Rôle"), value: template.displayPrimaryRole.isEmpty ? "-" : template.displayPrimaryRole)
+                    LabeledContent(localized("Département"), value: template.displayDepartment.isEmpty ? "-" : template.displayDepartment)
+                } header: {
+                    Text(template.displayName)
+                        .font(.headline)
+                }
+
+                let linked = store.projectResourcesLinkedToTemplate(template.id)
+                let candidates = store.resources.filter { r in
+                    r.id != template.id && r.assignedProjectIDs.isEmpty == false && r.templateResourceID != template.id
+                }
+
+                Section(localized("Ressources de projet liées (\(linked.count))")) {
+                    if linked.isEmpty {
+                        Text(localized("Aucune ressource de projet liée à ce template."))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(linked) { resource in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(resource.displayName)
+                                        .font(.subheadline)
+                                    Text(resource.displayPrimaryRole.isEmpty ? "-" : resource.displayPrimaryRole)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button(localized("Délier"), role: .destructive) {
+                                    onUnlink(resource.id)
+                                }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                }
+
+                if candidates.isEmpty == false {
+                    Section(localized("Lier une ressource de projet")) {
+                        ForEach(candidates) { resource in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(resource.displayName)
+                                        .font(.subheadline)
+                                    let projectNames = resource.assignedProjectIDs.compactMap { store.project(with: $0)?.name }.joined(separator: ", ")
+                                    Text(projectNames.isEmpty ? "-" : projectNames)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button(localized("Lier")) {
+                                    onLink(resource.id)
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(localized("Ressources liées au template"))
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(localized("Fermer")) { dismiss() }
+                }
+            }
+        }
+        .frame(minWidth: 560, minHeight: 480)
+    }
+
+    private func localized(_ key: String) -> String {
+        AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
+}
+
 private extension Resource {
     var assignedProjectCount: Int { assignedProjectIDs.count }
     var primaryResourceRoleSortKey: String { primaryResourceRole ?? "" }
@@ -1814,6 +1926,8 @@ private struct ResourceGridCard: View {
     let scopedProjectID: UUID?
     let isSelected: Bool
     let isMarkedForExport: Bool
+    let templateName: String?
+    let linkedProjectResourceCount: Int
     let onToggleExportSelection: () -> Void
     let onToggleFavorite: (() -> Void)?
     let onEdit: (() -> Void)?
@@ -1825,6 +1939,12 @@ private struct ResourceGridCard: View {
                     .font(.headline)
                     .onTapGesture(count: 2) { onEdit?() }
                 Spacer()
+                if linkedProjectResourceCount > 0 {
+                    Label("\(linkedProjectResourceCount)", systemImage: "doc.on.doc")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .help("Template utilisé par \(linkedProjectResourceCount) ressource(s) de projet")
+                }
                 if let scopedProjectID, resource.assignedProjectIDs.contains(scopedProjectID) {
                     Button(action: {
                         onToggleFavorite?()
@@ -1846,6 +1966,13 @@ private struct ResourceGridCard: View {
 
             Text(resource.displayPrimaryRole.isEmpty ? "Rôle non renseigné" : resource.displayPrimaryRole)
                 .foregroundStyle(.secondary)
+
+            if let templateName {
+                Label(templateName, systemImage: "doc.plaintext")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             HStack {
                 Text(resource.allocationLabel)

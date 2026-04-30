@@ -249,10 +249,38 @@ extension ResourceStore {
     }
 
     @discardableResult
+    func assignTemplate(resourceID: UUID, templateID: UUID) -> Bool {
+        guard resourceID != templateID else { return false }
+        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return false }
+        guard resources.contains(where: { $0.id == templateID }) else { return false }
+        guard resources[index].templateResourceID != templateID else { return false }
+        resources[index].templateResourceID = templateID
+        resources[index].updatedAt = .now
+        return true
+    }
+
+    @discardableResult
+    func unassignTemplate(resourceID: UUID) -> Bool {
+        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return false }
+        guard resources[index].templateResourceID != nil else { return false }
+        resources[index].templateResourceID = nil
+        resources[index].updatedAt = .now
+        return true
+    }
+
+    func projectResourcesLinkedToTemplate(_ templateID: UUID) -> [Resource] {
+        resources.filter { $0.templateResourceID == templateID }
+    }
+
+    @discardableResult
     func deleteResource(resourceID: UUID) -> Bool {
         let previousCount = resources.count
         resources.removeAll { $0.id == resourceID }
-        return resources.count != previousCount
+        guard resources.count != previousCount else { return false }
+        for index in resources.indices where resources[index].templateResourceID == resourceID {
+            resources[index].templateResourceID = nil
+        }
+        return true
     }
 
     func sortResources(_ resources: [Resource]) -> [Resource] {

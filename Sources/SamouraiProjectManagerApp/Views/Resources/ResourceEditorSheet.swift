@@ -25,6 +25,7 @@ struct ResourceEditorSheet: View {
     @State private var phone: String
     @State private var assignedProjectIDs: Set<UUID>
     @State private var notes: String
+    @State private var templateResourceID: UUID?
     @State private var didApplyPrimaryProjectDefault = false
     @State private var initialSnapshot: String?
     @State private var isShowingDismissConfirmation = false
@@ -48,6 +49,7 @@ struct ResourceEditorSheet: View {
         _email = State(initialValue: resource?.email ?? "")
         _phone = State(initialValue: resource?.phone ?? "")
         _assignedProjectIDs = State(initialValue: Set(resource?.assignedProjectIDs ?? []))
+        _templateResourceID = State(initialValue: resource?.templateResourceID)
         _notes = State(initialValue: resource?.notes ?? "")
     }
 
@@ -116,6 +118,33 @@ struct ResourceEditorSheet: View {
                             .foregroundStyle(.secondary)
                     } else {
                         Text(localized("Projet principal préaffecté automatiquement, modifiable à tout moment."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if assignedProjectIDs.isEmpty == false {
+                    Section(localized("Ressource template")) {
+                        let candidates = store.resources.filter { $0.id != resource?.id && $0.assignedProjectIDs.isEmpty }
+                        if candidates.isEmpty {
+                            Text(localized("Aucune ressource template disponible dans l'annuaire global."))
+                                .foregroundStyle(.secondary)
+                                .font(.callout)
+                        } else {
+                            Picker(localized("Template associé"), selection: $templateResourceID) {
+                                Text(localized("Aucun")).tag(UUID?.none)
+                                ForEach(candidates) { candidate in
+                                    Text(candidate.displayName).tag(UUID?.some(candidate.id))
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            if let tid = templateResourceID, let t = store.resource(with: tid) {
+                                Text(localized("Rôle : \(t.displayPrimaryRole)") + " • " + localized("Dép. : \(t.displayDepartment)"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Text(localized("Lie cette ressource de projet à un modèle de l'annuaire global (1 template → N ressources de projet)."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -190,6 +219,7 @@ struct ResourceEditorSheet: View {
             email,
             phone,
             assignedProjectIDs.map(\.uuidString).sorted().joined(separator: ","),
+            templateResourceID?.uuidString ?? "",
             notes
         ].joined(separator: "|")
     }
@@ -252,6 +282,7 @@ struct ResourceEditorSheet: View {
                 assignedProjectIDs: normalizedAssignedProjectIDs(),
                 notes: trimmedNotes
             )
+            applyTemplateLink(resourceID: resource.id)
             appState.selectedResourceID = resource.id
         } else {
             let resourceID = store.addResource(
@@ -274,6 +305,7 @@ struct ResourceEditorSheet: View {
                 assignedProjectIDs: normalizedAssignedProjectIDs(),
                 notes: trimmedNotes
             )
+            applyTemplateLink(resourceID: resourceID)
             appState.selectedResourceID = resourceID
         }
 
@@ -291,6 +323,14 @@ struct ResourceEditorSheet: View {
             get: { binding.wrappedValue ?? .now },
             set: { binding.wrappedValue = $0 }
         )
+    }
+
+    private func applyTemplateLink(resourceID: UUID) {
+        if let tid = templateResourceID {
+            store.assignTemplate(resourceID: resourceID, templateID: tid)
+        } else {
+            store.unassignTemplate(resourceID: resourceID)
+        }
     }
 
     private func normalizedAssignedProjectIDs() -> [UUID] {

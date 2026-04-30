@@ -3077,6 +3077,20 @@ final class SamouraiStore {
         }
     }
 
+    func assignTemplate(resourceID: UUID, templateID: UUID) {
+        let didUpdate = resourceStore.assignTemplate(resourceID: resourceID, templateID: templateID)
+        if didUpdate { persist() }
+    }
+
+    func unassignTemplate(resourceID: UUID) {
+        let didUpdate = resourceStore.unassignTemplate(resourceID: resourceID)
+        if didUpdate { persist() }
+    }
+
+    func projectResourcesLinkedToTemplate(_ templateID: UUID) -> [Resource] {
+        resourceStore.projectResourcesLinkedToTemplate(templateID)
+    }
+
     func deleteResource(resourceID: UUID) {
         let didDelete = resourceStore.deleteResource(resourceID: resourceID)
         guard didDelete else { return }

@@ -748,65 +748,33 @@ private struct ActionEditorSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField(localized("Titre"), text: $title)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(localized(action == nil ? "Nouvelle action PM" : "Modifier l'action PM"))
+                        .font(.title2.weight(.semibold))
+                        .padding(.horizontal, 24)
+                        .padding(.top, 20)
+                        .padding(.bottom, 16)
 
-                    DatePicker(localized("Date d'échéance"), selection: $dueDate, displayedComponents: [.date])
+                    identificationCard
+                        .padding(.horizontal, 16)
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(localized("Description détaillée"))
-                            .foregroundStyle(.secondary)
-                        TextEditor(text: $details)
-                            .frame(minHeight: 140)
+                    sectionLabel(localized("Paramètres"))
+
+                    parametersCard
+                        .padding(.horizontal, 16)
+
+                    if let action {
+                        sectionLabel(localized("Historique"))
+
+                        historyCard(for: action.id)
+                            .padding(.horizontal, 16)
                     }
 
-                    severitySlider
-
-                    Picker(localized("Statut"), selection: $status) {
-                        ForEach(ActionStatus.allCases) { value in
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(value.tintColor)
-                                    .frame(width: 9, height: 9)
-                                Text(value.label.appLocalized(language: appState.interfaceLanguage))
-                            }
-                            .tag(value)
-                        }
-                    }
-
-                    if action != nil {
-                        Picker(localized("Flux"), selection: $flow) {
-                            ForEach(ActionFlow.allCases) { value in
-                                Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
-                            }
-                        }
-                    }
-
-                    Picker(localized("Projet"), selection: $projectID) {
-                        Text(localized("Sans projet"))
-                            .tag(Optional<UUID>.none)
-                        ForEach(store.projects) { project in
-                            Text(project.name).tag(Optional(project.id))
-                        }
-                    }
-
-                    if appState.resolvedPrimaryProjectID(in: store) == nil {
-                        Text(localized("Aucun Projet Principal défini: sélection projet manuelle."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text(localized("Projet principal propagé automatiquement, modifiable si nécessaire."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if let action {
-                    historySection(for: action.id)
+                    Spacer(minLength: 24)
                 }
             }
-            .navigationTitle(appState.localized(action == nil ? "Nouvelle action PM" : "Modifier l'action PM"))
+            .navigationTitle("")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(localized("Annuler")) {
@@ -818,6 +786,8 @@ private struct ActionEditorSheet: View {
                     Button(appState.localized(action == nil ? "Créer" : "Enregistrer")) {
                         save()
                     }
+                    .disabled(!canSave)
+                    .keyboardShortcut(.return, modifiers: .command)
                 }
             }
             .alert(localized("Validation"), isPresented: Binding(
@@ -836,13 +806,9 @@ private struct ActionEditorSheet: View {
         }
         .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
             if canSave {
-                Button(localized("Enregistrer")) {
-                    save()
-                }
+                Button(localized("Enregistrer")) { save() }
             }
-            Button(localized("Ignorer les modifications"), role: .destructive) {
-                dismiss()
-            }
+            Button(localized("Ignorer les modifications"), role: .destructive) { dismiss() }
             Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
             Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
@@ -853,47 +819,294 @@ private struct ActionEditorSheet: View {
         }
     }
 
-    private var severitySlider: some View {
-        let binding = Binding<Double>(
-            get: { Double(priority.severityLevel) },
-            set: { priority = ActionPriority(severityLevel: Int($0.rounded())) ?? priority }
-        )
+    // MARK: - Cards
 
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(localized("Sévérité"))
-                Spacer()
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(priority.severityColor)
-                        .frame(width: 10, height: 10)
-                    Text(priority.label.appLocalized(language: appState.interfaceLanguage))
-                        .fontWeight(.medium)
-                        .foregroundStyle(priority.severityColor)
+    private var identificationCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: 16) {
+                field(label: localized("Titre")) {
+                    TextField(localized("Nom de l'action…"), text: $title)
+                        .textFieldStyle(.plain)
+                        .font(.body.weight(.medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .strokeBorder(
+                                    title.isEmpty ? Color.accentColor.opacity(0.5) : Color.secondary.opacity(0.22),
+                                    lineWidth: 1
+                                )
+                        )
                 }
-            }
 
-            Slider(value: binding, in: 1...4, step: 1)
-                .tint(priority.severityColor)
+                field(label: localized("Description")) {
+                    ZStack(alignment: .topLeading) {
+                        TextEditor(text: $details)
+                            .font(.body)
+                            .frame(minHeight: 110)
+                            .scrollContentBackground(.hidden)
+                            .padding(6)
+                            .background(Color(nsColor: .textBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(Color.secondary.opacity(0.22), lineWidth: 1)
+                            )
 
-            HStack {
-                ForEach(ActionPriority.allCases) { level in
-                    Text(level.label.appLocalized(language: appState.interfaceLanguage))
-                        .font(.caption2)
-                        .foregroundStyle(level == priority ? level.severityColor : .secondary)
-                        .frame(maxWidth: .infinity, alignment: alignment(for: level))
+                        if details.isEmpty {
+                            Text(localized("Décrivez le contexte, les attentes, les contraintes…"))
+                                .font(.body)
+                                .foregroundStyle(Color(nsColor: .placeholderTextColor))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 12)
+                                .allowsHitTesting(false)
+                        }
+                    }
                 }
             }
         }
     }
 
-    private func alignment(for level: ActionPriority) -> Alignment {
+    private var parametersCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: 0) {
+                field(label: localized("Date d'échéance")) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar")
+                            .foregroundStyle(.secondary)
+                        DatePicker("", selection: $dueDate, displayedComponents: [.date])
+                            .labelsHidden()
+                            .environment(\.locale, Locale(identifier: "fr_FR"))
+                    }
+                }
+
+                cardDivider
+
+                field(label: localized("Statut")) {
+                    Picker("", selection: $status) {
+                        ForEach(ActionStatus.allCases) { value in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(value.tintColor)
+                                    .frame(width: 8, height: 8)
+                                Text(value.label.appLocalized(language: appState.interfaceLanguage))
+                            }
+                            .tag(value)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 220, alignment: .leading)
+                }
+
+                cardDivider
+
+                severityField
+
+                cardDivider
+
+                field(label: localized("Projet")) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Picker("", selection: $projectID) {
+                            Text(localized("Sans projet")).tag(Optional<UUID>.none)
+                            ForEach(store.projects) { project in
+                                Text(project.name).tag(Optional(project.id))
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 300, alignment: .leading)
+
+                        if appState.resolvedPrimaryProjectID(in: store) != nil {
+                            Label(
+                                localized("Projet principal propagé automatiquement."),
+                                systemImage: "link"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(Color.secondary)
+                        } else {
+                            Text(localized("Aucun Projet Principal défini — sélection manuelle."))
+                                .font(.caption)
+                                .foregroundStyle(Color.secondary)
+                        }
+                    }
+                }
+
+                if action != nil {
+                    cardDivider
+
+                    field(label: localized("Flux")) {
+                        Picker("", selection: $flow) {
+                            ForEach(ActionFlow.allCases) { value in
+                                Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: 180, alignment: .leading)
+                    }
+                }
+            }
+        }
+    }
+
+    private var severityField: some View {
+        let binding = Binding<Double>(
+            get: { Double(priority.severityLevel) },
+            set: { priority = ActionPriority(severityLevel: Int($0.rounded())) ?? priority }
+        )
+
+        return field(label: localized("Sévérité")) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(sliderColor(for: priority))
+                        .frame(width: 10, height: 10)
+                    Text(priority.label.appLocalized(language: appState.interfaceLanguage))
+                        .fontWeight(.medium)
+                        .foregroundStyle(sliderColor(for: priority))
+                }
+
+                Slider(value: binding, in: 1...4, step: 1)
+                    .tint(sliderColor(for: priority))
+
+                HStack(spacing: 0) {
+                    ForEach(ActionPriority.allCases) { level in
+                        Button {
+                            priority = level
+                        } label: {
+                            Text(level.label.appLocalized(language: appState.interfaceLanguage))
+                                .font(.caption2)
+                                .foregroundStyle(
+                                    level == priority
+                                    ? sliderColor(for: level)
+                                    : Color.secondary
+                                )
+                                .frame(maxWidth: .infinity, alignment: sliderLabelAlignment(for: level))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func historyCard(for actionID: UUID) -> some View {
+        let entries = store.action(with: actionID)?.historyEntriesChronological ?? []
+
+        card {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField(localized("Ajouter un commentaire"), text: $newCommentText, axis: .vertical)
+                        .lineLimit(2...4)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack {
+                        Spacer()
+                        Button(localized("Ajouter au journal")) {
+                            let trimmed = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard trimmed.isEmpty == false else { return }
+                            store.addActionComment(actionID: actionID, text: trimmed)
+                            newCommentText = ""
+                        }
+                        .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+
+                if entries.isEmpty {
+                    Text(localized("Aucune entrée d'historique pour le moment."))
+                        .foregroundStyle(.secondary)
+                        .font(.callout)
+                } else {
+                    Divider()
+                    ForEach(entries) { entry in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: entry.kind.symbolName)
+                                .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
+                                .frame(width: 18)
+                                .padding(.top, 2)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(entry.text).font(.callout)
+                                HStack(spacing: 6) {
+                                    Text(entry.kind.label.appLocalized(language: appState.interfaceLanguage))
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(Color.secondary)
+                                    Text("•").foregroundStyle(.tertiary)
+                                    Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.caption)
+                                        .foregroundStyle(Color.secondary)
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Layout helpers
+
+    @ViewBuilder
+    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(16)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5)
+            )
+    }
+
+    @ViewBuilder
+    private func field<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.primary.opacity(0.72))
+            content()
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var cardDivider: some View {
+        Divider().padding(.vertical, 2)
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.secondary)
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
+            .padding(.bottom, 6)
+    }
+
+    // MARK: - Severity helpers
+
+    private func sliderColor(for priority: ActionPriority) -> Color {
+        switch priority {
+        case .trivial: Color(.sRGB, red: 0/255,   green: 175/255, blue: 95/255,  opacity: 1)
+        case .minor:   Color(.sRGB, red: 0/255,   green: 175/255, blue: 95/255,  opacity: 1)
+        case .major:   Color(.sRGB, red: 245/255, green: 166/255, blue: 35/255,  opacity: 1)
+        case .critical: Color(.sRGB, red: 232/255, green: 65/255,  blue: 65/255,  opacity: 1)
+        }
+    }
+
+    private func sliderLabelAlignment(for level: ActionPriority) -> Alignment {
         switch level {
         case .trivial:  .leading
         case .critical: .trailing
         default:        .center
         }
     }
+
+    // MARK: - Logic
 
     private var canSave: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -917,9 +1130,7 @@ private struct ActionEditorSheet: View {
     }
 
     private func captureInitialSnapshotIfNeeded() {
-        if initialSnapshot == nil {
-            initialSnapshot = snapshot
-        }
+        if initialSnapshot == nil { initialSnapshot = snapshot }
     }
 
     private func requestDismiss() {
@@ -965,62 +1176,6 @@ private struct ActionEditorSheet: View {
         }
 
         dismiss()
-    }
-
-    @ViewBuilder
-    private func historySection(for actionID: UUID) -> some View {
-        let currentAction = store.action(with: actionID)
-        let entries = currentAction?.historyEntriesChronological ?? []
-
-        Section(localized("Historique")) {
-            VStack(alignment: .leading, spacing: 8) {
-                TextField(localized("Ajouter un commentaire"), text: $newCommentText, axis: .vertical)
-                    .lineLimit(2...4)
-                    .textFieldStyle(.roundedBorder)
-
-                HStack {
-                    Spacer()
-                    Button(localized("Ajouter au journal")) {
-                        let trimmed = newCommentText.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard trimmed.isEmpty == false else { return }
-                        store.addActionComment(actionID: actionID, text: trimmed)
-                        newCommentText = ""
-                    }
-                    .disabled(newCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-
-            if entries.isEmpty {
-                Text(localized("Aucune entrée d'historique pour le moment."))
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-            } else {
-                ForEach(entries) { entry in
-                    HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: entry.kind.symbolName)
-                            .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
-                            .frame(width: 18)
-                            .padding(.top, 2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.text)
-                                .font(.callout)
-                            HStack(spacing: 6) {
-                                Text(entry.kind.label.appLocalized(language: appState.interfaceLanguage))
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(.secondary)
-                                Text("•")
-                                    .foregroundStyle(.tertiary)
-                                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.vertical, 2)
-                }
-            }
-        }
     }
 
     private func applyPrimaryProjectDefaultIfNeeded() {

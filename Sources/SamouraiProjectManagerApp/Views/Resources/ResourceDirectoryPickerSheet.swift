@@ -3,6 +3,7 @@ import SwiftUI
 struct ResourceDirectoryPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SamouraiStore.self) private var store
+    @Environment(AppState.self) private var appState
 
     let projectID: UUID
     let projectName: String
@@ -21,27 +22,23 @@ struct ResourceDirectoryPickerSheet: View {
             }
             .frame(minWidth: 560, idealWidth: 680, minHeight: 480, idealHeight: 620)
             .navigationTitle(localized("Ajouter depuis l'annuaire"))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(localized("Fermer")) { dismiss() }
-                }
-            }
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(localized("Sélectionner une ou plusieurs ressources de l'annuaire global à affecter à \\(projectName)."))
+        VStack(alignment: .leading, spacing: 16) {
+            Text(localized("Sélectionner une ou plusieurs ressources de l'annuaire global à affecter à ") + projectName + ".")
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(secondaryTextColor)
 
             TextField(localized("Rechercher dans l'annuaire"), text: $searchText)
                 .textFieldStyle(.roundedBorder)
+                .frame(minHeight: 28)
 
             HStack {
-                Text(localized("\\(availableResources.count) ressource(s) disponible(s) — \\(selectedResourceIDs.count) sélectionnée(s)"))
+                Text("\(availableResources.count) " + localized("ressource(s) disponible(s)") + " — \(selectedResourceIDs.count) " + localized("sélectionnée(s)"))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(secondaryTextColor)
                 Spacer()
                 if selectedResourceIDs.isEmpty == false {
                     Button(localized("Tout désélectionner")) { selectedResourceIDs.removeAll() }
@@ -50,72 +47,47 @@ struct ResourceDirectoryPickerSheet: View {
                 }
             }
         }
-        .padding(16)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
     }
 
     @ViewBuilder
     private var content: some View {
         if store.resources.isEmpty {
             ContentUnavailableView(
-                "Annuaire vide",
+                localized("Annuaire vide"),
                 systemImage: "person.3",
                 description: Text(localized("Ajoute des ressources dans l'annuaire global avant de les affecter à un projet."))
             )
         } else if availableResources.isEmpty {
             ContentUnavailableView(
-                "Toutes les ressources sont déjà affectées",
+                localized("Toutes les ressources sont déjà affectées"),
                 systemImage: "checkmark.seal",
                 description: Text(localized("Aucune ressource disponible dans l'annuaire n'est actuellement libre pour ce projet."))
             )
         } else if filteredResources.isEmpty {
             ContentUnavailableView(
-                "Aucun résultat",
+                localized("Aucun résultat"),
                 systemImage: "magnifyingglass",
                 description: Text(localized("Ajuste la recherche pour retrouver une ressource."))
             )
         } else {
-            List(filteredResources, id: \.id) { resource in
-                row(for: resource)
-                    .contentShape(Rectangle())
-                    .onTapGesture { toggleSelection(resource.id) }
-            }
-            .listStyle(.inset)
-        }
-    }
-
-    private func row(for resource: Resource) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: selectedResourceIDs.contains(resource.id) ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(selectedResourceIDs.contains(resource.id) ? Color.accentColor : Color.secondary)
-                .font(.title3)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(resource.displayName)
-                    .font(.body.weight(.medium))
-                HStack(spacing: 8) {
-                    if resource.jobTitle.isEmpty == false {
-                        Text(resource.jobTitle)
-                    }
-                    if resource.department.isEmpty == false {
-                        Text("·")
-                        Text(resource.department)
-                    }
-                    if resource.email.isEmpty == false {
-                        Text("·")
-                        Text(resource.email)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(filteredResources, id: \.id) { resource in
+                        ResourceDirectoryRow(
+                            resource: resource,
+                            isSelected: selectedResourceIDs.contains(resource.id),
+                            secondaryColor: secondaryTextColor,
+                            assignedLabel: "\(resource.assignedProjectIDs.count) " + localized("projet(s)")
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture { toggleSelection(resource.id) }
+                        Divider().padding(.horizontal, 24)
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
-
-            Spacer()
-
-            Text(localized("\\(resource.assignedProjectIDs.count) projet(s)"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
     }
 
     private var footer: some View {
@@ -123,12 +95,15 @@ struct ResourceDirectoryPickerSheet: View {
             Spacer()
             Button(localized("Annuler")) { dismiss() }
                 .keyboardShortcut(.cancelAction)
+                .controlSize(.large)
             Button(localized("Ajouter au projet")) { applySelection() }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
                 .disabled(selectedResourceIDs.isEmpty)
         }
-        .padding(16)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
     }
 
     private var availableResources: [Resource] {
@@ -163,9 +138,72 @@ struct ResourceDirectoryPickerSheet: View {
         dismiss()
     }
 
-    @Environment(AppState.self) private var appState
+    private var secondaryTextColor: Color {
+        Color.primary.opacity(0.72)
+    }
 
     private func localized(_ key: String) -> String {
         AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
+}
+
+private struct ResourceDirectoryRow: View {
+    let resource: Resource
+    let isSelected: Bool
+    let secondaryColor: Color
+    let assignedLabel: String
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                .font(.title3)
+                .frame(width: 24, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(resource.displayName)
+                    .font(.body.weight(.semibold))
+                    .lineLimit(1)
+                Text(roleLine)
+                    .font(.caption)
+                    .foregroundStyle(secondaryColor)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 12)
+
+            Text(assignedLabel)
+                .font(.caption)
+                .foregroundStyle(secondaryColor)
+                .frame(minWidth: 80, alignment: .trailing)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 10)
+        .frame(minHeight: 44)
+        .background(rowBackground)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+
+    private var roleLine: String {
+        var parts: [String] = []
+        if resource.jobTitle.isEmpty == false { parts.append(resource.jobTitle) }
+        if resource.department.isEmpty == false { parts.append(resource.department) }
+        if resource.email.isEmpty == false { parts.append(resource.email) }
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var rowBackground: some View {
+        if isSelected {
+            Color.accentColor.opacity(0.12)
+        } else if isHovered {
+            Color.primary.opacity(0.06)
+        } else {
+            Color.clear
+        }
     }
 }

@@ -28,6 +28,7 @@ struct ProjectActivityEditorSheet: View {
     @State private var parentSelectionQuery = ""
     @State private var initialSnapshot: String?
     @State private var isShowingDismissConfirmation = false
+    @State private var titleTouched = false
 
     init(
         projectID: UUID,
@@ -70,114 +71,203 @@ struct ProjectActivityEditorSheet: View {
         }
         let parentCandidates = projectActivities.filter { $0.hierarchyLevel.sortRank < hierarchyLevel.sortRank }
         let actionLinkingIsAvailable = resolvedScenarioID == store.defaultPlanningScenarioID(for: projectID)
+        let projectDeliverables = store.project(with: projectID)?.deliverables ?? []
+        let majorDeliverables = projectDeliverables.filter(\.isMainDeliverable)
+        let titleIsEmpty = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         NavigationStack {
-            Form {
-                Section(localized("Métadonnées activité")) {
-                    TextField(localized("Titre de l'activité"), text: $title)
-                    if let resolvedScenario {
-                        LabeledContent("Scénario") {
-                            Text(resolvedScenario.name)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Picker(localized("Type hiérarchique"), selection: $hierarchyLevel) {
-                        ForEach(ActivityHierarchyLevel.allCases) { level in
-                            Text(level.label.appLocalized(language: appState.interfaceLanguage)).tag(level)
-                        }
-                    }
-                    SearchableSingleSelectDropdown(
-                        title: "Activité parente",
-                        placeholder: "Rechercher une activité parente",
-                        items: parentCandidates,
-                        selectedID: $parentActivityID,
-                        query: $parentSelectionQuery,
-                        itemLabel: { $0.displayTitle }
-                    )
-                    Toggle(localized("Pas de date (activité chapeau)"), isOn: $isDateless)
-                    if isDateless {
-                        Label(localized("Cette activité regroupe d'autres activités sans avoir de dates propres."), systemImage: "calendar.badge.minus")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Toggle(localized("Marquer comme jalon"), isOn: $isMilestone)
-                        if isMilestone {
-                            DatePicker(localized("Date de fin (jalon)"), selection: $estimatedEndDate, displayedComponents: .date)
-                        } else {
-                            DatePicker(localized("Date de début estimée"), selection: $estimatedStartDate, displayedComponents: .date)
-                            if !selectedPredecessorIDs.isEmpty {
-                                Label(localized("Date positionnée depuis le prédécesseur"), systemImage: "link")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            DatePicker(localized("Date de fin estimée"), selection: $estimatedEndDate, displayedComponents: .date)
-                        }
-                        Toggle(localized("Fin réelle renseignée"), isOn: $includeActualEndDate)
-                        if includeActualEndDate {
-                            DatePicker(localized("Date de fin réelle"), selection: $actualEndDate, displayedComponents: .date)
-                        }
-                    }
-                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
 
-                Section(localized("Actions rattachées")) {
-                    if actionLinkingIsAvailable == false {
-                        Text(localized("Les rattachements d'actions restent pilotés sur le scénario principal pour éviter les croisements entre scénarios."))
-                            .foregroundStyle(.secondary)
-                    } else if projectActions.isEmpty {
-                        Text(localized("Aucune action disponible pour ce projet."))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        SearchableMultiSelectDropdown(
-                            title: "Sélectionner les actions",
-                            placeholder: "Rechercher une action",
-                            items: projectActions,
-                            selectedIDs: $selectedActionIDs,
-                            query: $actionSelectionQuery,
-                            itemLabel: { $0.displayTitle }
-                        )
-                    }
-                }
-
-                Section(localized("Livrables justifiés par l'activité")) {
-                    let projectDeliverables = store.project(with: projectID)?.deliverables ?? []
-                    let majorDeliverables = projectDeliverables.filter(\.isMainDeliverable)
-                    if majorDeliverables.isEmpty {
-                        Text(localized("Aucun livrable principal disponible dans le scope."))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(majorDeliverables) { deliverable in
-                            Toggle(
-                                deliverable.title,
-                                isOn: Binding(
-                                    get: { selectedDeliverableIDs.contains(deliverable.id) },
-                                    set: { isSelected in
-                                        if isSelected {
-                                            selectedDeliverableIDs.insert(deliverable.id)
-                                        } else {
-                                            selectedDeliverableIDs.remove(deliverable.id)
+                    // ── Métadonnées ──────────────────────────────────────
+                    formSection(title: localized("Métadonnées activité")) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            fieldStack(label: localized("Titre de l'activité"), required: true) {
+                                TextField(localized("Nommez l'activité..."), text: $title)
+                                    .textFieldStyle(.roundedBorder)
+                                    .overlay(alignment: .trailing) {
+                                        if titleTouched && titleIsEmpty {
+                                            Image(systemName: "exclamationmark.circle.fill")
+                                                .foregroundStyle(.red)
+                                                .padding(.trailing, 6)
                                         }
                                     }
+                                    .onSubmit { titleTouched = true }
+                                if titleTouched && titleIsEmpty {
+                                    Label(localized("Le titre est obligatoire"), systemImage: "exclamationmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+                            }
+
+                            if let resolvedScenario {
+                                fieldStack(label: localized("Scénario")) {
+                                    Text(resolvedScenario.name)
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 6)
+                                        .background(.background)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .overlay {
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .stroke(.separator, lineWidth: 0.5)
+                                        }
+                                }
+                            }
+
+                            HStack(alignment: .top, spacing: 16) {
+                                fieldStack(label: localized("Type hiérarchique")) {
+                                    Picker("", selection: $hierarchyLevel) {
+                                        ForEach(ActivityHierarchyLevel.allCases) { level in
+                                            Text(level.label.appLocalized(language: appState.interfaceLanguage)).tag(level)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+
+                                fieldStack(label: localized("Activité parente")) {
+                                    SearchableSingleSelectDropdown(
+                                        title: localized("Sélectionner..."),
+                                        placeholder: localized("Rechercher une activité parente"),
+                                        items: parentCandidates,
+                                        selectedID: $parentActivityID,
+                                        query: $parentSelectionQuery,
+                                        itemLabel: { $0.displayTitle }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Planification ────────────────────────────────────
+                    formSection(title: localized("Planification")) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            Toggle(localized("Pas de date (activité chapeau)"), isOn: $isDateless)
+
+                            if isDateless {
+                                Label(
+                                    localized("Cette activité regroupe d'autres activités sans avoir de dates propres."),
+                                    systemImage: "calendar.badge.minus"
                                 )
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            } else {
+                                Toggle(localized("Marquer comme jalon"), isOn: $isMilestone)
+
+                                Divider()
+
+                                if isMilestone {
+                                    fieldStack(label: localized("Date de fin (jalon)")) {
+                                        DatePicker("", selection: $estimatedEndDate, displayedComponents: .date)
+                                            .labelsHidden()
+                                    }
+                                } else {
+                                    HStack(alignment: .top, spacing: 16) {
+                                        fieldStack(label: localized("Date de début estimée")) {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                DatePicker("", selection: $estimatedStartDate, displayedComponents: .date)
+                                                    .labelsHidden()
+                                                if !selectedPredecessorIDs.isEmpty {
+                                                    Label(
+                                                        localized("Positionnée depuis le prédécesseur"),
+                                                        systemImage: "link"
+                                                    )
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                        }
+
+                                        fieldStack(label: localized("Date de fin estimée")) {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                DatePicker("", selection: $estimatedEndDate, displayedComponents: .date)
+                                                    .labelsHidden()
+                                                if estimatedEndDate < estimatedStartDate {
+                                                    Label(
+                                                        localized("La fin doit être après le début"),
+                                                        systemImage: "exclamationmark.triangle.fill"
+                                                    )
+                                                    .font(.caption)
+                                                    .foregroundStyle(.orange)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Divider()
+
+                                Toggle(localized("Fin réelle renseignée"), isOn: $includeActualEndDate)
+                                if includeActualEndDate {
+                                    fieldStack(label: localized("Date de fin réelle")) {
+                                        DatePicker("", selection: $actualEndDate, displayedComponents: .date)
+                                            .labelsHidden()
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Actions rattachées ───────────────────────────────
+                    formSection(title: localized("Actions rattachées")) {
+                        if !actionLinkingIsAvailable {
+                            infoText(localized("Les rattachements d'actions restent pilotés sur le scénario principal pour éviter les croisements entre scénarios."))
+                        } else if projectActions.isEmpty {
+                            infoText(localized("Aucune action disponible pour ce projet."))
+                        } else {
+                            SearchableMultiSelectDropdown(
+                                title: localized("Sélectionner les actions"),
+                                placeholder: localized("Rechercher une action"),
+                                items: projectActions,
+                                selectedIDs: $selectedActionIDs,
+                                query: $actionSelectionQuery,
+                                itemLabel: { $0.displayTitle }
                             )
                         }
                     }
-                }
 
-                Section(localized("Dépendances (A terminé avant B)")) {
-                    if projectActivities.isEmpty {
-                        Text(localized("Aucune autre activité disponible."))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        SearchableMultiSelectDropdown(
-                            title: "Sélectionner les dépendances",
-                            placeholder: "Rechercher une activité",
-                            items: projectActivities,
-                            selectedIDs: $selectedPredecessorIDs,
-                            query: $predecessorSelectionQuery,
-                            itemLabel: { $0.displayTitle }
-                        )
+                    // ── Livrables ────────────────────────────────────────
+                    formSection(title: localized("Livrables justifiés par l'activité")) {
+                        if majorDeliverables.isEmpty {
+                            infoText(localized("Aucun livrable principal disponible dans le scope."))
+                        } else {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(majorDeliverables) { deliverable in
+                                    Toggle(
+                                        deliverable.title,
+                                        isOn: Binding(
+                                            get: { selectedDeliverableIDs.contains(deliverable.id) },
+                                            set: { isSelected in
+                                                if isSelected { selectedDeliverableIDs.insert(deliverable.id) }
+                                                else { selectedDeliverableIDs.remove(deliverable.id) }
+                                            }
+                                        )
+                                    )
+                                }
+                            }
+                        }
                     }
+
+                    // ── Dépendances ──────────────────────────────────────
+                    formSection(title: localized("Dépendances (A terminé avant B)")) {
+                        if projectActivities.isEmpty {
+                            infoText(localized("Aucune autre activité disponible."))
+                        } else {
+                            SearchableMultiSelectDropdown(
+                                title: localized("Sélectionner les dépendances"),
+                                placeholder: localized("Rechercher une activité"),
+                                items: projectActivities,
+                                selectedIDs: $selectedPredecessorIDs,
+                                query: $predecessorSelectionQuery,
+                                itemLabel: { $0.displayTitle }
+                            )
+                        }
+                    }
+
                 }
+                .padding(24)
             }
             .navigationTitle(activity == nil ? "Nouvelle activité" : "Modifier activité")
             .onChange(of: isMilestone) { _, isNowMilestone in
@@ -217,29 +307,27 @@ struct ProjectActivityEditorSheet: View {
                         requestDismiss()
                     }
                 }
-
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(activity == nil ? "Créer" : "Enregistrer") {
+                    Button(activity == nil ? localized("Créer") : localized("Enregistrer")) {
+                        titleTouched = true
+                        guard !formIsInvalid else { return }
                         submit()
                     }
+                    .buttonStyle(.borderedProminent)
                     .disabled(formIsInvalid)
                 }
             }
         }
-        .frame(minWidth: 600, minHeight: 520)
+        .frame(minWidth: 640, minHeight: 560)
         .interactiveDismissDisabled(hasUnsavedChanges)
         .onExitCommand {
             requestDismiss()
         }
         .confirmationDialog(localized("Fermer le formulaire ?"), isPresented: $isShowingDismissConfirmation, titleVisibility: .visible) {
-            if formIsInvalid == false {
-                Button(localized("Enregistrer")) {
-                    submit()
-                }
+            if !formIsInvalid {
+                Button(localized("Enregistrer")) { submit() }
             }
-            Button(localized("Ignorer les modifications"), role: .destructive) {
-                dismiss()
-            }
+            Button(localized("Ignorer les modifications"), role: .destructive) { dismiss() }
             Button(localized("Continuer l'édition"), role: .cancel) {}
         } message: {
             Text(localized("Les informations déjà saisies peuvent être enregistrées ou abandonnées."))
@@ -249,9 +337,53 @@ struct ProjectActivityEditorSheet: View {
         }
     }
 
+    // ── Helpers UI ───────────────────────────────────────────────────────
+
+    @ViewBuilder
+    private func formSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            content()
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    @ViewBuilder
+    private func fieldStack<Content: View>(label: String, required: Bool = false, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 2) {
+                Text(label)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                if required {
+                    Text("*")
+                        .font(.subheadline)
+                        .foregroundStyle(.red)
+                }
+            }
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func infoText(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+    }
+
+    // ── Logique ──────────────────────────────────────────────────────────
+
     private var formIsInvalid: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || (!isDateless && isMilestone == false && estimatedEndDate < estimatedStartDate)
+            || (!isDateless && !isMilestone && estimatedEndDate < estimatedStartDate)
     }
 
     private var snapshot: String {

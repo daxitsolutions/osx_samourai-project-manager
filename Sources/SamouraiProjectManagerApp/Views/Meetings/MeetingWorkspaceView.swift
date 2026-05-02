@@ -429,10 +429,11 @@ private struct MeetingEditorSheet: View {
     @State private var transcript: String
     @State private var aiSummary: String
     @State private var validationMessage: String?
-    @FocusState private var focusedField: MeetingEditorField?
     @State private var didApplyPrimaryProjectDefault = false
     @State private var initialSnapshot: String?
     @State private var isShowingDismissConfirmation = false
+    @State private var titleTouched = false
+    @FocusState private var titleFocused: Bool
 
     init(meeting: ProjectMeeting?, prefill: MeetingEditorPrefill?) {
         self.meeting = meeting
@@ -458,60 +459,160 @@ private struct MeetingEditorSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section(localized("Informations réunion")) {
-                    TextField(localized("Titre"), text: $title)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
 
-                    Picker(localized("Projet"), selection: $projectID) {
-                        Text(localized("Sans projet"))
-                            .tag(Optional<UUID>.none)
-                        ForEach(store.projects) { project in
-                            Text(project.name).tag(Optional(project.id))
+                    // ── Identification ────────────────────────────────
+                    formSection(title: localized("Identification")) {
+                        VStack(alignment: .leading, spacing: 16) {
+
+                            fieldStack(label: localized("Titre de la réunion"), required: true) {
+                                TextField(localized("Nommez la réunion..."), text: $title)
+                                    .textFieldStyle(.roundedBorder)
+                                    .focused($titleFocused)
+                                    .overlay(alignment: .trailing) {
+                                        if titleTouched && titleIsEmpty {
+                                            Image(systemName: "exclamationmark.circle.fill")
+                                                .foregroundStyle(.red)
+                                                .padding(.trailing, 6)
+                                        }
+                                    }
+                                    .onChange(of: titleFocused) { _, focused in
+                                        if !focused { titleTouched = true }
+                                    }
+                                if titleTouched && titleIsEmpty {
+                                    Label(localized("Le titre est obligatoire"), systemImage: "exclamationmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+                            }
+
+                            fieldStack(label: localized("Projet")) {
+                                Picker("", selection: $projectID) {
+                                    Text(localized("Sans projet")).tag(Optional<UUID>.none)
+                                    ForEach(store.projects) { project in
+                                        Text(project.name).tag(Optional(project.id))
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            HStack(alignment: .top, spacing: 16) {
+                                fieldStack(label: localized("Date et heure")) {
+                                    DatePicker("", selection: $meetingAt)
+                                        .labelsHidden()
+                                }
+
+                                fieldStack(label: localized("Durée")) {
+                                    HStack(spacing: 8) {
+                                        TextField("60", text: $durationMinutesText)
+                                            .textFieldStyle(.roundedBorder)
+                                            .frame(width: 72)
+                                        Text(localized("min"))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    if durationIsInvalid {
+                                        Label(localized("Nombre positif requis"), systemImage: "exclamationmark.triangle.fill")
+                                            .font(.caption)
+                                            .foregroundStyle(.orange)
+                                    }
+                                }
+                            }
+
+                            HStack(alignment: .top, spacing: 16) {
+                                fieldStack(label: localized("Format")) {
+                                    Picker("", selection: $mode) {
+                                        ForEach(MeetingMode.allCases) { m in
+                                            Label(
+                                                m.label.appLocalized(language: appState.interfaceLanguage),
+                                                systemImage: m.systemImage
+                                            ).tag(m)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+
+                                fieldStack(label: localized("Lieu ou lien visio")) {
+                                    TextField(localized("Salle, URL visio..."), text: $locationOrLink)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                            }
                         }
                     }
 
-                    DatePicker(localized("Date et heure"), selection: $meetingAt)
+                    // ── Personnes ─────────────────────────────────────
+                    formSection(title: localized("Personnes")) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            ResourceAutocompleteInput(
+                                label: localized("Organisateur"),
+                                placeholder: localized("Nom de l'organisateur..."),
+                                text: $organizer,
+                                multiValue: false,
+                                resources: store.resources
+                            )
 
-                    TextField(localized("Durée (minutes)"), text: $durationMinutesText)
+                            ResourceAutocompleteInput(
+                                label: localized("Participants"),
+                                placeholder: localized("Séparez les noms par des virgules..."),
+                                text: $participants,
+                                multiValue: true,
+                                resources: store.resources
+                            )
 
-                    Picker(localized("Type"), selection: $mode) {
-                        ForEach(MeetingMode.allCases) { value in
-                            Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
+                            Text(localized("Tapez les premières lettres pour voir les suggestions depuis l'annuaire des ressources."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
-                    TextField(localized("Organisateur"), text: $organizer)
-                    TextField(localized("Participants"), text: $participants)
-                    TextField(localized("Lieu ou lien visio"), text: $locationOrLink)
-                    TextField(localized("Notes"), text: $notes, axis: .vertical)
-                        .lineLimit(2...4)
-                }
+                    // ── Contenu ───────────────────────────────────────
+                    formSection(title: localized("Contenu")) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            fieldStack(label: localized("Notes")) {
+                                PlaceholderTextEditor(
+                                    text: $notes,
+                                    placeholder: localized("Points-clés abordés, remarques..."),
+                                    minHeight: 80
+                                )
+                            }
 
-                Section(localized("Compte Rendu Synthétique (IA)")) {
-                    TextEditor(text: $aiSummary)
-                        .frame(minHeight: 140)
-                        .focused($focusedField, equals: .aiSummary)
-                        .onKeyPress(.tab) {
-                            focusedField = .transcript
-                            return .handled
+                            fieldStack(label: localized("Compte Rendu Synthétique (IA)")) {
+                                PlaceholderTextEditor(
+                                    text: $aiSummary,
+                                    placeholder: localized("Résumé généré ou saisi manuellement..."),
+                                    minHeight: 140
+                                )
+                            }
+
+                            fieldStack(label: localized("Transcript Brut")) {
+                                PlaceholderTextEditor(
+                                    text: $transcript,
+                                    placeholder: localized("Copiez ici le transcript complet de la réunion..."),
+                                    minHeight: 180
+                                )
+                            }
                         }
-                }
+                    }
 
-                Section(localized("Transcript Brut")) {
-                    TextEditor(text: $transcript)
-                        .frame(minHeight: 180)
-                        .focused($focusedField, equals: .transcript)
-                }
-
-                if appState.resolvedPrimaryProjectID(in: store) == nil {
-                    Text(localized("Aucun Projet Principal défini: sélection projet manuelle."))
+                    if appState.resolvedPrimaryProjectID(in: store) == nil {
+                        Label(
+                            localized("Aucun Projet Principal défini : sélection projet manuelle."),
+                            systemImage: "info.circle"
+                        )
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                } else {
-                    Text(localized("Projet principal propagé automatiquement, modifiable si nécessaire."))
+                    } else {
+                        Label(
+                            localized("Projet principal propagé automatiquement, modifiable si nécessaire."),
+                            systemImage: "info.circle"
+                        )
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    }
                 }
+                .padding(24)
             }
             .navigationTitle(appState.localized(meeting == nil ? "Nouvelle réunion" : "Modifier la réunion"))
             .toolbar {
@@ -520,11 +621,14 @@ private struct MeetingEditorSheet: View {
                         requestDismiss()
                     }
                 }
-
                 ToolbarItem(placement: .confirmationAction) {
                     Button(appState.localized(meeting == nil ? "Créer" : "Enregistrer")) {
+                        titleTouched = true
+                        guard canSave else { return }
                         save()
                     }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSave)
                 }
             }
             .alert(localized("Validation"), isPresented: Binding(
@@ -560,9 +664,52 @@ private struct MeetingEditorSheet: View {
         }
     }
 
+    // ── Helpers UI ──────────────────────────────────────────────────────
+
+    @ViewBuilder
+    private func formSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            content()
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    @ViewBuilder
+    private func fieldStack<Content: View>(label: String, required: Bool = false, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 2) {
+                Text(label)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                if required {
+                    Text("*")
+                        .font(.subheadline)
+                        .foregroundStyle(.red)
+                }
+            }
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // ── Computed ────────────────────────────────────────────────────────
+
+    private var titleIsEmpty: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var durationIsInvalid: Bool {
+        Int(durationMinutesText.trimmingCharacters(in: .whitespacesAndNewlines)).map { $0 <= 0 } ?? true
+    }
+
     private var canSave: Bool {
-        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            && Int(durationMinutesText.trimmingCharacters(in: .whitespacesAndNewlines)).map { $0 > 0 } == true
+        !titleIsEmpty && !durationIsInvalid
     }
 
     private var snapshot: String {
@@ -585,6 +732,8 @@ private struct MeetingEditorSheet: View {
         guard let initialSnapshot else { return false }
         return snapshot != initialSnapshot
     }
+
+    // ── Actions ─────────────────────────────────────────────────────────
 
     private func captureInitialSnapshotIfNeeded() {
         if initialSnapshot == nil {
@@ -852,7 +1001,145 @@ private enum MeetingDropParser {
     }
 }
 
-private enum MeetingEditorField: Hashable {
-    case aiSummary
-    case transcript
+// ── Composants réutilisables ─────────────────────────────────────────────────
+
+private struct PlaceholderTextEditor: View {
+    @Binding var text: String
+    let placeholder: String
+    var minHeight: CGFloat = 100
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $text)
+                .frame(minHeight: minHeight)
+                .scrollContentBackground(.hidden)
+            if text.isEmpty {
+                Text(placeholder)
+                    .foregroundStyle(.placeholder)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 8)
+                    .allowsHitTesting(false)
+            }
+        }
+        .padding(1)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+        }
+    }
+}
+
+private struct ResourceAutocompleteInput: View {
+    let label: String
+    let placeholder: String
+    @Binding var text: String
+    let multiValue: Bool
+    let resources: [Resource]
+
+    @State private var showSuggestions = false
+    @FocusState private var isFocused: Bool
+
+    private var currentTerm: String {
+        if multiValue {
+            return String(text.split(separator: ",", omittingEmptySubsequences: false).last ?? "")
+                .trimmingCharacters(in: .whitespaces)
+        }
+        return text.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var filteredSuggestions: [Resource] {
+        let term = currentTerm
+        guard term.count >= 1 else { return [] }
+        let normalized = term.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        return Array(
+            resources.filter {
+                $0.displayName
+                    .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+                    .contains(normalized)
+            }
+            .prefix(6)
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundStyle(.primary)
+
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.roundedBorder)
+                .focused($isFocused)
+                .onChange(of: text) { _, _ in
+                    showSuggestions = true
+                }
+                .onChange(of: isFocused) { _, focused in
+                    if !focused {
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(150))
+                            showSuggestions = false
+                        }
+                    }
+                }
+
+            if showSuggestions && filteredSuggestions.isEmpty == false {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(filteredSuggestions.enumerated()), id: \.element.id) { index, resource in
+                        Button {
+                            selectResource(resource)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(resource.displayName)
+                                        .foregroundStyle(.primary)
+                                    if resource.email.isEmpty == false {
+                                        Text(resource.email)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        if index < filteredSuggestions.count - 1 {
+                            Divider().padding(.horizontal, 12)
+                        }
+                    }
+                }
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.1), radius: 6, y: 3)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func selectResource(_ resource: Resource) {
+        if multiValue {
+            let parts = text
+                .split(separator: ",", omittingEmptySubsequences: false)
+                .map { String($0).trimmingCharacters(in: .whitespaces) }
+            let existingParts = parts.dropLast().filter { $0.isEmpty == false }
+            text = (existingParts + [resource.displayName]).joined(separator: ", ") + ", "
+        } else {
+            text = resource.displayName
+        }
+        showSuggestions = false
+    }
 }

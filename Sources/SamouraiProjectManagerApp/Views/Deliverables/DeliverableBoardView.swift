@@ -412,39 +412,134 @@ private struct DeliverableScopeEditorSheet: View {
     @State private var acceptanceCriteriaRaw = ""
     @State private var initialSnapshot: String?
     @State private var isShowingDismissConfirmation = false
+    @State private var titleTouched = false
+
+    private var titleIsEmpty: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var titlePlaceholder: String {
+        context.parentDeliverableID == nil
+            ? localized("Livrable principal")
+            : localized("Sous-livrable")
+    }
 
     var body: some View {
         NavigationStack {
-            Form {
-                if let primaryProject {
-                    Text(appState.localizedFormat("Projet principal: %@", primaryProject.name))
-                        .foregroundStyle(.secondary)
-                }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
 
-                Picker(localized("Phase"), selection: $phase) {
-                    ForEach(DeliverablePhase.allCases) { phase in
-                        Text(phase.label).tag(phase)
+                    if let primaryProject {
+                        HStack(spacing: 8) {
+                            Image(systemName: "folder.fill")
+                                .foregroundStyle(.secondary)
+                            Text(appState.localizedFormat("Projet principal: %@", primaryProject.name))
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.primary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.background.secondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    formSection(title: localized("Métadonnées")) {
+                        VStack(alignment: .leading, spacing: 24) {
+                            fieldStack(label: localized("Phase")) {
+                                Picker("", selection: $phase) {
+                                    ForEach(DeliverablePhase.allCases) { phase in
+                                        Text(phase.label).tag(phase)
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(minHeight: 44)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            fieldStack(label: localized("Owner"), required: true) {
+                                TextField(localized("Responsable du livrable"), text: $owner)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(minHeight: 44)
+                            }
+
+                            fieldStack(label: localized("Échéance")) {
+                                DatePicker("", selection: $dueDate, displayedComponents: .date)
+                                    .labelsHidden()
+                                    .frame(minHeight: 44)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+
+                    formSection(title: localized("Détails du livrable")) {
+                        VStack(alignment: .leading, spacing: 24) {
+                            fieldStack(label: titlePlaceholder, required: true) {
+                                TextField(titlePlaceholder, text: $title)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(minHeight: 44)
+                                    .overlay(alignment: .trailing) {
+                                        if titleTouched && titleIsEmpty {
+                                            Image(systemName: "exclamationmark.circle.fill")
+                                                .foregroundStyle(.red)
+                                                .padding(.trailing, 6)
+                                        }
+                                    }
+                                    .onSubmit { titleTouched = true }
+                                    .onChange(of: title) { _, _ in
+                                        if !titleIsEmpty { titleTouched = true }
+                                    }
+                                if titleTouched && titleIsEmpty {
+                                    Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+                            }
+
+                            fieldStack(label: localized("Description"), required: true) {
+                                TextField(
+                                    localized("Précisez les objectifs du livrable..."),
+                                    text: $details,
+                                    axis: .vertical
+                                )
+                                .textFieldStyle(.roundedBorder)
+                                .lineLimit(3...6)
+                            }
+
+                            if context.parentDeliverableID == nil {
+                                Toggle(isOn: $isMilestone) {
+                                    Text(localized("Traiter ce livrable comme un jalon"))
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                }
+                                .toggleStyle(.switch)
+                                .frame(minHeight: 44)
+                            }
+                        }
+                    }
+
+                    if context.parentDeliverableID == nil {
+                        formSection(title: localized("Critères d'acceptation")) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                TextField(
+                                    localized("Un critère par ligne"),
+                                    text: $acceptanceCriteriaRaw,
+                                    axis: .vertical
+                                )
+                                .textFieldStyle(.roundedBorder)
+                                .lineLimit(4...8)
+                                Text(localized("Un critère par ligne"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
-
-                TextField(context.parentDeliverableID == nil ? "Livrable principal" : "Sous-livrable", text: $title)
-                TextField(localized("Description"), text: $details, axis: .vertical)
-                    .lineLimit(3...6)
-                TextField(localized("Owner"), text: $owner)
-                DatePicker(localized("Échéance"), selection: $dueDate, displayedComponents: .date)
-                if context.parentDeliverableID == nil {
-                    Toggle(localized("Traiter ce livrable comme un jalon"), isOn: $isMilestone)
-                }
-
-                if context.parentDeliverableID == nil {
-                    Section(localized("Critères d'acceptation")) {
-                        TextField(localized("Un critère par ligne"), text: $acceptanceCriteriaRaw, axis: .vertical)
-                            .lineLimit(4...8)
-                    }
-                }
+                .padding(24)
             }
-            .formStyle(.grouped)
-            .navigationTitle(context.parentDeliverableID == nil ? "Nouveau livrable" : "Nouveau sous-livrable")
+            .background(.background)
+            .navigationTitle(context.parentDeliverableID == nil ? localized("Nouveau livrable") : localized("Nouveau sous-livrable"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(localized("Annuler")) { requestDismiss() }
@@ -469,7 +564,7 @@ private struct DeliverableScopeEditorSheet: View {
                 }
             }
         }
-        .frame(minWidth: 560, minHeight: 430)
+        .frame(minWidth: 620, minHeight: 600)
         .interactiveDismissDisabled(hasUnsavedChanges)
         .onExitCommand {
             requestDismiss()
@@ -557,6 +652,39 @@ private struct DeliverableScopeEditorSheet: View {
 
     private func localized(_ key: String) -> String {
         AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
+
+    @ViewBuilder
+    private func formSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            content()
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    @ViewBuilder
+    private func fieldStack<Content: View>(label: String, required: Bool = false, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 2) {
+                Text(label)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                if required {
+                    Text("*")
+                        .font(.subheadline)
+                        .foregroundStyle(.red)
+                }
+            }
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

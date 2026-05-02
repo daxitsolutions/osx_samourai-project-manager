@@ -658,6 +658,30 @@ private struct ManualRiskEditorSheet: View {
     @State private var initialSnapshot: String?
     @State private var isShowingDismissConfirmation = false
     @State private var newCommentText: String = ""
+    @State private var titleTouched = false
+    @State private var mitigationTouched = false
+    @State private var ownerTouched = false
+
+    private var titleIsEmpty: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var mitigationIsEmpty: Bool {
+        mitigation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var ownerIsEmpty: Bool {
+        owner.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func severityColor(_ severity: RiskSeverity) -> Color {
+        switch severity {
+        case .low: .green
+        case .medium: .orange
+        case .high: .orange
+        case .critical: .red
+        }
+    }
 
     init(entry: RiskEntry?, suggestedProjectID: UUID?) {
         self.entry = entry
@@ -673,51 +697,162 @@ private struct ManualRiskEditorSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                if entry == nil {
-                    Picker(localized("Projet"), selection: $projectID) {
-                        Text(localized("Sélectionner")).tag(Optional<UUID>.none)
-                        ForEach(store.projects) { project in
-                            Text(project.name).tag(Optional(project.id))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+
+                    if entry == nil {
+                        formSection(title: localized("Projet")) {
+                            VStack(alignment: .leading, spacing: 24) {
+                                fieldStack(label: localized("Projet"), required: true) {
+                                    Picker("", selection: $projectID) {
+                                        Text(localized("Sélectionner")).tag(Optional<UUID>.none)
+                                        ForEach(store.projects) { project in
+                                            Text(project.name).tag(Optional(project.id))
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .frame(minHeight: 44)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                        }
+                    } else {
+                        HStack(spacing: 8) {
+                            Image(systemName: "folder.fill")
+                                .foregroundStyle(.secondary)
+                            Text(appState.localizedFormat("Projet: %@", store.projectName(for: projectID)))
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.primary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.background.secondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    formSection(title: localized("Détails du risque")) {
+                        VStack(alignment: .leading, spacing: 24) {
+                            fieldStack(label: localized("Risque"), required: true) {
+                                TextField(localized("Décrivez le risque potentiel..."), text: $title)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(minHeight: 44)
+                                    .overlay(alignment: .trailing) {
+                                        if titleTouched && titleIsEmpty {
+                                            Image(systemName: "exclamationmark.circle.fill")
+                                                .foregroundStyle(.red)
+                                                .padding(.trailing, 6)
+                                        }
+                                    }
+                                    .onSubmit { titleTouched = true }
+                                    .onChange(of: title) { _, _ in
+                                        if !titleIsEmpty { titleTouched = true }
+                                    }
+                                if titleTouched && titleIsEmpty {
+                                    Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+                            }
+
+                            fieldStack(label: localized("Mitigation"), required: true) {
+                                TextField(
+                                    localized("Décrivez la stratégie de mitigation..."),
+                                    text: $mitigation,
+                                    axis: .vertical
+                                )
+                                .textFieldStyle(.roundedBorder)
+                                .lineLimit(3...5)
+                                .onChange(of: mitigation) { _, _ in
+                                    if !mitigationIsEmpty { mitigationTouched = true }
+                                }
+                                if mitigationTouched && mitigationIsEmpty {
+                                    Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+                            }
+
+                            fieldStack(label: localized("Owner"), required: true) {
+                                TextField(localized("Responsable du risque..."), text: $owner)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(minHeight: 44)
+                                    .overlay(alignment: .trailing) {
+                                        if ownerTouched && ownerIsEmpty {
+                                            Image(systemName: "exclamationmark.circle.fill")
+                                                .foregroundStyle(.red)
+                                                .padding(.trailing, 6)
+                                        }
+                                    }
+                                    .onSubmit { ownerTouched = true }
+                                    .onChange(of: owner) { _, _ in
+                                        if !ownerIsEmpty { ownerTouched = true }
+                                    }
+                                if ownerTouched && ownerIsEmpty {
+                                    Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+                            }
                         }
                     }
-                } else {
-                    LabeledContent("Projet") {
-                        Text(store.projectName(for: projectID))
-                            .foregroundStyle(.secondary)
-                    }
-                }
 
-                TextField(localized("Risque"), text: $title)
-                TextField(localized("Mitigation"), text: $mitigation, axis: .vertical)
-                    .lineLimit(3...5)
-                TextField(localized("Owner"), text: $owner)
+                    formSection(title: localized("Métadonnées")) {
+                        VStack(alignment: .leading, spacing: 24) {
+                            fieldStack(label: localized("Sévérité")) {
+                                Picker("", selection: $severity) {
+                                    ForEach(RiskSeverity.allCases) { s in
+                                        HStack {
+                                            Circle()
+                                                .fill(severityColor(s))
+                                                .frame(width: 10, height: 10)
+                                            Text(s.label.appLocalized(language: appState.interfaceLanguage))
+                                        }
+                                        .tag(s)
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(minHeight: 44)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .tint(severityColor(severity))
+                            }
 
-                Picker(localized("Sévérité"), selection: $severity) {
-                    ForEach(RiskSeverity.allCases) { s in
-                        Text(s.label.appLocalized(language: appState.interfaceLanguage)).tag(s)
-                    }
-                }
+                            fieldStack(label: localized("Statut")) {
+                                Picker("", selection: $status) {
+                                    ForEach(RiskStatus.allCases) { s in
+                                        HStack {
+                                            Circle()
+                                                .fill(s.tintColor)
+                                                .frame(width: 10, height: 10)
+                                            Text(s.label.appLocalized(language: appState.interfaceLanguage))
+                                        }
+                                        .tag(s)
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(minHeight: 44)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
 
-                Picker(localized("Statut"), selection: $status) {
-                    ForEach(RiskStatus.allCases) { s in
-                        HStack {
-                            Circle()
-                                .fill(s.tintColor)
-                                .frame(width: 10, height: 10)
-                            Text(s.label.appLocalized(language: appState.interfaceLanguage))
+                            fieldStack(label: localized("Date d'action cible")) {
+                                DatePicker("", selection: $dueDate, displayedComponents: .date)
+                                    .labelsHidden()
+                                    .frame(minHeight: 44)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
-                        .tag(s)
+                    }
+
+                    if let entry {
+                        formSection(title: localized("Historique")) {
+                            historySection(for: entry.risk.id)
+                        }
                     }
                 }
-
-                DatePicker(localized("Date d'action cible"), selection: $dueDate, displayedComponents: .date)
-
-                if let entry {
-                    historySection(for: entry.risk.id)
-                }
+                .padding(24)
             }
-            .formStyle(.grouped)
+            .background(.background)
             .navigationTitle(appState.localized(entry == nil ? "Nouveau risque" : "Modifier le risque"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -734,7 +869,7 @@ private struct ManualRiskEditorSheet: View {
                 }
             }
         }
-        .frame(minWidth: 500, minHeight: 380)
+        .frame(minWidth: 620, minHeight: 600)
         .interactiveDismissDisabled(hasUnsavedChanges)
         .onExitCommand {
             requestDismiss()
@@ -765,7 +900,7 @@ private struct ManualRiskEditorSheet: View {
         let currentRisk = store.risks.first(where: { $0.risk.id == riskID })?.risk
         let entries = currentRisk?.historyEntriesChronological ?? []
 
-        Section(localized("Historique")) {
+        VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 TextField(localized("Ajouter un commentaire"), text: $newCommentText, axis: .vertical)
                     .lineLimit(2...4)
@@ -788,29 +923,31 @@ private struct ManualRiskEditorSheet: View {
                     .foregroundStyle(.secondary)
                     .font(.callout)
             } else {
-                ForEach(entries) { entry in
-                    HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: entry.kind.symbolName)
-                            .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
-                            .frame(width: 18)
-                            .padding(.top, 2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.text)
-                                .font(.callout)
-                            HStack(spacing: 6) {
-                                Text(entry.kind.label.appLocalized(language: appState.interfaceLanguage))
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(.secondary)
-                                Text("•")
-                                    .foregroundStyle(.tertiary)
-                                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(entries) { entry in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: entry.kind.symbolName)
+                                .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
+                                .frame(width: 18)
+                                .padding(.top, 2)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(entry.text)
+                                    .font(.callout)
+                                HStack(spacing: 6) {
+                                    Text(entry.kind.label.appLocalized(language: appState.interfaceLanguage))
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                    Text("•")
+                                        .foregroundStyle(.tertiary)
+                                    Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
+                            Spacer(minLength: 0)
                         }
-                        Spacer(minLength: 0)
+                        .padding(.vertical, 2)
                     }
-                    .padding(.vertical, 2)
                 }
             }
         }
@@ -888,6 +1025,39 @@ private struct ManualRiskEditorSheet: View {
 
     private func localized(_ key: String) -> String {
         AppLocalizer.localized(key, language: appState.interfaceLanguage)
+    }
+
+    @ViewBuilder
+    private func formSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            content()
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    @ViewBuilder
+    private func fieldStack<Content: View>(label: String, required: Bool = false, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 2) {
+                Text(label)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                if required {
+                    Text("*")
+                        .font(.subheadline)
+                        .foregroundStyle(.red)
+                }
+            }
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

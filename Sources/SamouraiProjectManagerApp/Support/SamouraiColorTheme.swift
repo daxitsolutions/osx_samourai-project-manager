@@ -148,6 +148,19 @@ enum SamouraiColorTheme {
     static func healthColor(for score: Int) -> Color {
         color(healthToken(for: max(0, min(score, 100))))
     }
+
+    static func surface(_ token: SamouraiColorToken, opacity: Double = 0.12) -> Color {
+        color(token).opacity(opacity)
+    }
+}
+
+extension Color {
+    static var samouraiSuccess: Color { SamouraiColorTheme.color(.brandGreen) }
+    static var samouraiAccent: Color { SamouraiColorTheme.color(.brandPurple) }
+    static var samouraiInfo: Color { SamouraiColorTheme.color(.brandBlue) }
+    static var samouraiWarn: Color { SamouraiColorTheme.color(.warnYellow) }
+    static var samouraiDanger: Color { SamouraiColorTheme.color(.dangerRed) }
+    static var samouraiMuted: Color { SamouraiColorTheme.color(.textMuted) }
 }
 
 extension ProjectTestingRAGStatus {

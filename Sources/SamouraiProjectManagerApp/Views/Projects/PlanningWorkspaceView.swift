@@ -259,7 +259,7 @@ struct PlanningWorkspaceView: View {
                             )
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(isPrimary ? .green : (isVisible ? .accentColor : Color.secondary.opacity(0.45)))
+                        .tint(isPrimary ? Color.samouraiSuccess : (isVisible ? .accentColor : Color.secondary.opacity(0.45)))
 
                         Button {
                             toggleScenarioVisibility(scenario.id)
@@ -285,14 +285,14 @@ struct PlanningWorkspaceView: View {
                                 Image(systemName: "trash")
                             }
                             .buttonStyle(.borderless)
-                            .foregroundStyle(.red.opacity(0.7))
+                            .foregroundStyle(Color.samouraiDanger.opacity(0.7))
                             .help(localized("Supprimer ce scénario et toutes ses activités"))
                         }
                     }
                     .padding(10)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(isPrimary ? Color.green.opacity(0.10) : (isVisible ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.06)))
+                            .fill(isPrimary ? Color.samouraiSuccess.opacity(0.10) : (isVisible ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.06)))
                     )
                 }
             }
@@ -659,7 +659,7 @@ struct PlanningWorkspaceView: View {
                     activityPendingDeletion = activity
                 } label: {
                     Image(systemName: "trash")
-                        .foregroundStyle(.red.opacity(0.7))
+                        .foregroundStyle(Color.samouraiDanger.opacity(0.7))
                 }
                 .buttonStyle(.borderless)
             }
@@ -1040,7 +1040,7 @@ private struct ProjectPlanningTimelineView: View {
                                 HStack(spacing: 6) {
                                     Image(systemName: "diamond.fill")
                                         .font(.caption2)
-                                        .foregroundStyle(.purple)
+                                        .foregroundStyle(Color.samouraiAccent)
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(milestone.displayTitle)
                                             .font(.caption.weight(.semibold))
@@ -1052,7 +1052,7 @@ private struct ProjectPlanningTimelineView: View {
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
-                                .background(Color.purple.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .background(Color.samouraiAccent.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                                 .planningActivityDragSource(activityID: milestone.id)
                                 .planningActivityDropTarget(activityID: milestone.id) { sourceID, targetID in
                                     onMoveActivity?(sourceID, targetID)
@@ -1272,7 +1272,7 @@ private struct ProjectPlanningDailyGridView: View {
                     let isWeekend = isWeekend(day)
                     Text("\(dayNum)")
                         .font(.caption2.weight(isWeekend ? .bold : .regular))
-                        .foregroundStyle(isWeekend ? Color.orange : Color.secondary)
+                        .foregroundStyle(isWeekend ? Color.samouraiWarn : Color.secondary)
                         .frame(width: Self.dayWidth, height: Self.rowHeight)
                         .background(Color.secondary.opacity(isWeekend ? 0.06 : 0.08))
                 }
@@ -1291,7 +1291,7 @@ private struct ProjectPlanningDailyGridView: View {
                 } else if activity.isMilestone {
                     Image(systemName: "diamond.fill")
                         .font(.caption2)
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(Color.samouraiAccent)
                 } else {
                     Circle()
                         .fill(activity.hierarchyLevel.tintColor.opacity(0.85))
@@ -1308,7 +1308,7 @@ private struct ProjectPlanningDailyGridView: View {
                 } else if isCompleted(activity) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.caption2)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Color.samouraiSuccess)
                 }
             }
             .frame(width: Self.labelWidth, alignment: .leading)
@@ -1326,14 +1326,14 @@ private struct ProjectPlanningDailyGridView: View {
                 let weekend = isWeekend(day)
                 ZStack {
                     if weekend {
-                        Color.orange.opacity(0.04)
+                        Color.samouraiWarn.opacity(0.04)
                     } else if isEven {
                         Color.secondary.opacity(0.03)
                     }
                     if active {
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
                             .fill(activity.isMilestone
-                                ? Color.purple.opacity(0.75)
+                                ? Color.samouraiAccent.opacity(0.75)
                                 : activity.hierarchyLevel.tintColor.opacity(isCompleted(activity) ? 0.35 : 0.70))
                             .padding(.horizontal, 2)
                             .padding(.vertical, 8)
@@ -1485,7 +1485,7 @@ private struct ProjectPlanningMonthlyGridView: View {
                     } else if activity.isMilestone {
                         Image(systemName: "diamond.fill")
                             .font(.caption2)
-                            .foregroundStyle(.purple)
+                            .foregroundStyle(Color.samouraiAccent)
                     } else {
                         Circle()
                             .fill(activity.hierarchyLevel.tintColor.opacity(0.85))
@@ -1498,7 +1498,7 @@ private struct ProjectPlanningMonthlyGridView: View {
                     if !activity.isDateless, isCompleted(activity) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.caption2)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(Color.samouraiSuccess)
                     }
                 }
                 Text(activityDateRange(activity))
@@ -1524,7 +1524,7 @@ private struct ProjectPlanningMonthlyGridView: View {
                     if let activeLabel {
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
                             .fill(activity.isMilestone
-                                ? Color.purple.opacity(0.75)
+                                ? Color.samouraiAccent.opacity(0.75)
                                 : activity.hierarchyLevel.tintColor.opacity(isCompleted(activity) ? 0.35 : 0.72))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 9)

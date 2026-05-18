@@ -741,7 +741,7 @@ private struct ManualRiskEditorSheet: View {
                                     .overlay(alignment: .trailing) {
                                         if titleTouched && titleIsEmpty {
                                             Image(systemName: "exclamationmark.circle.fill")
-                                                .foregroundStyle(.red)
+                                                .foregroundStyle(Color.samouraiDanger)
                                                 .padding(.trailing, 6)
                                         }
                                     }
@@ -752,7 +752,7 @@ private struct ManualRiskEditorSheet: View {
                                 if titleTouched && titleIsEmpty {
                                     Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
                                         .font(.caption)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Color.samouraiDanger)
                                 }
                             }
 
@@ -770,7 +770,7 @@ private struct ManualRiskEditorSheet: View {
                                 if mitigationTouched && mitigationIsEmpty {
                                     Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
                                         .font(.caption)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Color.samouraiDanger)
                                 }
                             }
 
@@ -781,7 +781,7 @@ private struct ManualRiskEditorSheet: View {
                                     .overlay(alignment: .trailing) {
                                         if ownerTouched && ownerIsEmpty {
                                             Image(systemName: "exclamationmark.circle.fill")
-                                                .foregroundStyle(.red)
+                                                .foregroundStyle(Color.samouraiDanger)
                                                 .padding(.trailing, 6)
                                         }
                                     }
@@ -792,7 +792,7 @@ private struct ManualRiskEditorSheet: View {
                                 if ownerTouched && ownerIsEmpty {
                                     Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
                                         .font(.caption)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Color.samouraiDanger)
                                 }
                             }
                         }
@@ -1052,7 +1052,7 @@ private struct ManualRiskEditorSheet: View {
                 if required {
                     Text("*")
                         .font(.subheadline)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.samouraiDanger)
                 }
             }
             content()

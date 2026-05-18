@@ -230,7 +230,7 @@ struct SamouraiDebugPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "ladybug.fill")
-                    .foregroundStyle(Color.orange)
+                    .foregroundStyle(Color.samouraiWarn)
                 Text(
                     AppLocalizer.localizedFormat(
                         "Debug — %@",
@@ -269,7 +269,7 @@ struct SamouraiDebugPanel: View {
 
             if let action = context.action, action.isEmpty == false {
                 HStack(spacing: 6) {
-                    Image(systemName: "bolt.fill").foregroundStyle(Color.orange)
+                    Image(systemName: "bolt.fill").foregroundStyle(Color.samouraiWarn)
                     Text(localized("Action en cours :"))
                         .font(typography.captionEmphasized)
                     Text(action)
@@ -282,11 +282,11 @@ struct SamouraiDebugPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.orange.opacity(0.08))
+                .fill(Color.samouraiWarn.opacity(0.08))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+                .stroke(Color.samouraiWarn.opacity(0.35), lineWidth: 1)
         )
         .padding(.horizontal, SamouraiLayout.pagePadding)
         .padding(.vertical, 10)

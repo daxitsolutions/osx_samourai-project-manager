@@ -107,7 +107,7 @@ struct DeliverableBoardView: View {
                                     Image(systemName: "minus.circle")
                                 }
                                 .buttonStyle(.borderless)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Color.samouraiDanger)
                             }
                             .padding(.vertical, 2)
                         }
@@ -156,7 +156,7 @@ struct DeliverableBoardView: View {
                                     Image(systemName: "minus.circle")
                                 }
                                 .buttonStyle(.borderless)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Color.samouraiDanger)
                             }
                             .padding(.vertical, 2)
                         }
@@ -482,7 +482,7 @@ private struct DeliverableScopeEditorSheet: View {
                                     .overlay(alignment: .trailing) {
                                         if titleTouched && titleIsEmpty {
                                             Image(systemName: "exclamationmark.circle.fill")
-                                                .foregroundStyle(.red)
+                                                .foregroundStyle(Color.samouraiDanger)
                                                 .padding(.trailing, 6)
                                         }
                                     }
@@ -493,7 +493,7 @@ private struct DeliverableScopeEditorSheet: View {
                                 if titleTouched && titleIsEmpty {
                                     Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
                                         .font(.caption)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Color.samouraiDanger)
                                 }
                             }
 
@@ -679,7 +679,7 @@ private struct DeliverableScopeEditorSheet: View {
                 if required {
                     Text("*")
                         .font(.subheadline)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.samouraiDanger)
                 }
             }
             content()

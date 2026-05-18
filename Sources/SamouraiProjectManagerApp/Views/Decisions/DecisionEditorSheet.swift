@@ -50,7 +50,7 @@ struct DecisionEditorSheet: View {
                                     .overlay(alignment: .trailing) {
                                         if titleTouched && titleIsEmpty {
                                             Image(systemName: "exclamationmark.circle.fill")
-                                                .foregroundStyle(.red)
+                                                .foregroundStyle(Color.samouraiDanger)
                                                 .padding(.trailing, 6)
                                         }
                                     }
@@ -60,7 +60,7 @@ struct DecisionEditorSheet: View {
                                 if titleTouched && titleIsEmpty {
                                     Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
                                         .font(.caption)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Color.samouraiDanger)
                                 }
                             }
 
@@ -109,7 +109,7 @@ struct DecisionEditorSheet: View {
                                 if detailsTouched && detailsIsEmpty {
                                     Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
                                         .font(.caption)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Color.samouraiDanger)
                                 }
                             }
                         }
@@ -431,7 +431,7 @@ struct DecisionEditorSheet: View {
                 if required {
                     Text("*")
                         .font(.subheadline)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.samouraiDanger)
                 }
             }
             content()

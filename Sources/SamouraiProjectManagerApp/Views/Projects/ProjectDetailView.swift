@@ -709,7 +709,7 @@ struct ProjectDetailView: View {
                 if linkedDeliverables.isEmpty {
                     Text(localized("⚠️ Aucune liaison livrable: activité non justifiée par le scope"))
                         .font(.caption)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Color.samouraiWarn)
                 } else {
                     Text(linkedDeliverables.map(\.title).joined(separator: ", "))
                         .font(.caption)

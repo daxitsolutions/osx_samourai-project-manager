@@ -1854,7 +1854,7 @@ private struct ResourceTemplateManagementSheet: View {
                                     onUnlink(resource.id)
                                 }
                                 .buttonStyle(.borderless)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Color.samouraiDanger)
                             }
                         }
                     }

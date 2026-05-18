@@ -88,7 +88,7 @@ struct ProjectActivityEditorSheet: View {
                                     .overlay(alignment: .trailing) {
                                         if titleTouched && titleIsEmpty {
                                             Image(systemName: "exclamationmark.circle.fill")
-                                                .foregroundStyle(.red)
+                                                .foregroundStyle(Color.samouraiDanger)
                                                 .padding(.trailing, 6)
                                         }
                                     }
@@ -96,7 +96,7 @@ struct ProjectActivityEditorSheet: View {
                                 if titleTouched && titleIsEmpty {
                                     Label(localized("Le titre est obligatoire"), systemImage: "exclamationmark.circle.fill")
                                         .font(.caption)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Color.samouraiDanger)
                                 }
                             }
 
@@ -190,7 +190,7 @@ struct ProjectActivityEditorSheet: View {
                                                         systemImage: "exclamationmark.triangle.fill"
                                                     )
                                                     .font(.caption)
-                                                    .foregroundStyle(.orange)
+                                                    .foregroundStyle(Color.samouraiWarn)
                                                 }
                                             }
                                         }
@@ -364,7 +364,7 @@ struct ProjectActivityEditorSheet: View {
                 if required {
                     Text("*")
                         .font(.subheadline)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.samouraiDanger)
                 }
             }
             content()

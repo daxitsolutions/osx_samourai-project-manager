@@ -56,7 +56,7 @@ struct ProjectTimelineView: View {
                             }
 
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(activity.isMilestone ? Color.purple.opacity(0.8) : Color.accentColor.opacity(0.85))
+                                .fill(activity.isMilestone ? Color.samouraiAccent.opacity(0.8) : Color.accentColor.opacity(0.85))
                                 .frame(width: proxy.size.width * widthRatio, height: 14)
                                 .offset(x: proxy.size.width * startRatio)
                         }

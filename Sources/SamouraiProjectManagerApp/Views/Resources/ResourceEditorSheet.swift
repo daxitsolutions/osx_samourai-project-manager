@@ -110,13 +110,13 @@ struct ResourceEditorSheet: View {
                         .overlay(alignment: .trailing) {
                             if nomTouched && nomIsEmpty {
                                 Image(systemName: "exclamationmark.circle.fill")
-                                    .foregroundStyle(.red).padding(.trailing, 6)
+                                    .foregroundStyle(Color.samouraiDanger).padding(.trailing, 6)
                             }
                         }
                         .onChange(of: nom) { _, _ in if !nomIsEmpty { nomTouched = true } }
                     if nomTouched && nomIsEmpty {
                         Label(localized("Ce champ est obligatoire"), systemImage: "exclamationmark.circle.fill")
-                            .font(.caption).foregroundStyle(.red)
+                            .font(.caption).foregroundStyle(Color.samouraiDanger)
                     }
                 }
                 textField(label: localized("Parent Description"),
@@ -310,7 +310,7 @@ struct ResourceEditorSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 2) {
                 Text(label).font(.subheadline).fontWeight(.medium).foregroundStyle(.primary)
-                if required { Text("*").font(.subheadline).foregroundStyle(.red) }
+                if required { Text("*").font(.subheadline).foregroundStyle(Color.samouraiDanger) }
             }
             content()
         }

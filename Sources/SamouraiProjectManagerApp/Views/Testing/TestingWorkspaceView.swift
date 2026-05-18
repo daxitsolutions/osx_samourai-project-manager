@@ -196,7 +196,7 @@ struct TestingWorkspaceView: View {
                             case .blocked:
                                 TableColumn(appState.localized(column.label), value: \.blockedSortKey) { row in
                                     Image(systemName: row.phase.isBlocked ? "exclamationmark.triangle.fill" : "checkmark.circle")
-                                        .foregroundStyle(row.phase.isBlocked ? Color.red : .secondary)
+                                        .foregroundStyle(row.phase.isBlocked ? Color.samouraiDanger : .secondary)
                                 }
                                 .width(70)
                             }

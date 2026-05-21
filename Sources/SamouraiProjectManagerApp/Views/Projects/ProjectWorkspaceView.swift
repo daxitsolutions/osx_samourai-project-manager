@@ -265,47 +265,206 @@ private struct ProjectListRow: View {
     let onHealthChange: (ProjectHealth) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                TextField(
-                    "Nom du projet",
-                    text: Binding(
-                        get: { project.name },
-                        set: { onNameChange($0) }
-                    )
-                )
-                .textFieldStyle(.plain)
-                .font(.headline)
-                Spacer()
-                Picker(
-                    "Santé",
-                    selection: Binding(
-                        get: { project.health },
-                        set: { onHealthChange($0) }
-                    )
-                ) {
-                    ForEach(ProjectHealth.allCases) { health in
-                        Text(health.label.appLocalized(language: appState.interfaceLanguage)).tag(health)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 18)
+        VStack(alignment: .leading, spacing: 10) {
+            header
+
+            if project.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                Text(project.summary)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
 
-            Text(project.summary)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            badgeRow
 
-            HStack {
-                Text(project.phase.label.appLocalized(language: appState.interfaceLanguage))
-                Spacer()
-                Text(project.targetDate.formatted(date: .abbreviated, time: .omitted))
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            metadataRows
+
+            progressSection
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(project.health.tintColor)
+                .frame(width: 9, height: 9)
+
+            TextField(
+                "Nom du projet",
+                text: Binding(
+                    get: { project.name },
+                    set: { onNameChange($0) }
+                )
+            )
+            .textFieldStyle(.plain)
+            .font(.headline)
+
+            Spacer(minLength: 8)
+
+            Picker(
+                "Santé",
+                selection: Binding(
+                    get: { project.health },
+                    set: { onHealthChange($0) }
+                )
+            ) {
+                ForEach(ProjectHealth.allCases) { health in
+                    Text(loc(health.label)).tag(health)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: 18)
+        }
+    }
+
+    // MARK: - Badges
+
+    private var badgeRow: some View {
+        HStack(spacing: 6) {
+            badge(loc(project.health.label), color: project.health.tintColor)
+            badge(loc(project.phase.label), color: SamouraiColorTheme.color(.brandBlue))
+            badge(loc(project.deliveryMode.label), color: SamouraiColorTheme.color(.brandPurple))
+        }
+    }
+
+    private func badge(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.16), in: Capsule())
+            .foregroundStyle(color)
+    }
+
+    // MARK: - Metadata
+
+    private var metadataRows: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 16) {
+                metaItem(icon: "person.crop.circle", value: displayValue(project.sponsor))
+                metaItem(icon: "person.badge.shield.checkmark", value: displayValue(project.manager))
+            }
+            HStack(spacing: 16) {
+                metaItem(
+                    icon: "calendar",
+                    value: "\(project.startDate.formatted(date: .abbreviated, time: .omitted)) → \(project.targetDate.formatted(date: .abbreviated, time: .omitted))"
+                )
+                metaItem(icon: "clock", value: remainingLabel)
+            }
+        }
+    }
+
+    private func metaItem(icon: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            Text(value)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    // MARK: - Progress & counters
+
+    private var progressSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                ProgressView(value: project.completionRatio)
+                    .tint(project.health.tintColor)
+                Text("\(Int((project.completionRatio * 100).rounded()))%")
+                    .font(.caption2.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 6) {
+                counter(
+                    icon: "shippingbox",
+                    text: AppLocalizer.localizedFormat(
+                        "%d/%d livrable(s)",
+                        language: appState.interfaceLanguage,
+                        project.deliverables.filter(\.isDone).count,
+                        project.deliverables.count
+                    ),
+                    color: SamouraiColorTheme.color(.brandGreen)
+                )
+
+                counter(
+                    icon: project.criticalRiskCount > 0 ? "exclamationmark.triangle.fill" : "exclamationmark.triangle",
+                    text: project.criticalRiskCount > 0
+                        ? AppLocalizer.localizedFormat(
+                            "%d risque(s) · %d critique(s)",
+                            language: appState.interfaceLanguage,
+                            project.risks.count,
+                            project.criticalRiskCount
+                        )
+                        : AppLocalizer.localizedFormat(
+                            "%d risque(s)",
+                            language: appState.interfaceLanguage,
+                            project.risks.count
+                        ),
+                    color: project.criticalRiskCount > 0
+                        ? SamouraiColorTheme.color(.dangerRed)
+                        : SamouraiColorTheme.color(.textMuted)
+                )
+
+                counter(
+                    icon: "checklist",
+                    text: AppLocalizer.localizedFormat(
+                        "Tests %d%%",
+                        language: appState.interfaceLanguage,
+                        project.testingAverageProgressPercent
+                    ),
+                    color: project.testingRAGStatus.tintColor
+                )
+            }
+        }
+    }
+
+    private func counter(icon: String, text: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption2)
+            Text(text)
+                .font(.caption2)
+                .lineLimit(1)
+        }
+        .foregroundStyle(color)
+    }
+
+    // MARK: - Helpers
+
+    private var remainingLabel: String {
+        let days = Calendar.current.dateComponents([.day], from: .now, to: project.targetDate).day ?? 0
+        if days < 0 {
+            return AppLocalizer.localizedFormat(
+                "En retard de %d j",
+                language: appState.interfaceLanguage,
+                abs(days)
+            )
+        }
+        if days == 0 {
+            return loc("Échéance aujourd'hui")
+        }
+        return AppLocalizer.localizedFormat(
+            "%d j restant(s)",
+            language: appState.interfaceLanguage,
+            days
+        )
+    }
+
+    private func displayValue(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? loc("Non défini") : trimmed
+    }
+
+    private func loc(_ key: String) -> String {
+        key.appLocalized(language: appState.interfaceLanguage)
     }
 }

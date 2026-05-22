@@ -139,7 +139,7 @@ struct ResourceDirectoryPickerSheet: View {
     }
 
     private var secondaryTextColor: Color {
-        Color.primary.opacity(0.72)
+        Color.primary.opacity(0.85)
     }
 
     private func localized(_ key: String) -> String {
@@ -164,15 +164,14 @@ private struct ResourceDirectoryRow: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(resource.displayName)
-                    .font(.body.weight(.semibold))
+                    .font(.headline.weight(.bold))
                     .lineLimit(1)
                 Text(roleLine)
                     .font(.caption)
                     .foregroundStyle(secondaryColor)
                     .lineLimit(1)
             }
-
-            Spacer(minLength: 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(assignedLabel)
                 .font(.caption)

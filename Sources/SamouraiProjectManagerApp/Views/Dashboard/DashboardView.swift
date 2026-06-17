@@ -7,6 +7,7 @@ struct DashboardView: View {
     private let metricsColumns = [
         GridItem(.adaptive(minimum: 220, maximum: 320), spacing: 16)
     ]
+    private let upcomingActionsHorizonInDays = 14
 
     var body: some View {
         ScrollView {
@@ -103,6 +104,17 @@ struct DashboardView: View {
                 }
 
                 SamouraiSectionCard(
+                    title: "Actions à piloter",
+                    subtitle: "Les actions sont regroupées par proximité d’échéance ou absence de date de fin."
+                ) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        ForEach(actionSections) { section in
+                            DashboardActionSubsection(section: section)
+                        }
+                    }
+                }
+
+                SamouraiSectionCard(
                     title: "Prochains livrables",
                     subtitle: "Les livrables ouverts à horizon proche restent visibles sans navigation supplémentaire."
                 ) {
@@ -148,6 +160,66 @@ struct DashboardView: View {
         deliverables.filter { $0.deliverable.isDone == false }
     }
 
+    private var scopedActions: [ProjectAction] {
+        let baseActions: [ProjectAction]
+        if let primaryProjectID = appState.resolvedPrimaryProjectID(in: store) {
+            baseActions = store.actions.filter { $0.projectID == primaryProjectID }
+        } else {
+            baseActions = store.actions
+        }
+
+        return baseActions.filter { action in
+            action.isDone == false && action.status != .done && action.status != .cancelled
+        }
+    }
+
+    private var actionSections: [DashboardActionSection] {
+        [
+            DashboardActionSection(
+                title: "Actions : Les retards",
+                systemImage: "exclamationmark.circle.fill",
+                emptyTitle: "Aucune action en retard",
+                actions: overdueActions
+            ),
+            DashboardActionSection(
+                title: "Actions : Les prochaines échéances",
+                systemImage: "calendar.badge.clock",
+                emptyTitle: "Aucune échéance proche",
+                actions: upcomingActions
+            ),
+            DashboardActionSection(
+                title: "Actions : actions sans date de fin",
+                systemImage: "calendar.badge.exclamationmark",
+                emptyTitle: "Aucune action sans date de fin",
+                actions: actionsWithoutDueDate
+            )
+        ]
+    }
+
+    private var overdueActions: [ProjectAction] {
+        scopedActions
+            .filter { action in
+                action.hasDashboardDueDate && action.dueDate < todayStart
+            }
+            .sortedByDashboardPriority()
+    }
+
+    private var upcomingActions: [ProjectAction] {
+        scopedActions
+            .filter { action in
+                action.hasDashboardDueDate
+                    && action.dueDate >= todayStart
+                    && action.dueDate <= upcomingActionsLimit
+            }
+            .sortedByDashboardPriority()
+    }
+
+    private var actionsWithoutDueDate: [ProjectAction] {
+        scopedActions
+            .filter { $0.hasDashboardDueDate == false }
+            .sortedByDashboardPriority()
+    }
+
     private var scopedRisks: [RiskEntry] {
         if let primaryProjectID = appState.resolvedPrimaryProjectID(in: store) {
             return store.risks.filter { $0.projectID == primaryProjectID }
@@ -177,9 +249,26 @@ struct DashboardView: View {
         projects.reduce(0) { $0 + $1.blockedTestingPhaseCount }
     }
 
+    private var todayStart: Date {
+        Calendar.current.startOfDay(for: .now)
+    }
+
+    private var upcomingActionsLimit: Date {
+        Calendar.current.date(byAdding: .day, value: upcomingActionsHorizonInDays, to: todayStart) ?? todayStart
+    }
+
     private func localized(_ key: String) -> String {
         AppLocalizer.localized(key, language: appState.interfaceLanguage)
     }
+}
+
+private struct DashboardActionSection: Identifiable {
+    let title: String
+    let systemImage: String
+    let emptyTitle: String
+    let actions: [ProjectAction]
+
+    var id: String { title }
 }
 
 private struct ProjectOverviewRow: View {
@@ -260,6 +349,69 @@ private struct RiskHighlightRow: View {
     }
 }
 
+private struct DashboardActionSubsection: View {
+    let section: DashboardActionSection
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(section.title, systemImage: section.systemImage)
+                .font(.headline)
+
+            if section.actions.isEmpty {
+                Text(section.emptyTitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(SamouraiSurface.panelStrong, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            } else {
+                ForEach(section.actions) { action in
+                    DashboardActionRow(action: action)
+                }
+            }
+        }
+    }
+}
+
+private struct DashboardActionRow: View {
+    let action: ProjectAction
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .fill(action.priority.severityColor)
+                .frame(width: 10, height: 10)
+                .padding(.top, 6)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(action.displayTitle)
+                            .font(.headline)
+                        Text(action.details)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 12)
+
+                    SamouraiStatusPill(text: action.priority.label, tint: action.priority.severityColor)
+                }
+
+                HStack(spacing: 12) {
+                    Label(action.status.label, systemImage: "circle.dotted")
+                    Label(action.dashboardDueDateLabel, systemImage: "calendar")
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .samouraiCardSurface()
+    }
+}
+
 private struct DeliverableRow: View {
     let entry: DeliverableEntry
 
@@ -292,5 +444,36 @@ private struct DeliverableRow: View {
         }
         .padding(16)
         .samouraiCardSurface()
+    }
+}
+
+private extension ProjectAction {
+    var hasDashboardDueDate: Bool {
+        dueDate < dashboardNoDueDateThreshold
+    }
+
+    var dashboardDueDateLabel: String {
+        hasDashboardDueDate ? dueDate.formatted(date: .abbreviated, time: .omitted) : "Sans date de fin"
+    }
+
+    private var dashboardNoDueDateThreshold: Date {
+        Calendar.current.date(byAdding: .year, value: 50, to: .now) ?? .distantFuture
+    }
+}
+
+private extension [ProjectAction] {
+    func sortedByDashboardPriority() -> [ProjectAction] {
+        sorted {
+            if $0.hasDashboardDueDate != $1.hasDashboardDueDate {
+                return $0.hasDashboardDueDate
+            }
+            if $0.hasDashboardDueDate && $0.dueDate != $1.dueDate {
+                return $0.dueDate < $1.dueDate
+            }
+            if $0.priority.sortWeight != $1.priority.sortWeight {
+                return $0.priority.sortWeight > $1.priority.sortWeight
+            }
+            return $0.updatedAt > $1.updatedAt
+        }
     }
 }

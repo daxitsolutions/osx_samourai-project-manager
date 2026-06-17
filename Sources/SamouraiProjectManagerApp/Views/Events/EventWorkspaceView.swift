@@ -180,6 +180,12 @@ struct EventWorkspaceView: View {
                         }
                     }
                     .scrollIndicators(.visible)
+                    .contextMenu(forSelectionType: ProjectEvent.ID.self) { _ in
+                    } primaryAction: { ids in
+                        if let id = ids.first {
+                            editorContext = .edit(id)
+                        }
+                    }
                 }
             }
             .frame(minWidth: 760, idealWidth: 900)

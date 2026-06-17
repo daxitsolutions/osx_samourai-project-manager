@@ -1,92 +1,114 @@
 import Foundation
 
-enum EventPriority: String, Codable, CaseIterable, Identifiable {
-    case trivial
-    case minor
-    case major
-    case critical
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .trivial:
-            "Trivial"
-        case .minor:
-            "Mineur"
-        case .major:
-            "Majeur"
-        case .critical:
-            "Critique"
-        }
-    }
-
-    var sortWeight: Int {
-        switch self {
-        case .trivial:
-            1
-        case .minor:
-            2
-        case .major:
-            3
-        case .critical:
-            4
-        }
-    }
-
-    var tintName: String {
-        colorToken.rawValue
-    }
-}
-
 struct ProjectEvent: Identifiable, Codable, Hashable {
     var id: UUID
-    var title: String
-    var details: String
-    var source: String
-    var priority: EventPriority
-    var happenedAt: Date
+    var subject: String
+    var communication: String
+    var author: String
+    var distribution: String
     var projectID: UUID?
     var resourceIDs: [UUID]
     var createdAt: Date
+    var publishedAt: Date
     var updatedAt: Date
 
     init(
         id: UUID = UUID(),
-        title: String,
-        details: String = "",
-        source: String = "",
-        priority: EventPriority,
-        happenedAt: Date = .now,
+        subject: String,
+        communication: String = "",
+        author: String = "",
+        distribution: String = "",
         projectID: UUID? = nil,
         resourceIDs: [UUID] = [],
         createdAt: Date = .now,
+        publishedAt: Date = .now,
         updatedAt: Date = .now
     ) {
         self.id = id
-        self.title = title
-        self.details = details
-        self.source = source
-        self.priority = priority
-        self.happenedAt = happenedAt
+        self.subject = subject
+        self.communication = communication
+        self.author = author
+        self.distribution = distribution
         self.projectID = projectID
         self.resourceIDs = resourceIDs.removingDuplicateValues()
         self.createdAt = createdAt
+        self.publishedAt = publishedAt
         self.updatedAt = updatedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case subject
+        case communication
+        case author
+        case distribution
+        case projectID
+        case resourceIDs
+        case createdAt
+        case publishedAt
+        case updatedAt
+
+        // Legacy fields kept for one-way migration from the previous event log model.
+        case title
+        case details
+        case source
+        case happenedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let now = Date()
+
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        subject = try container.decodeIfPresent(String.self, forKey: .subject)
+            ?? container.decodeIfPresent(String.self, forKey: .title)
+            ?? ""
+        communication = try container.decodeIfPresent(String.self, forKey: .communication)
+            ?? container.decodeIfPresent(String.self, forKey: .details)
+            ?? ""
+        author = try container.decodeIfPresent(String.self, forKey: .author)
+            ?? container.decodeIfPresent(String.self, forKey: .source)
+            ?? ""
+        distribution = try container.decodeIfPresent(String.self, forKey: .distribution) ?? ""
+        projectID = try container.decodeIfPresent(UUID.self, forKey: .projectID)
+        resourceIDs = try container.decodeIfPresent([UUID].self, forKey: .resourceIDs) ?? []
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? now
+        publishedAt = try container.decodeIfPresent(Date.self, forKey: .publishedAt)
+            ?? container.decodeIfPresent(Date.self, forKey: .happenedAt)
+            ?? createdAt
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(subject, forKey: .subject)
+        try container.encode(communication, forKey: .communication)
+        try container.encode(author, forKey: .author)
+        try container.encode(distribution, forKey: .distribution)
+        try container.encodeIfPresent(projectID, forKey: .projectID)
+        try container.encode(resourceIDs, forKey: .resourceIDs)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(publishedAt, forKey: .publishedAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 }
 
 extension ProjectEvent {
     var displayTitle: String {
-        let value = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? "Événement sans titre" : value
+        let value = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? "Event / news sans sujet" : value
     }
 
     var hasTextContent: Bool {
-        details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        communication.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
-    var hasSource: Bool {
-        source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    var hasAuthor: Bool {
+        author.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
+    var hasDistribution: Bool {
+        distribution.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 }

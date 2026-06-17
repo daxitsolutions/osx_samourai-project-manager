@@ -13,7 +13,7 @@ struct EventWorkspaceView: View {
     @State private var exportFilename = "events"
     @State private var isShowingDeleteConfirmation = false
     @State private var sortOrder: [KeyPathComparator<ProjectEvent>] = [
-        .init(\.happenedAt, order: .reverse)
+        .init(\.publishedAt, order: .reverse)
     ]
 
     var body: some View {
@@ -23,9 +23,9 @@ struct EventWorkspaceView: View {
             VStack(spacing: 0) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(localized("Événements projet"))
+                        Text(localized("les events / news du projet"))
                             .font(.title2.weight(.semibold))
-                        Text(appState.localizedFormat("%d / %d événement(s) affiché(s)", filteredEvents.count, scopedEvents.count))
+                        Text(appState.localizedFormat("%d / %d event(s) / news affiché(s)", filteredEvents.count, scopedEvents.count))
                             .foregroundStyle(.secondary)
                     }
 
@@ -70,15 +70,15 @@ struct EventWorkspaceView: View {
                     Button {
                         editorContext = .create
                     } label: {
-                        Label(localized("Nouvel événement"), systemImage: "plus")
-                    }
+                            Label(localized("Nouvel event / news"), systemImage: "plus")
+                        }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
                 .padding(.bottom, 8)
 
                 HStack(spacing: 12) {
-                    TextField(localized("Recherche texte (titre, détails, source, projet, ressources)"), text: $searchText)
+                    TextField(localized("Recherche texte (sujet, communication, auteur, distribution, projet, ressources)"), text: $searchText)
                         .textFieldStyle(.roundedBorder)
                 }
                 .padding(.horizontal, 16)
@@ -86,71 +86,49 @@ struct EventWorkspaceView: View {
 
                 if scopedEvents.isEmpty {
                     ContentUnavailableView(
-                        "Aucun événement",
+                        "Aucun event / news",
                         systemImage: "bell.slash",
-                        description: Text(localized("Ajoute manuellement les événements pour constituer l'historique centralisé du projet."))
+                        description: Text(localized("Ajoute les communications importantes pour donner de la visibilité aux équipes projet et conserver la trace de ce qui a été communiqué."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredEvents.isEmpty {
                     ContentUnavailableView(
                         "Aucun résultat",
                         systemImage: "line.3.horizontal.decrease.circle",
-                        description: Text(localized("Ajuste la recherche pour retrouver un événement existant."))
+                        description: Text(localized("Ajuste la recherche pour retrouver un event / news existant."))
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Table(filteredEvents, selection: $selectedEventIDs, sortOrder: $sortOrder) {
                         TableColumnForEach(activeTableColumns) { column in
                             switch column {
-                            case .happenedAt:
-                                TableColumn(appState.localized(column.label), value: \.happenedAt) { event in
-                                    Text(event.happenedAt.formatted(date: .abbreviated, time: .shortened))
+                            case .createdAt:
+                                TableColumn(appState.localized(column.label), value: \.createdAt) { event in
+                                    Text(event.createdAt.formatted(date: .abbreviated, time: .shortened))
                                 }
                                 .width(min: 160, ideal: 190)
 
-                            case .priority:
-                                TableColumn(appState.localized(column.label), value: \.prioritySortWeight) { event in
-                                    Picker(
-                                        "Priorité",
-                                        selection: Binding(
-                                            get: { event.priority },
-                                            set: {
-                                                store.updateEvent(
-                                                    eventID: event.id,
-                                                    title: event.title,
-                                                    details: event.details,
-                                                    source: event.source,
-                                                    priority: $0,
-                                                    happenedAt: event.happenedAt,
-                                                    projectID: event.projectID,
-                                                    resourceIDs: event.resourceIDs
-                                                )
-                                            }
-                                        )
-                                    ) {
-                                        ForEach(EventPriority.allCases) { priority in
-                                            Text(priority.label.appLocalized(language: appState.interfaceLanguage)).tag(priority)
-                                        }
-                                    }
-                                    .labelsHidden()
-                                    .pickerStyle(.menu)
+                            case .publishedAt:
+                                TableColumn(appState.localized(column.label), value: \.publishedAt) { event in
+                                    Text(event.publishedAt.formatted(date: .abbreviated, time: .shortened))
                                 }
-                                .width(min: 110, ideal: 120)
+                                .width(min: 160, ideal: 190)
 
-                            case .title:
+                            case .subject:
                                 TableColumn(appState.localized(column.label), value: \.displayTitle) { event in
                                     TextField(
-                                        "Événement",
+                                        "Sujet",
                                         text: Binding(
-                                            get: { event.title },
+                                            get: { event.subject },
                                             set: {
                                                 store.updateEvent(
                                                     eventID: event.id,
-                                                    title: $0,
-                                                    details: event.details,
-                                                    source: event.source,
-                                                    priority: event.priority,
-                                                    happenedAt: event.happenedAt,
+                                                    subject: $0,
+                                                    communication: event.communication,
+                                                    author: event.author,
+                                                    distribution: event.distribution,
+                                                    createdAt: event.createdAt,
+                                                    publishedAt: event.publishedAt,
                                                     projectID: event.projectID,
                                                     resourceIDs: event.resourceIDs
                                                 )
@@ -162,12 +140,28 @@ struct EventWorkspaceView: View {
                                 }
                                 .width(min: 220, ideal: 320)
 
-                            case .source:
-                                TableColumn(appState.localized(column.label), value: \.sourceSortKey) { event in
-                                    Text(event.hasSource ? event.source : "-")
-                                        .foregroundStyle(event.hasSource ? .primary : .secondary)
+                            case .communication:
+                                TableColumn(appState.localized(column.label), value: \.communicationSortKey) { event in
+                                    Text(event.hasTextContent ? event.communication : "-")
+                                        .foregroundStyle(event.hasTextContent ? .primary : .secondary)
+                                        .lineLimit(2)
                                 }
-                                .width(min: 180, ideal: 250)
+                                .width(min: 240, ideal: 360)
+
+                            case .author:
+                                TableColumn(appState.localized(column.label), value: \.authorSortKey) { event in
+                                    Text(event.hasAuthor ? event.author : "-")
+                                        .foregroundStyle(event.hasAuthor ? .primary : .secondary)
+                                }
+                                .width(min: 150, ideal: 210)
+
+                            case .distribution:
+                                TableColumn(appState.localized(column.label), value: \.distributionSortKey) { event in
+                                    Text(event.hasDistribution ? event.distribution : "-")
+                                        .foregroundStyle(event.hasDistribution ? .primary : .secondary)
+                                        .lineLimit(2)
+                                }
+                                .width(min: 180, ideal: 260)
 
                             case .project:
                                 TableColumn(appState.localized(column.label), value: \.projectIDSortKey) { event in
@@ -207,7 +201,7 @@ struct EventWorkspaceView: View {
             contentType: .commaSeparatedText,
             defaultFilename: exportFilename
         ) { _ in }
-        .alert(localized("Supprimer l'événement"), isPresented: $isShowingDeleteConfirmation) {
+        .alert(localized("Supprimer l'event / news"), isPresented: $isShowingDeleteConfirmation) {
             Button(localized("Supprimer"), role: .destructive) {
                 if selectedEventIDs.isEmpty == false {
                     for eventID in selectedEventIDs {
@@ -227,8 +221,8 @@ struct EventWorkspaceView: View {
             Text(
                 appState.localized(
                     selectedEventIDs.count > 1
-                    ? "Ces événements seront supprimés du suivi projet."
-                    : "Cet événement sera supprimé du suivi projet."
+                    ? "Ces events / news seront supprimés du suivi projet."
+                    : "Cet event / news sera supprimé du suivi projet."
                 )
             )
         }
@@ -270,12 +264,13 @@ struct EventWorkspaceView: View {
         return baseEvents.filter { event in
             let resourceNames = store.resourceNames(for: event.resourceIDs)
             let searchableValues: [String] = [
-                event.title,
-                event.details,
-                event.source,
-                event.priority.label.appLocalized(language: appState.interfaceLanguage),
+                event.subject,
+                event.communication,
+                event.author,
+                event.distribution,
                 store.projectName(for: event.projectID),
-                event.happenedAt.formatted(date: .abbreviated, time: .shortened)
+                event.createdAt.formatted(date: .abbreviated, time: .shortened),
+                event.publishedAt.formatted(date: .abbreviated, time: .shortened)
             ] + resourceNames
 
             let normalizedValues = searchableValues.map(normalize)
@@ -310,14 +305,16 @@ struct EventWorkspaceView: View {
 
     private func prepareExport(events: [ProjectEvent], filenameSuffix: String) {
         guard events.isEmpty == false else { return }
-        let headers = ["DateHeure", "Priorite", "Titre", "Source", "Projet", "Ressources"]
+        let headers = ["Sujet", "Communication", "Auteur", "Distribution", "Date de création", "Date de publication", "Projet", "Ressources"]
             .map { appState.localized($0) }
         let rows = events.map { event in
             [
-                event.happenedAt.formatted(date: .abbreviated, time: .shortened),
-                event.priority.label.appLocalized(language: appState.interfaceLanguage),
                 event.displayTitle,
-                event.source,
+                event.communication,
+                event.author,
+                event.distribution,
+                event.createdAt.formatted(date: .abbreviated, time: .shortened),
+                event.publishedAt.formatted(date: .abbreviated, time: .shortened),
                 store.projectName(for: event.projectID),
                 store.resourceNames(for: event.resourceIDs).joined(separator: " | ")
             ]
@@ -334,8 +331,9 @@ struct EventWorkspaceView: View {
 }
 
 private extension ProjectEvent {
-    var prioritySortWeight: Int { priority.sortWeight }
-    var sourceSortKey: String { source.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var communicationSortKey: String { communication.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var authorSortKey: String { author.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var distributionSortKey: String { distribution.trimmingCharacters(in: .whitespacesAndNewlines) }
     var projectIDSortKey: String { projectID?.uuidString ?? "" }
     var resourceCount: Int { resourceIDs.count }
 }
@@ -347,11 +345,12 @@ private struct EventEditorSheet: View {
 
     let event: ProjectEvent?
 
-    @State private var title: String
-    @State private var details: String
-    @State private var source: String
-    @State private var priority: EventPriority
-    @State private var happenedAt: Date
+    @State private var subject: String
+    @State private var communication: String
+    @State private var author: String
+    @State private var distribution: String
+    @State private var createdAt: Date
+    @State private var publishedAt: Date
     @State private var projectID: UUID?
     @State private var selectedResourceIDs: Set<UUID>
     @State private var resourceSearchText = ""
@@ -362,11 +361,12 @@ private struct EventEditorSheet: View {
 
     init(event: ProjectEvent?) {
         self.event = event
-        _title = State(initialValue: event?.title ?? "")
-        _details = State(initialValue: event?.details ?? "")
-        _source = State(initialValue: event?.source ?? "")
-        _priority = State(initialValue: event?.priority ?? .minor)
-        _happenedAt = State(initialValue: event?.happenedAt ?? .now)
+        _subject = State(initialValue: event?.subject ?? "")
+        _communication = State(initialValue: event?.communication ?? "")
+        _author = State(initialValue: event?.author ?? "")
+        _distribution = State(initialValue: event?.distribution ?? "")
+        _createdAt = State(initialValue: event?.createdAt ?? .now)
+        _publishedAt = State(initialValue: event?.publishedAt ?? .now)
         _projectID = State(initialValue: event?.projectID)
         _selectedResourceIDs = State(initialValue: Set(event?.resourceIDs ?? []))
     }
@@ -375,15 +375,11 @@ private struct EventEditorSheet: View {
         NavigationStack {
             Form {
                 Section(localized("Informations")) {
-                    TextField(localized("Titre de l'événement"), text: $title)
-
-                    DatePicker(localized("Date et heure"), selection: $happenedAt)
-
-                    Picker(localized("Priorité"), selection: $priority) {
-                        ForEach(EventPriority.allCases) { value in
-                            Text(value.label.appLocalized(language: appState.interfaceLanguage)).tag(value)
-                        }
-                    }
+                    TextField(localized("Sujet"), text: $subject)
+                    TextField(localized("Auteur"), text: $author)
+                    TextField(localized("Distribution"), text: $distribution)
+                    DatePicker(localized("Date de création"), selection: $createdAt)
+                    DatePicker(localized("Date de publication"), selection: $publishedAt)
 
                     Picker(localized("Projet"), selection: $projectID) {
                         Text(localized("Sans projet"))
@@ -403,10 +399,14 @@ private struct EventEditorSheet: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    TextField(localized("Source (email, réunion, chat, directive, ...)"), text: $source)
                 }
 
-                Section(localized("Ressources associées")) {
+                Section(localized("Communication")) {
+                    TextEditor(text: $communication)
+                        .frame(minHeight: 140)
+                }
+
+                Section(localized("Visibilité équipes projet")) {
                     TextField(localized("Filtrer les ressources"), text: $resourceSearchText)
                         .textFieldStyle(.roundedBorder)
 
@@ -434,13 +434,8 @@ private struct EventEditorSheet: View {
                         }
                     }
                 }
-
-                Section(localized("Détails")) {
-                    TextEditor(text: $details)
-                        .frame(minHeight: 140)
-                }
             }
-            .navigationTitle(appState.localized(event == nil ? "Nouvel événement" : "Modifier l'événement"))
+            .navigationTitle(appState.localized(event == nil ? "Nouvel event / news" : "Modifier l'event / news"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(localized("Annuler")) {
@@ -488,16 +483,17 @@ private struct EventEditorSheet: View {
     }
 
     private var canSave: Bool {
-        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
     private var snapshot: String {
         [
-            title,
-            details,
-            source,
-            priority.rawValue,
-            String(happenedAt.timeIntervalSinceReferenceDate),
+            subject,
+            communication,
+            author,
+            distribution,
+            String(createdAt.timeIntervalSinceReferenceDate),
+            String(publishedAt.timeIntervalSinceReferenceDate),
             projectID?.uuidString ?? "",
             selectedResourceIDs.map(\.uuidString).sorted().joined(separator: ","),
             resourceSearchText
@@ -546,9 +542,9 @@ private struct EventEditorSheet: View {
     }
 
     private func save() {
-        let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard cleanedTitle.isEmpty == false else {
-            validationMessage = "Le titre est obligatoire."
+        let cleanedSubject = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleanedSubject.isEmpty == false else {
+            validationMessage = "Le sujet est obligatoire."
             return
         }
 
@@ -559,22 +555,24 @@ private struct EventEditorSheet: View {
         if let event {
             store.updateEvent(
                 eventID: event.id,
-                title: cleanedTitle,
-                details: details,
-                source: source,
-                priority: priority,
-                happenedAt: happenedAt,
+                subject: cleanedSubject,
+                communication: communication,
+                author: author,
+                distribution: distribution,
+                createdAt: createdAt,
+                publishedAt: publishedAt,
                 projectID: projectID,
                 resourceIDs: sortedResourceIDs
             )
             appState.openEvent(event.id)
         } else {
             let createdEventID = store.addEvent(
-                title: cleanedTitle,
-                details: details,
-                source: source,
-                priority: priority,
-                happenedAt: happenedAt,
+                subject: cleanedSubject,
+                communication: communication,
+                author: author,
+                distribution: distribution,
+                createdAt: createdAt,
+                publishedAt: publishedAt,
                 projectID: projectID,
                 resourceIDs: sortedResourceIDs
             )
@@ -621,10 +619,12 @@ private enum EventEditorContext: Identifiable {
 }
 
 private enum EventTableColumn: String, CaseIterable, Identifiable, Hashable {
-    case happenedAt
-    case priority
-    case title
-    case source
+    case subject
+    case communication
+    case author
+    case distribution
+    case createdAt
+    case publishedAt
     case project
     case resources
 

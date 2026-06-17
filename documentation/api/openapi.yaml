@@ -37,7 +37,7 @@ tags:
 - name: Decisions
   description: CRUD des decisions.
 - name: Events
-  description: CRUD des evenements.
+  description: CRUD des events / news du projet.
 - name: Meetings
   description: CRUD des reunions.
 - name: Deliverables
@@ -636,11 +636,11 @@ paths:
     get:
       tags:
       - Events
-      summary: Lister les evenements
+      summary: Lister les events / news du projet
       operationId: listEvents
       responses:
         '200':
-          description: Liste des evenements.
+          description: Liste des events / news du projet.
           content:
             application/json:
               schema:
@@ -650,13 +650,13 @@ paths:
     post:
       tags:
       - Events
-      summary: Creer un evenement
+      summary: Creer un event / news du projet
       operationId: createEvent
       requestBody:
         "$ref": "#/components/requestBodies/ProjectEventBody"
       responses:
         '201':
-          description: Evenement cree.
+          description: Event / news cree.
           content:
             application/json:
               schema:
@@ -671,11 +671,11 @@ paths:
     get:
       tags:
       - Events
-      summary: Lire un evenement
+      summary: Lire un event / news du projet
       operationId: getEvent
       responses:
         '200':
-          description: Evenement trouve.
+          description: Event / news trouve.
           content:
             application/json:
               schema:
@@ -685,13 +685,13 @@ paths:
     put:
       tags:
       - Events
-      summary: Remplacer un evenement
+      summary: Remplacer un event / news du projet
       operationId: replaceEvent
       requestBody:
         "$ref": "#/components/requestBodies/ProjectEventBody"
       responses:
         '200':
-          description: Evenement remplace.
+          description: Event / news remplace.
           content:
             application/json:
               schema:
@@ -703,11 +703,11 @@ paths:
     delete:
       tags:
       - Events
-      summary: Supprimer un evenement
+      summary: Supprimer un event / news du projet
       operationId: deleteEvent
       responses:
         '204':
-          description: Evenement supprime.
+          description: Event / news supprime.
         '404':
           "$ref": "#/components/responses/NotFound"
   "/meetings":
@@ -1761,27 +1761,29 @@ components:
       type: object
       required:
       - id
-      - title
-      - details
-      - source
-      - priority
-      - happenedAt
+      - subject
+      - communication
+      - author
+      - distribution
       - resourceIDs
       - createdAt
+      - publishedAt
       - updatedAt
       properties:
         id:
           "$ref": "#/components/schemas/Uuid"
-        title:
+        subject:
           type: string
-        details:
+          description: Sujet de l'event / news du projet.
+        communication:
           type: string
-        source:
+          description: Contenu de la communication.
+        author:
           type: string
-        priority:
-          "$ref": "#/components/schemas/EventPriority"
-        happenedAt:
-          "$ref": "#/components/schemas/IsoDateTime"
+          description: Auteur de la communication.
+        distribution:
+          type: string
+          description: Destinataires ou perimetre de diffusion.
         projectID:
           "$ref": "#/components/schemas/Uuid"
           nullable: true
@@ -1790,6 +1792,8 @@ components:
           items:
             "$ref": "#/components/schemas/Uuid"
         createdAt:
+          "$ref": "#/components/schemas/IsoDateTime"
+        publishedAt:
           "$ref": "#/components/schemas/IsoDateTime"
         updatedAt:
           "$ref": "#/components/schemas/IsoDateTime"
@@ -2368,13 +2372,6 @@ components:
       - proposedUnderReview
       - validated
       - abandoned
-    EventPriority:
-      type: string
-      enum:
-      - trivial
-      - minor
-      - major
-      - critical
     MeetingMode:
       type: string
       enum:

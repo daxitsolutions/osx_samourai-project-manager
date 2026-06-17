@@ -56,7 +56,7 @@ window.SAMOURAI_OPENAPI_SPEC = {
     },
     {
       "name": "Events",
-      "description": "CRUD des evenements."
+      "description": "CRUD des events / news du projet."
     },
     {
       "name": "Meetings",
@@ -1024,11 +1024,11 @@ window.SAMOURAI_OPENAPI_SPEC = {
         "tags": [
           "Events"
         ],
-        "summary": "Lister les evenements",
+        "summary": "Lister les events / news du projet",
         "operationId": "listEvents",
         "responses": {
           "200": {
-            "description": "Liste des evenements.",
+            "description": "Liste des events / news du projet.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1046,14 +1046,14 @@ window.SAMOURAI_OPENAPI_SPEC = {
         "tags": [
           "Events"
         ],
-        "summary": "Creer un evenement",
+        "summary": "Creer un event / news du projet",
         "operationId": "createEvent",
         "requestBody": {
           "$ref": "#/components/requestBodies/ProjectEventBody"
         },
         "responses": {
           "201": {
-            "description": "Evenement cree.",
+            "description": "Event / news cree.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1081,11 +1081,11 @@ window.SAMOURAI_OPENAPI_SPEC = {
         "tags": [
           "Events"
         ],
-        "summary": "Lire un evenement",
+        "summary": "Lire un event / news du projet",
         "operationId": "getEvent",
         "responses": {
           "200": {
-            "description": "Evenement trouve.",
+            "description": "Event / news trouve.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1103,14 +1103,14 @@ window.SAMOURAI_OPENAPI_SPEC = {
         "tags": [
           "Events"
         ],
-        "summary": "Remplacer un evenement",
+        "summary": "Remplacer un event / news du projet",
         "operationId": "replaceEvent",
         "requestBody": {
           "$ref": "#/components/requestBodies/ProjectEventBody"
         },
         "responses": {
           "200": {
-            "description": "Evenement remplace.",
+            "description": "Event / news remplace.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1131,11 +1131,11 @@ window.SAMOURAI_OPENAPI_SPEC = {
         "tags": [
           "Events"
         ],
-        "summary": "Supprimer un evenement",
+        "summary": "Supprimer un event / news du projet",
         "operationId": "deleteEvent",
         "responses": {
           "204": {
-            "description": "Evenement supprime."
+            "description": "Event / news supprime."
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -2710,33 +2710,34 @@ window.SAMOURAI_OPENAPI_SPEC = {
         "type": "object",
         "required": [
           "id",
-          "title",
-          "details",
-          "source",
-          "priority",
-          "happenedAt",
+          "subject",
+          "communication",
+          "author",
+          "distribution",
           "resourceIDs",
           "createdAt",
+          "publishedAt",
           "updatedAt"
         ],
         "properties": {
           "id": {
             "$ref": "#/components/schemas/Uuid"
           },
-          "title": {
-            "type": "string"
+          "subject": {
+            "type": "string",
+            "description": "Sujet de l'event / news du projet."
           },
-          "details": {
-            "type": "string"
+          "communication": {
+            "type": "string",
+            "description": "Contenu de la communication."
           },
-          "source": {
-            "type": "string"
+          "author": {
+            "type": "string",
+            "description": "Auteur de la communication."
           },
-          "priority": {
-            "$ref": "#/components/schemas/EventPriority"
-          },
-          "happenedAt": {
-            "$ref": "#/components/schemas/IsoDateTime"
+          "distribution": {
+            "type": "string",
+            "description": "Destinataires ou perimetre de diffusion."
           },
           "projectID": {
             "$ref": "#/components/schemas/Uuid",
@@ -2749,6 +2750,9 @@ window.SAMOURAI_OPENAPI_SPEC = {
             }
           },
           "createdAt": {
+            "$ref": "#/components/schemas/IsoDateTime"
+          },
+          "publishedAt": {
             "$ref": "#/components/schemas/IsoDateTime"
           },
           "updatedAt": {
@@ -3549,15 +3553,6 @@ window.SAMOURAI_OPENAPI_SPEC = {
           "proposedUnderReview",
           "validated",
           "abandoned"
-        ]
-      },
-      "EventPriority": {
-        "type": "string",
-        "enum": [
-          "trivial",
-          "minor",
-          "major",
-          "critical"
         ]
       },
       "MeetingMode": {

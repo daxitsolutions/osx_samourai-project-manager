@@ -1089,22 +1089,24 @@ final class SamouraiStore {
     }
 
     func addEvent(
-        title: String,
-        details: String,
-        source: String,
-        priority: EventPriority,
-        happenedAt: Date,
+        subject: String,
+        communication: String,
+        author: String,
+        distribution: String,
+        createdAt: Date,
+        publishedAt: Date,
         projectID: UUID?,
         resourceIDs: [UUID]
     ) -> UUID {
         let event = ProjectEvent(
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-            details: details.trimmingCharacters(in: .whitespacesAndNewlines),
-            source: source.trimmingCharacters(in: .whitespacesAndNewlines),
-            priority: priority,
-            happenedAt: happenedAt,
+            subject: subject.trimmingCharacters(in: .whitespacesAndNewlines),
+            communication: communication.trimmingCharacters(in: .whitespacesAndNewlines),
+            author: author.trimmingCharacters(in: .whitespacesAndNewlines),
+            distribution: distribution.trimmingCharacters(in: .whitespacesAndNewlines),
             projectID: sanitizedProjectID(projectID),
-            resourceIDs: sanitizedResourceIDs(resourceIDs)
+            resourceIDs: sanitizedResourceIDs(resourceIDs),
+            createdAt: createdAt,
+            publishedAt: publishedAt
         )
 
         events.append(event)
@@ -1115,21 +1117,23 @@ final class SamouraiStore {
 
     func updateEvent(
         eventID: UUID,
-        title: String,
-        details: String,
-        source: String,
-        priority: EventPriority,
-        happenedAt: Date,
+        subject: String,
+        communication: String,
+        author: String,
+        distribution: String,
+        createdAt: Date,
+        publishedAt: Date,
         projectID: UUID?,
         resourceIDs: [UUID]
     ) {
         guard let index = events.firstIndex(where: { $0.id == eventID }) else { return }
 
-        events[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        events[index].details = details.trimmingCharacters(in: .whitespacesAndNewlines)
-        events[index].source = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        events[index].priority = priority
-        events[index].happenedAt = happenedAt
+        events[index].subject = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        events[index].communication = communication.trimmingCharacters(in: .whitespacesAndNewlines)
+        events[index].author = author.trimmingCharacters(in: .whitespacesAndNewlines)
+        events[index].distribution = distribution.trimmingCharacters(in: .whitespacesAndNewlines)
+        events[index].createdAt = createdAt
+        events[index].publishedAt = publishedAt
         events[index].projectID = sanitizedProjectID(projectID)
         events[index].resourceIDs = sanitizedResourceIDs(resourceIDs)
         events[index].updatedAt = .now
@@ -3485,6 +3489,10 @@ final class SamouraiStore {
     @discardableResult
     func apiUpsertEvent(_ event: ProjectEvent, replacing id: UUID? = nil) throws -> ProjectEvent {
         var updated = event
+        updated.subject = updated.subject.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.communication = updated.communication.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.author = updated.author.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.distribution = updated.distribution.trimmingCharacters(in: .whitespacesAndNewlines)
         updated.projectID = sanitizedProjectID(updated.projectID)
         updated.resourceIDs = sanitizedResourceIDs(updated.resourceIDs)
         if let id {
@@ -4113,10 +4121,10 @@ final class SamouraiStore {
 
     private func sortEvents(_ events: [ProjectEvent]) -> [ProjectEvent] {
         events.sorted {
-            if $0.happenedAt == $1.happenedAt {
+            if $0.publishedAt == $1.publishedAt {
                 return $0.updatedAt > $1.updatedAt
             }
-            return $0.happenedAt > $1.happenedAt
+            return $0.publishedAt > $1.publishedAt
         }
     }
 
@@ -4315,6 +4323,10 @@ final class SamouraiStore {
     private func sanitizeEvents(_ events: [ProjectEvent], projectIDs: Set<UUID>, resourceIDs: Set<UUID>) -> [ProjectEvent] {
         events.map { event in
             var normalizedEvent = event
+            normalizedEvent.subject = event.subject.trimmingCharacters(in: .whitespacesAndNewlines)
+            normalizedEvent.communication = event.communication.trimmingCharacters(in: .whitespacesAndNewlines)
+            normalizedEvent.author = event.author.trimmingCharacters(in: .whitespacesAndNewlines)
+            normalizedEvent.distribution = event.distribution.trimmingCharacters(in: .whitespacesAndNewlines)
             if let projectID = event.projectID, projectIDs.contains(projectID) == false {
                 normalizedEvent.projectID = nil
             }
@@ -4421,11 +4433,12 @@ final class SamouraiStore {
 
     private func eventSearchableValues(for event: ProjectEvent) -> [String] {
         var values: [String] = [
-            event.title,
-            event.details,
-            event.source,
-            event.priority.label,
-            event.happenedAt.formatted(date: .abbreviated, time: .shortened),
+            event.subject,
+            event.communication,
+            event.author,
+            event.distribution,
+            event.createdAt.formatted(date: .abbreviated, time: .shortened),
+            event.publishedAt.formatted(date: .abbreviated, time: .shortened),
             projectName(for: event.projectID)
         ]
         values.append(contentsOf: resourceNames(for: event.resourceIDs))

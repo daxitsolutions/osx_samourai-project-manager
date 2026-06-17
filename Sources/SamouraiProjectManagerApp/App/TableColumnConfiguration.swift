@@ -26,7 +26,7 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
         case .actions:
             "Actions PM"
         case .events:
-            "Événements"
+            "les events / news du projet"
         case .meetings:
             "Réunions"
         case .decisions:
@@ -45,7 +45,7 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
         case .actions:
             "Liste opérationnelle des actions projet."
         case .events:
-            "Journal des événements projet."
+            "Communications importantes du projet."
         case .meetings:
             "Registre des réunions."
         case .decisions:
@@ -97,10 +97,12 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
             ]
         case .events:
             [
-                .init(id: "happenedAt", title: "Date/Heure"),
-                .init(id: "priority", title: "Priorité"),
-                .init(id: "title", title: "Événement"),
-                .init(id: "source", title: "Source"),
+                .init(id: "subject", title: "Sujet"),
+                .init(id: "communication", title: "Communication"),
+                .init(id: "author", title: "Auteur"),
+                .init(id: "distribution", title: "Distribution"),
+                .init(id: "createdAt", title: "Date de création"),
+                .init(id: "publishedAt", title: "Date de publication"),
                 .init(id: "project", title: "Projet"),
                 .init(id: "resources", title: "Ressources")
             ]
@@ -120,7 +122,7 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
                 .init(id: "title", title: "Décision"),
                 .init(id: "project", title: "Projet"),
                 .init(id: "meetings", title: "Réunions liées"),
-                .init(id: "events", title: "Événements liés"),
+                .init(id: "events", title: "Events / news liés"),
                 .init(id: "revisions", title: "Révisions"),
                 .init(id: "comments", title: "Commentaires")
             ]

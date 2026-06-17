@@ -289,7 +289,7 @@ struct DecisionEditorSheet: View {
 
     @ViewBuilder
     private func eventToggleSection() -> some View {
-        fieldStack(label: localized("Événements liés")) {
+        fieldStack(label: localized("Events / news liés")) {
             if store.events.isEmpty {
                 Text(localized("Aucun élément disponible"))
                     .foregroundStyle(.primary.opacity(0.7))
@@ -297,7 +297,7 @@ struct DecisionEditorSheet: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(store.events) { event in
                         Toggle(
-                            "\(event.displayTitle) · \(event.happenedAt.formatted(date: .abbreviated, time: .shortened))",
+                            "\(event.displayTitle) · \(event.publishedAt.formatted(date: .abbreviated, time: .shortened))",
                             isOn: Binding(
                                 get: { selectedEventIDs.contains(event.id) },
                                 set: { isOn in

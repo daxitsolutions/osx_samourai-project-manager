@@ -241,25 +241,6 @@ extension RiskStatus {
     }
 }
 
-extension EventPriority {
-    var colorToken: SamouraiColorToken {
-        switch self {
-        case .trivial:
-            .textMuted
-        case .minor:
-            .brandBlue
-        case .major:
-            .healthAmber
-        case .critical:
-            .dangerRed
-        }
-    }
-
-    var tintColor: Color {
-        SamouraiColorTheme.color(colorToken)
-    }
-}
-
 extension ActionPriority {
     var colorToken: SamouraiColorToken {
         switch self {

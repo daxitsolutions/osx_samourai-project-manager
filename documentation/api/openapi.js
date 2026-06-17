@@ -2588,6 +2588,10 @@ window.SAMOURAI_OPENAPI_SPEC = {
           "dueDate": {
             "$ref": "#/components/schemas/IsoDateTime"
           },
+          "expectedDate": {
+            "$ref": "#/components/schemas/IsoDateTime",
+            "nullable": true
+          },
           "flow": {
             "$ref": "#/components/schemas/ActionFlow"
           },
@@ -2598,6 +2602,12 @@ window.SAMOURAI_OPENAPI_SPEC = {
           "activityID": {
             "$ref": "#/components/schemas/Uuid",
             "nullable": true
+          },
+          "expectedDeliverableIDs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            }
           },
           "createdAt": {
             "$ref": "#/components/schemas/IsoDateTime"

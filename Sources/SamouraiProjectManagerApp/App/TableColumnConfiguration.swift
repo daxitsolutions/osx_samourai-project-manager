@@ -90,6 +90,8 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
                 .init(id: "activity", title: "Activité"),
                 .init(id: "project", title: "Projet"),
                 .init(id: "dueDate", title: "Échéance"),
+                .init(id: "expectedDate", title: "Date attendue"),
+                .init(id: "deliverables", title: "Livrables attendus"),
                 .init(id: "createdAt", title: "Créée le")
             ]
         case .events:

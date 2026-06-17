@@ -26,6 +26,8 @@ struct ActionWorkspaceView: View {
         static let activity: CGFloat = 200
         static let project: CGFloat = 200
         static let dueDate: CGFloat = 130
+        static let expectedDate: CGFloat = 130
+        static let deliverables: CGFloat = 220
         static let createdAt: CGFloat = 170
         static let expand: CGFloat = 28
     }
@@ -244,6 +246,14 @@ struct ActionWorkspaceView: View {
         case .dueDate:
             ActionSortHeader(label: column.label, comparator: .init(\.dueDate, order: .reverse), sortOrder: $sortOrder)
                 .frame(width: Col.dueDate, alignment: .leading)
+        case .expectedDate:
+            ActionSortHeader(label: column.label, comparator: .init(\.expectedDateSortKey, order: .reverse), sortOrder: $sortOrder)
+                .frame(width: Col.expectedDate, alignment: .leading)
+        case .deliverables:
+            Text(column.label.appLocalized(language: appState.interfaceLanguage))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: Col.deliverables, alignment: .leading)
         case .createdAt:
             ActionSortHeader(label: column.label, comparator: .init(\.createdAt, order: .reverse), sortOrder: $sortOrder)
                 .frame(width: Col.createdAt, alignment: .leading)
@@ -407,6 +417,18 @@ struct ActionWorkspaceView: View {
             Text(action.dueDate.formatted(date: .abbreviated, time: .omitted))
                 .frame(width: Col.dueDate, alignment: .leading)
 
+        case .expectedDate:
+            Text(action.expectedDate?.formatted(date: .abbreviated, time: .omitted) ?? "-")
+                .foregroundStyle(action.expectedDate == nil ? Color.secondary : Color.primary)
+                .frame(width: Col.expectedDate, alignment: .leading)
+
+        case .deliverables:
+            Text(expectedDeliverablesLabel(for: action))
+                .foregroundStyle(action.expectedDeliverableIDs.isEmpty ? Color.secondary : Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(width: Col.deliverables, alignment: .leading)
+
         case .createdAt:
             Text(action.createdAt.formatted(date: .abbreviated, time: .shortened))
                 .foregroundStyle(.secondary)
@@ -469,6 +491,8 @@ struct ActionWorkspaceView: View {
                 activityTitle(for: action.activityID),
                 store.projectName(for: action.projectID),
                 action.dueDate.formatted(date: .abbreviated, time: .omitted),
+                action.expectedDate?.formatted(date: .abbreviated, time: .omitted) ?? "",
+                expectedDeliverablesLabel(for: action),
                 action.createdAt.formatted(date: .abbreviated, time: .shortened),
                 action.isDone ? "terminée" : "ouverte"
             ]
@@ -503,13 +527,24 @@ struct ActionWorkspaceView: View {
         return activity.displayTitle
     }
 
+    private func expectedDeliverablesLabel(for action: ProjectAction) -> String {
+        guard action.expectedDeliverableIDs.isEmpty == false,
+              let projectID = action.projectID,
+              let project = store.project(with: projectID)
+        else { return "-" }
+
+        let deliverablesByID = Dictionary(uniqueKeysWithValues: project.deliverables.map { ($0.id, $0.title) })
+        let labels = action.expectedDeliverableIDs.compactMap { deliverablesByID[$0] }
+        return labels.isEmpty ? "-" : labels.joined(separator: ", ")
+    }
+
     private var selectedActionsForExport: [ProjectAction] {
         filteredActions.filter { selectedActionIDs.contains($0.id) }
     }
 
     private func prepareExport(actions: [ProjectAction], filenameSuffix: String) {
         guard actions.isEmpty == false else { return }
-        let headers = ["Titre", "Statut", "Priorite", "Flux", "Projet", "Activite", "Echeance", "Creee le"]
+        let headers = ["Titre", "Statut", "Priorite", "Flux", "Projet", "Activite", "Echeance", "Date attendue", "Livrables attendus", "Creee le"]
             .map { appState.localized($0) }
         let rows = actions.map { action in
             [
@@ -520,6 +555,8 @@ struct ActionWorkspaceView: View {
                 store.projectName(for: action.projectID),
                 activityTitle(for: action.activityID),
                 action.dueDate.formatted(date: .abbreviated, time: .omitted),
+                action.expectedDate?.formatted(date: .abbreviated, time: .omitted) ?? "",
+                expectedDeliverablesLabel(for: action),
                 action.createdAt.formatted(date: .abbreviated, time: .shortened)
             ]
         }
@@ -541,6 +578,7 @@ private extension ProjectAction {
     var statusSortKey: String { status.rawValue }
     var activityIDSortKey: String { activityID?.uuidString ?? "" }
     var projectIDSortKey: String { projectID?.uuidString ?? "" }
+    var expectedDateSortKey: Date { expectedDate ?? .distantPast }
 }
 
 private struct ActionSortHeader: View {
@@ -727,8 +765,11 @@ private struct ActionEditorSheet: View {
     @State private var priority: ActionPriority
     @State private var status: ActionStatus
     @State private var dueDate: Date
+    @State private var hasExpectedDate: Bool
+    @State private var expectedDate: Date
     @State private var flow: ActionFlow
     @State private var projectID: UUID?
+    @State private var selectedExpectedDeliverableIDs: Set<UUID>
     @State private var validationMessage: String?
     @State private var didApplyPrimaryProjectDefault = false
     @State private var initialSnapshot: String?
@@ -742,8 +783,11 @@ private struct ActionEditorSheet: View {
         _priority = State(initialValue: action?.priority ?? .minor)
         _status = State(initialValue: action?.status ?? .todo)
         _dueDate = State(initialValue: action?.dueDate ?? Calendar.current.date(byAdding: .day, value: 3, to: .now) ?? .now)
+        _hasExpectedDate = State(initialValue: action?.expectedDate != nil)
+        _expectedDate = State(initialValue: action?.expectedDate ?? action?.dueDate ?? Calendar.current.date(byAdding: .day, value: 3, to: .now) ?? .now)
         _flow = State(initialValue: action?.flow ?? .manuel)
         _projectID = State(initialValue: action?.projectID)
+        _selectedExpectedDeliverableIDs = State(initialValue: Set(action?.expectedDeliverableIDs ?? []))
     }
 
     var body: some View {
@@ -815,7 +859,11 @@ private struct ActionEditorSheet: View {
         }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
+            pruneExpectedDeliverablesForSelectedProject()
             captureInitialSnapshotIfNeeded()
+        }
+        .onChange(of: projectID) {
+            pruneExpectedDeliverablesForSelectedProject()
         }
     }
 
@@ -884,6 +932,24 @@ private struct ActionEditorSheet: View {
 
                 cardDivider
 
+                field(label: localized("Date attendue")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(localized("Renseigner une date attendue"), isOn: $hasExpectedDate)
+
+                        if hasExpectedDate {
+                            HStack(spacing: 8) {
+                                Image(systemName: "calendar.badge.clock")
+                                    .foregroundStyle(.secondary)
+                                DatePicker("", selection: $expectedDate, displayedComponents: [.date])
+                                    .labelsHidden()
+                                    .environment(\.locale, Locale(identifier: "fr_FR"))
+                            }
+                        }
+                    }
+                }
+
+                cardDivider
+
                 field(label: localized("Statut")) {
                     Picker("", selection: $status) {
                         ForEach(ActionStatus.allCases) { value in
@@ -934,6 +1000,10 @@ private struct ActionEditorSheet: View {
                     }
                 }
 
+                cardDivider
+
+                expectedDeliverablesField
+
                 if action != nil {
                     cardDivider
 
@@ -947,6 +1017,44 @@ private struct ActionEditorSheet: View {
                         .pickerStyle(.menu)
                         .frame(maxWidth: 180, alignment: .leading)
                     }
+                }
+            }
+        }
+    }
+
+    private var expectedDeliverablesField: some View {
+        field(label: localized("Livrables attendus")) {
+            VStack(alignment: .leading, spacing: 8) {
+                if let projectID,
+                   let project = store.project(with: projectID) {
+                    let deliverables = project.sortedDeliverables
+                    if deliverables.isEmpty {
+                        Text(localized("Aucun livrable disponible pour ce projet."))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(deliverables) { deliverable in
+                                Toggle(
+                                    deliverable.title,
+                                    isOn: Binding(
+                                        get: { selectedExpectedDeliverableIDs.contains(deliverable.id) },
+                                        set: { isSelected in
+                                            if isSelected {
+                                                selectedExpectedDeliverableIDs.insert(deliverable.id)
+                                            } else {
+                                                selectedExpectedDeliverableIDs.remove(deliverable.id)
+                                            }
+                                        }
+                                    )
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Text(localized("Sélectionne un projet pour associer des livrables attendus."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -1119,8 +1227,10 @@ private struct ActionEditorSheet: View {
             priority.rawValue,
             status.rawValue,
             String(dueDate.timeIntervalSinceReferenceDate),
+            hasExpectedDate ? String(expectedDate.timeIntervalSinceReferenceDate) : "",
             flow.rawValue,
-            projectID?.uuidString ?? ""
+            projectID?.uuidString ?? "",
+            selectedExpectedDeliverableIDs.map(\.uuidString).sorted().joined(separator: ",")
         ].joined(separator: "|")
     }
 
@@ -1157,8 +1267,10 @@ private struct ActionEditorSheet: View {
                 details: cleanedDetails,
                 priority: priority,
                 dueDate: dueDate,
+                expectedDate: hasExpectedDate ? expectedDate : nil,
                 flow: flow,
                 projectID: projectID,
+                expectedDeliverableIDs: Array(selectedExpectedDeliverableIDs),
                 status: status
             )
             appState.openAction(action.id)
@@ -1169,8 +1281,10 @@ private struct ActionEditorSheet: View {
                 priority: priority,
                 status: status,
                 dueDate: dueDate,
+                expectedDate: hasExpectedDate ? expectedDate : nil,
                 flow: flow,
-                projectID: projectID
+                projectID: projectID,
+                expectedDeliverableIDs: Array(selectedExpectedDeliverableIDs)
             )
             appState.openAction(createdActionID)
         }
@@ -1183,6 +1297,18 @@ private struct ActionEditorSheet: View {
         didApplyPrimaryProjectDefault = true
         guard action == nil, projectID == nil else { return }
         projectID = appState.resolvedPrimaryProjectID(in: store)
+    }
+
+    private func pruneExpectedDeliverablesForSelectedProject() {
+        guard let projectID,
+              let project = store.project(with: projectID)
+        else {
+            selectedExpectedDeliverableIDs.removeAll()
+            return
+        }
+
+        let validIDs = Set(project.deliverables.map(\.id))
+        selectedExpectedDeliverableIDs.formIntersection(validIDs)
     }
 
     private func localized(_ key: String) -> String {
@@ -1223,6 +1349,8 @@ private enum ActionTableColumn: String, CaseIterable, Identifiable, Hashable {
     case activity
     case project
     case dueDate
+    case expectedDate
+    case deliverables
     case createdAt
 
     var id: String { rawValue }

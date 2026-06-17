@@ -159,9 +159,11 @@ struct ProjectAction: Identifiable, Codable, Hashable {
     var priority: ActionPriority
     var status: ActionStatus
     var dueDate: Date
+    var expectedDate: Date?
     var flow: ActionFlow
     var projectID: UUID?
     var activityID: UUID?
+    var expectedDeliverableIDs: [UUID]
     var createdAt: Date
     var updatedAt: Date
     var isDone: Bool
@@ -174,9 +176,11 @@ struct ProjectAction: Identifiable, Codable, Hashable {
         priority: ActionPriority,
         status: ActionStatus = .todo,
         dueDate: Date,
+        expectedDate: Date? = nil,
         flow: ActionFlow,
         projectID: UUID? = nil,
         activityID: UUID? = nil,
+        expectedDeliverableIDs: [UUID] = [],
         createdAt: Date = .now,
         updatedAt: Date = .now,
         isDone: Bool = false,
@@ -188,13 +192,59 @@ struct ProjectAction: Identifiable, Codable, Hashable {
         self.priority = priority
         self.status = status
         self.dueDate = dueDate
+        self.expectedDate = expectedDate
         self.flow = flow
         self.projectID = projectID
         self.activityID = activityID
+        self.expectedDeliverableIDs = expectedDeliverableIDs.removingDuplicateValues()
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.isDone = isDone
         self.history = history
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, details, priority, status, dueDate, expectedDate, flow
+        case projectID, activityID, expectedDeliverableIDs
+        case createdAt, updatedAt, isDone, history
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        details = try container.decode(String.self, forKey: .details)
+        priority = try container.decode(ActionPriority.self, forKey: .priority)
+        status = try container.decode(ActionStatus.self, forKey: .status)
+        dueDate = try container.decode(Date.self, forKey: .dueDate)
+        expectedDate = try container.decodeIfPresent(Date.self, forKey: .expectedDate)
+        flow = try container.decode(ActionFlow.self, forKey: .flow)
+        projectID = try container.decodeIfPresent(UUID.self, forKey: .projectID)
+        activityID = try container.decodeIfPresent(UUID.self, forKey: .activityID)
+        expectedDeliverableIDs = (try container.decodeIfPresent([UUID].self, forKey: .expectedDeliverableIDs) ?? []).removingDuplicateValues()
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        isDone = try container.decode(Bool.self, forKey: .isDone)
+        history = try container.decodeIfPresent([ActionHistoryEntry].self, forKey: .history)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(details, forKey: .details)
+        try container.encode(priority, forKey: .priority)
+        try container.encode(status, forKey: .status)
+        try container.encode(dueDate, forKey: .dueDate)
+        try container.encodeIfPresent(expectedDate, forKey: .expectedDate)
+        try container.encode(flow, forKey: .flow)
+        try container.encodeIfPresent(projectID, forKey: .projectID)
+        try container.encodeIfPresent(activityID, forKey: .activityID)
+        try container.encode(expectedDeliverableIDs, forKey: .expectedDeliverableIDs)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(isDone, forKey: .isDone)
+        try container.encodeIfPresent(history, forKey: .history)
     }
 }
 

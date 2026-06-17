@@ -1674,6 +1674,9 @@ components:
           "$ref": "#/components/schemas/ActionStatus"
         dueDate:
           "$ref": "#/components/schemas/IsoDateTime"
+        expectedDate:
+          "$ref": "#/components/schemas/IsoDateTime"
+          nullable: true
         flow:
           "$ref": "#/components/schemas/ActionFlow"
         projectID:
@@ -1682,6 +1685,10 @@ components:
         activityID:
           "$ref": "#/components/schemas/Uuid"
           nullable: true
+        expectedDeliverableIDs:
+          type: array
+          items:
+            "$ref": "#/components/schemas/Uuid"
         createdAt:
           "$ref": "#/components/schemas/IsoDateTime"
         updatedAt:

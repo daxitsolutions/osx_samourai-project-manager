@@ -1044,9 +1044,16 @@ final class SamouraiStore {
         priority: ActionPriority,
         status: ActionStatus = .todo,
         dueDate: Date,
+        expectedDate: Date? = nil,
         flow: ActionFlow,
-        projectID: UUID?
+        projectID: UUID?,
+        expectedDeliverableIDs: [UUID] = []
     ) -> UUID {
+        let sanitizedProjectID = sanitizedProjectID(projectID)
+        let sanitizedExpectedDeliverableIDs = sanitizedExpectedDeliverableIDs(
+            projectID: sanitizedProjectID,
+            deliverableIDs: expectedDeliverableIDs
+        )
         let creationEntry = ActionHistoryEntry(
             kind: .automatic,
             text: "Action PM créée — Sévérité : \(priority.label), Statut : \(status.label), Flux : \(flow.label)"
@@ -1057,8 +1064,10 @@ final class SamouraiStore {
             priority: priority,
             status: status,
             dueDate: dueDate,
+            expectedDate: expectedDate,
             flow: flow,
-            projectID: sanitizedProjectID(projectID),
+            projectID: sanitizedProjectID,
+            expectedDeliverableIDs: sanitizedExpectedDeliverableIDs,
             history: [creationEntry]
         )
         actions.append(action)
@@ -1073,18 +1082,35 @@ final class SamouraiStore {
         details: String,
         priority: ActionPriority,
         dueDate: Date,
+        expectedDate: Date?? = nil,
         flow: ActionFlow,
         projectID: UUID?,
+        expectedDeliverableIDs: [UUID]? = nil,
         status: ActionStatus? = nil
     ) {
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return }
         let previous = actions[index]
+        let sanitizedProjectID = sanitizedProjectID(projectID)
         actions[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         actions[index].details = details.trimmingCharacters(in: .whitespacesAndNewlines)
         actions[index].priority = priority
         actions[index].dueDate = dueDate
+        if let expectedDate {
+            actions[index].expectedDate = expectedDate
+        }
         actions[index].flow = flow
-        actions[index].projectID = sanitizedProjectID(projectID)
+        actions[index].projectID = sanitizedProjectID
+        if let expectedDeliverableIDs {
+            actions[index].expectedDeliverableIDs = sanitizedExpectedDeliverableIDs(
+                projectID: sanitizedProjectID,
+                deliverableIDs: expectedDeliverableIDs
+            )
+        } else {
+            actions[index].expectedDeliverableIDs = sanitizedExpectedDeliverableIDs(
+                projectID: sanitizedProjectID,
+                deliverableIDs: actions[index].expectedDeliverableIDs
+            )
+        }
         if let status {
             actions[index].status = status
             actions[index].isDone = (status == .done)
@@ -1223,6 +1249,16 @@ final class SamouraiStore {
             messages.append("Date d'échéance modifiée : \(formatter.string(from: previous.dueDate)) → \(formatter.string(from: current.dueDate))")
         }
 
+        if previous.expectedDate != current.expectedDate {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "fr_FR")
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            let previousLabel = previous.expectedDate.map(formatter.string(from:)) ?? AppLocalizer.localized("non renseignée")
+            let currentLabel = current.expectedDate.map(formatter.string(from:)) ?? AppLocalizer.localized("non renseignée")
+            messages.append(AppLocalizer.localizedFormat("Date attendue modifiée : %@ → %@", previousLabel, currentLabel))
+        }
+
         if previous.projectID != current.projectID {
             let previousLabel = projectDisplayName(for: previous.projectID)
             let currentLabel = projectDisplayName(for: current.projectID)
@@ -1233,6 +1269,12 @@ final class SamouraiStore {
             let previousLabel = activityDisplayName(for: previous.activityID)
             let currentLabel = activityDisplayName(for: current.activityID)
             messages.append(AppLocalizer.localizedFormat("Activité associée modifiée : %@ → %@", previousLabel, currentLabel))
+        }
+
+        if previous.expectedDeliverableIDs != current.expectedDeliverableIDs {
+            let previousLabel = expectedDeliverablesDisplayName(for: previous.expectedDeliverableIDs, projectID: previous.projectID)
+            let currentLabel = expectedDeliverablesDisplayName(for: current.expectedDeliverableIDs, projectID: current.projectID)
+            messages.append(AppLocalizer.localizedFormat("Livrables attendus modifiés : %@ → %@", previousLabel, currentLabel))
         }
 
         return messages
@@ -1246,6 +1288,18 @@ final class SamouraiStore {
     private func activityDisplayName(for id: UUID?) -> String {
         guard let id else { return AppLocalizer.localized("Sans activité") }
         return activity(with: id)?.title ?? AppLocalizer.localized("Activité inconnue")
+    }
+
+    private func expectedDeliverablesDisplayName(for ids: [UUID], projectID: UUID?) -> String {
+        guard ids.isEmpty == false,
+              let projectID,
+              let project = project(with: projectID)
+        else {
+            return AppLocalizer.localized("Aucun livrable")
+        }
+        let deliverablesByID = Dictionary(uniqueKeysWithValues: project.deliverables.map { ($0.id, $0.title) })
+        let labels = ids.compactMap { deliverablesByID[$0] }
+        return labels.isEmpty ? AppLocalizer.localized("Aucun livrable") : labels.joined(separator: ", ")
     }
 
     func addActivity(
@@ -3292,6 +3346,10 @@ final class SamouraiStore {
     func apiUpsertAction(_ action: ProjectAction, replacing id: UUID? = nil) throws -> ProjectAction {
         var updated = action
         updated.projectID = sanitizedProjectID(updated.projectID)
+        updated.expectedDeliverableIDs = sanitizedExpectedDeliverableIDs(
+            projectID: updated.projectID,
+            deliverableIDs: updated.expectedDeliverableIDs
+        )
         if let activityID = updated.activityID {
             guard let projectID = updated.projectID,
                   let activity = activity(with: activityID),
@@ -3543,6 +3601,11 @@ final class SamouraiStore {
                 activities = activities.map { activity in
                     var updated = activity
                     updated.linkedDeliverableIDs.removeAll { $0 == id }
+                    return updated
+                }
+                actions = actions.map { action in
+                    var updated = action
+                    updated.expectedDeliverableIDs.removeAll { $0 == id }
                     return updated
                 }
                 persist()
@@ -3951,6 +4014,10 @@ final class SamouraiStore {
             if let projectID = action.projectID, projectIDs.contains(projectID) == false {
                 normalizedAction.projectID = nil
             }
+            normalizedAction.expectedDeliverableIDs = sanitizedExpectedDeliverableIDs(
+                projectID: normalizedAction.projectID,
+                deliverableIDs: action.expectedDeliverableIDs
+            )
             if let activityID = action.activityID {
                 guard let activity = activitiesByID[activityID],
                       let actionProjectID = normalizedAction.projectID,
@@ -4044,6 +4111,10 @@ final class SamouraiStore {
 
     private func actionSearchableValues(for action: ProjectAction) -> [String] {
         let activityTitle = activityTitle(for: action.activityID)
+        let expectedDeliverables = expectedDeliverablesDisplayName(
+            for: action.expectedDeliverableIDs,
+            projectID: action.projectID
+        )
         return [
             action.title,
             action.details,
@@ -4052,6 +4123,8 @@ final class SamouraiStore {
             activityTitle,
             projectName(for: action.projectID),
             action.dueDate.formatted(date: .abbreviated, time: .omitted),
+            action.expectedDate?.formatted(date: .abbreviated, time: .omitted) ?? "",
+            expectedDeliverables,
             action.createdAt.formatted(date: .abbreviated, time: .shortened),
             action.isDone ? "terminée" : "ouverte"
         ]
@@ -4147,6 +4220,11 @@ final class SamouraiStore {
     private func sanitizedProjectID(_ projectID: UUID?) -> UUID? {
         guard let projectID else { return nil }
         return projects.contains(where: { $0.id == projectID }) ? projectID : nil
+    }
+
+    private func sanitizedExpectedDeliverableIDs(projectID: UUID?, deliverableIDs: [UUID]) -> [UUID] {
+        guard let projectID else { return [] }
+        return sanitizedDeliverableIDs(projectID: projectID, deliverableIDs: deliverableIDs)
     }
 
     private func sanitizedDeliverableIDs(projectID: UUID, deliverableIDs: [UUID]) -> [UUID] {

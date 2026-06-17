@@ -31596,6 +31596,12 @@ window.SAMOURAI_OPENAPI_BUNDLED_SPEC = {
             "format": "date-time",
             "description": "Date encodee en ISO 8601."
           },
+          "expectedDate": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date encodee en ISO 8601.",
+            "nullable": true
+          },
           "flow": {
             "type": "string",
             "enum": [
@@ -31618,6 +31624,16 @@ window.SAMOURAI_OPENAPI_BUNDLED_SPEC = {
               "00000000-0000-0000-0000-000000000000"
             ],
             "nullable": true
+          },
+          "expectedDeliverableIDs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "examples": [
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            }
           },
           "createdAt": {
             "type": "string",

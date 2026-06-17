@@ -163,6 +163,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
     var flow: ActionFlow
     var projectID: UUID?
     var activityID: UUID?
+    var assignedResourceID: UUID?
     var expectedDeliverableIDs: [UUID]
     var createdAt: Date
     var updatedAt: Date
@@ -180,6 +181,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
         flow: ActionFlow,
         projectID: UUID? = nil,
         activityID: UUID? = nil,
+        assignedResourceID: UUID? = nil,
         expectedDeliverableIDs: [UUID] = [],
         createdAt: Date = .now,
         updatedAt: Date = .now,
@@ -196,6 +198,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
         self.flow = flow
         self.projectID = projectID
         self.activityID = activityID
+        self.assignedResourceID = assignedResourceID
         self.expectedDeliverableIDs = expectedDeliverableIDs.removingDuplicateValues()
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -205,7 +208,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, title, details, priority, status, dueDate, expectedDate, flow
-        case projectID, activityID, expectedDeliverableIDs
+        case projectID, activityID, assignedResourceID, expectedDeliverableIDs
         case createdAt, updatedAt, isDone, history
     }
 
@@ -221,6 +224,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
         flow = try container.decode(ActionFlow.self, forKey: .flow)
         projectID = try container.decodeIfPresent(UUID.self, forKey: .projectID)
         activityID = try container.decodeIfPresent(UUID.self, forKey: .activityID)
+        assignedResourceID = try container.decodeIfPresent(UUID.self, forKey: .assignedResourceID)
         expectedDeliverableIDs = (try container.decodeIfPresent([UUID].self, forKey: .expectedDeliverableIDs) ?? []).removingDuplicateValues()
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
@@ -240,6 +244,7 @@ struct ProjectAction: Identifiable, Codable, Hashable {
         try container.encode(flow, forKey: .flow)
         try container.encodeIfPresent(projectID, forKey: .projectID)
         try container.encodeIfPresent(activityID, forKey: .activityID)
+        try container.encodeIfPresent(assignedResourceID, forKey: .assignedResourceID)
         try container.encode(expectedDeliverableIDs, forKey: .expectedDeliverableIDs)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)

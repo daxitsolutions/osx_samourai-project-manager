@@ -31625,6 +31625,14 @@ window.SAMOURAI_OPENAPI_BUNDLED_SPEC = {
             ],
             "nullable": true
           },
+          "assignedResourceID": {
+            "type": "string",
+            "format": "uuid",
+            "examples": [
+              "00000000-0000-0000-0000-000000000000"
+            ],
+            "nullable": true
+          },
           "expectedDeliverableIDs": {
             "type": "array",
             "items": {

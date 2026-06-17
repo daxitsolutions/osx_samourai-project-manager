@@ -772,6 +772,25 @@ final class SamouraiStore {
         resourceStore.resources(for: projectID)
     }
 
+    func defaultActionAssignedResourceID(projectID: UUID?) -> UUID? {
+        guard let projectID,
+              let project = project(with: projectID)
+        else { return nil }
+
+        let projectResources = resources(for: projectID)
+        let normalizedManager = normalizedToken(project.manager)
+        if normalizedManager.isEmpty == false,
+           let managerResource = projectResources.first(where: { resource in
+               [resource.displayName, resource.fullName, resource.nom ?? ""]
+                   .map(normalizedToken)
+                   .contains(normalizedManager)
+           }) {
+            return managerResource.id
+        }
+
+        return projectResources.first { $0.criticalRoles.contains(.projectManager) }?.id
+    }
+
     func resourceProfiling(for projectID: UUID?) -> ResourceProfilingReport {
         resourceStore.resourceProfiling(for: projectID)
     }
@@ -1047,9 +1066,15 @@ final class SamouraiStore {
         expectedDate: Date? = nil,
         flow: ActionFlow,
         projectID: UUID?,
+        assignedResourceID: UUID?? = nil,
         expectedDeliverableIDs: [UUID] = []
     ) -> UUID {
         let sanitizedProjectID = sanitizedProjectID(projectID)
+        let sanitizedAssignedResourceID = sanitizedAssignedResourceID(
+            projectID: sanitizedProjectID,
+            assignedResourceID: assignedResourceID,
+            defaultWhenOmitted: true
+        )
         let sanitizedExpectedDeliverableIDs = sanitizedExpectedDeliverableIDs(
             projectID: sanitizedProjectID,
             deliverableIDs: expectedDeliverableIDs
@@ -1067,6 +1092,7 @@ final class SamouraiStore {
             expectedDate: expectedDate,
             flow: flow,
             projectID: sanitizedProjectID,
+            assignedResourceID: sanitizedAssignedResourceID,
             expectedDeliverableIDs: sanitizedExpectedDeliverableIDs,
             history: [creationEntry]
         )
@@ -1085,6 +1111,7 @@ final class SamouraiStore {
         expectedDate: Date?? = nil,
         flow: ActionFlow,
         projectID: UUID?,
+        assignedResourceID: UUID?? = nil,
         expectedDeliverableIDs: [UUID]? = nil,
         status: ActionStatus? = nil
     ) {
@@ -1100,6 +1127,11 @@ final class SamouraiStore {
         }
         actions[index].flow = flow
         actions[index].projectID = sanitizedProjectID
+        actions[index].assignedResourceID = sanitizedAssignedResourceID(
+            projectID: sanitizedProjectID,
+            assignedResourceID: assignedResourceID,
+            fallbackResourceID: actions[index].assignedResourceID
+        )
         if let expectedDeliverableIDs {
             actions[index].expectedDeliverableIDs = sanitizedExpectedDeliverableIDs(
                 projectID: sanitizedProjectID,
@@ -1271,6 +1303,12 @@ final class SamouraiStore {
             messages.append(AppLocalizer.localizedFormat("Activité associée modifiée : %@ → %@", previousLabel, currentLabel))
         }
 
+        if previous.assignedResourceID != current.assignedResourceID {
+            let previousLabel = assignedResourceDisplayName(for: previous.assignedResourceID)
+            let currentLabel = assignedResourceDisplayName(for: current.assignedResourceID)
+            messages.append(AppLocalizer.localizedFormat("Assignation modifiée : %@ → %@", previousLabel, currentLabel))
+        }
+
         if previous.expectedDeliverableIDs != current.expectedDeliverableIDs {
             let previousLabel = expectedDeliverablesDisplayName(for: previous.expectedDeliverableIDs, projectID: previous.projectID)
             let currentLabel = expectedDeliverablesDisplayName(for: current.expectedDeliverableIDs, projectID: current.projectID)
@@ -1288,6 +1326,11 @@ final class SamouraiStore {
     private func activityDisplayName(for id: UUID?) -> String {
         guard let id else { return AppLocalizer.localized("Sans activité") }
         return activity(with: id)?.title ?? AppLocalizer.localized("Activité inconnue")
+    }
+
+    private func assignedResourceDisplayName(for id: UUID?) -> String {
+        guard let id else { return AppLocalizer.localized("Non assigné") }
+        return resource(with: id)?.displayName ?? AppLocalizer.localized("Ressource inconnue")
     }
 
     private func expectedDeliverablesDisplayName(for ids: [UUID], projectID: UUID?) -> String {
@@ -3173,6 +3216,13 @@ final class SamouraiStore {
     func deleteResource(resourceID: UUID) {
         let didDelete = resourceStore.deleteResource(resourceID: resourceID)
         guard didDelete else { return }
+        actions = actions.map { action in
+            var updatedAction = action
+            if updatedAction.assignedResourceID == resourceID {
+                updatedAction.assignedResourceID = nil
+            }
+            return updatedAction
+        }
         decisions = decisions.map { decision in
             var updatedDecision = decision
             updatedDecision.impactedResourceIDs.removeAll { $0 == resourceID }
@@ -3346,6 +3396,10 @@ final class SamouraiStore {
     func apiUpsertAction(_ action: ProjectAction, replacing id: UUID? = nil) throws -> ProjectAction {
         var updated = action
         updated.projectID = sanitizedProjectID(updated.projectID)
+        updated.assignedResourceID = sanitizedAssignedResourceID(
+            projectID: updated.projectID,
+            assignedResourceID: .some(updated.assignedResourceID)
+        )
         updated.expectedDeliverableIDs = sanitizedExpectedDeliverableIDs(
             projectID: updated.projectID,
             deliverableIDs: updated.expectedDeliverableIDs
@@ -4014,6 +4068,10 @@ final class SamouraiStore {
             if let projectID = action.projectID, projectIDs.contains(projectID) == false {
                 normalizedAction.projectID = nil
             }
+            normalizedAction.assignedResourceID = sanitizedAssignedResourceID(
+                projectID: normalizedAction.projectID,
+                assignedResourceID: .some(action.assignedResourceID)
+            )
             normalizedAction.expectedDeliverableIDs = sanitizedExpectedDeliverableIDs(
                 projectID: normalizedAction.projectID,
                 deliverableIDs: action.expectedDeliverableIDs
@@ -4122,6 +4180,7 @@ final class SamouraiStore {
             action.flow.label,
             activityTitle,
             projectName(for: action.projectID),
+            assignedResourceDisplayName(for: action.assignedResourceID),
             action.dueDate.formatted(date: .abbreviated, time: .omitted),
             action.expectedDate?.formatted(date: .abbreviated, time: .omitted) ?? "",
             expectedDeliverables,
@@ -4220,6 +4279,27 @@ final class SamouraiStore {
     private func sanitizedProjectID(_ projectID: UUID?) -> UUID? {
         guard let projectID else { return nil }
         return projects.contains(where: { $0.id == projectID }) ? projectID : nil
+    }
+
+    private func sanitizedAssignedResourceID(
+        projectID: UUID?,
+        assignedResourceID: UUID??,
+        defaultWhenOmitted: Bool = false,
+        fallbackResourceID: UUID? = nil
+    ) -> UUID? {
+        guard let projectID else { return nil }
+
+        if let assignedResourceID {
+            guard let resourceID = assignedResourceID else { return nil }
+            return resources(for: projectID).contains(where: { $0.id == resourceID }) ? resourceID : nil
+        }
+
+        if let fallbackResourceID,
+           resources(for: projectID).contains(where: { $0.id == fallbackResourceID }) {
+            return fallbackResourceID
+        }
+
+        return defaultWhenOmitted ? defaultActionAssignedResourceID(projectID: projectID) : nil
     }
 
     private func sanitizedExpectedDeliverableIDs(projectID: UUID?, deliverableIDs: [UUID]) -> [UUID] {

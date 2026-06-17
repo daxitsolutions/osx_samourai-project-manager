@@ -2603,6 +2603,10 @@ window.SAMOURAI_OPENAPI_SPEC = {
             "$ref": "#/components/schemas/Uuid",
             "nullable": true
           },
+          "assignedResourceID": {
+            "$ref": "#/components/schemas/Uuid",
+            "nullable": true
+          },
           "expectedDeliverableIDs": {
             "type": "array",
             "items": {

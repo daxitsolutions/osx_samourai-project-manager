@@ -1685,6 +1685,9 @@ components:
         activityID:
           "$ref": "#/components/schemas/Uuid"
           nullable: true
+        assignedResourceID:
+          "$ref": "#/components/schemas/Uuid"
+          nullable: true
         expectedDeliverableIDs:
           type: array
           items:

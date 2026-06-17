@@ -25,6 +25,7 @@ struct ActionWorkspaceView: View {
         static let priority: CGFloat = 120
         static let activity: CGFloat = 200
         static let project: CGFloat = 200
+        static let assignee: CGFloat = 180
         static let dueDate: CGFloat = 130
         static let expectedDate: CGFloat = 130
         static let deliverables: CGFloat = 220
@@ -249,6 +250,11 @@ struct ActionWorkspaceView: View {
         case .project:
             ActionSortHeader(label: column.label, comparator: .init(\.projectIDSortKey), sortOrder: $sortOrder)
                 .frame(width: Col.project, alignment: .leading)
+        case .assignee:
+            Text(column.label.appLocalized(language: appState.interfaceLanguage))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: Col.assignee, alignment: .leading)
         case .dueDate:
             ActionSortHeader(label: column.label, comparator: .init(\.dueDate, order: .reverse), sortOrder: $sortOrder)
                 .frame(width: Col.dueDate, alignment: .leading)
@@ -419,6 +425,13 @@ struct ActionWorkspaceView: View {
                 .truncationMode(.tail)
                 .frame(width: Col.project, alignment: .leading)
 
+        case .assignee:
+            Text(assignedResourceLabel(for: action))
+                .foregroundStyle(action.assignedResourceID == nil ? Color.secondary : Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(width: Col.assignee, alignment: .leading)
+
         case .dueDate:
             Text(action.dueDate.formatted(date: .abbreviated, time: .omitted))
                 .frame(width: Col.dueDate, alignment: .leading)
@@ -496,6 +509,7 @@ struct ActionWorkspaceView: View {
                 action.status.label.appLocalized(language: appState.interfaceLanguage),
                 activityTitle(for: action.activityID),
                 store.projectName(for: action.projectID),
+                assignedResourceLabel(for: action),
                 action.dueDate.formatted(date: .abbreviated, time: .omitted),
                 action.expectedDate?.formatted(date: .abbreviated, time: .omitted) ?? "",
                 expectedDeliverablesLabel(for: action),
@@ -533,6 +547,13 @@ struct ActionWorkspaceView: View {
         return activity.displayTitle
     }
 
+    private func assignedResourceLabel(for action: ProjectAction) -> String {
+        guard let assignedResourceID = action.assignedResourceID else {
+            return localized("Non assigné")
+        }
+        return store.resource(with: assignedResourceID)?.displayName ?? localized("Ressource inconnue")
+    }
+
     private func expectedDeliverablesLabel(for action: ProjectAction) -> String {
         guard action.expectedDeliverableIDs.isEmpty == false,
               let projectID = action.projectID,
@@ -550,7 +571,7 @@ struct ActionWorkspaceView: View {
 
     private func prepareExport(actions: [ProjectAction], filenameSuffix: String) {
         guard actions.isEmpty == false else { return }
-        let headers = ["Titre", "Statut", "Priorite", "Flux", "Projet", "Activite", "Echeance", "Date attendue", "Livrables attendus", "Creee le"]
+        let headers = ["Titre", "Statut", "Priorite", "Flux", "Projet", "Activite", "Assignation", "Echeance", "Date attendue", "Livrables attendus", "Creee le"]
             .map { appState.localized($0) }
         let rows = actions.map { action in
             [
@@ -560,6 +581,7 @@ struct ActionWorkspaceView: View {
                 action.flow.label.appLocalized(language: appState.interfaceLanguage),
                 store.projectName(for: action.projectID),
                 activityTitle(for: action.activityID),
+                assignedResourceLabel(for: action),
                 action.dueDate.formatted(date: .abbreviated, time: .omitted),
                 action.expectedDate?.formatted(date: .abbreviated, time: .omitted) ?? "",
                 expectedDeliverablesLabel(for: action),
@@ -584,6 +606,7 @@ private extension ProjectAction {
     var statusSortKey: String { status.rawValue }
     var activityIDSortKey: String { activityID?.uuidString ?? "" }
     var projectIDSortKey: String { projectID?.uuidString ?? "" }
+    var assignedResourceIDSortKey: String { assignedResourceID?.uuidString ?? "" }
     var expectedDateSortKey: Date { expectedDate ?? .distantPast }
 }
 
@@ -775,6 +798,8 @@ private struct ActionEditorSheet: View {
     @State private var expectedDate: Date
     @State private var flow: ActionFlow
     @State private var projectID: UUID?
+    @State private var selectedAssignedResourceID: UUID?
+    @State private var didChooseAssignedResourceExplicitly = false
     @State private var selectedExpectedDeliverableIDs: Set<UUID>
     @State private var validationMessage: String?
     @State private var didApplyPrimaryProjectDefault = false
@@ -793,6 +818,7 @@ private struct ActionEditorSheet: View {
         _expectedDate = State(initialValue: action?.expectedDate ?? action?.dueDate ?? Calendar.current.date(byAdding: .day, value: 3, to: .now) ?? .now)
         _flow = State(initialValue: action?.flow ?? .manuel)
         _projectID = State(initialValue: action?.projectID)
+        _selectedAssignedResourceID = State(initialValue: action?.assignedResourceID)
         _selectedExpectedDeliverableIDs = State(initialValue: Set(action?.expectedDeliverableIDs ?? []))
     }
 
@@ -865,10 +891,12 @@ private struct ActionEditorSheet: View {
         }
         .onAppear {
             applyPrimaryProjectDefaultIfNeeded()
+            normalizeAssignedResourceForSelectedProject()
             pruneExpectedDeliverablesForSelectedProject()
             captureInitialSnapshotIfNeeded()
         }
         .onChange(of: projectID) {
+            normalizeAssignedResourceForSelectedProject()
             pruneExpectedDeliverablesForSelectedProject()
         }
     }
@@ -1008,6 +1036,10 @@ private struct ActionEditorSheet: View {
 
                 cardDivider
 
+                assignmentField
+
+                cardDivider
+
                 expectedDeliverablesField
 
                 if action != nil {
@@ -1023,6 +1055,44 @@ private struct ActionEditorSheet: View {
                         .pickerStyle(.menu)
                         .frame(maxWidth: 180, alignment: .leading)
                     }
+                }
+            }
+        }
+    }
+
+    private var assignmentField: some View {
+        field(label: localized("Assignation")) {
+            VStack(alignment: .leading, spacing: 6) {
+                if let projectID {
+                    let projectResources = store.resources(for: projectID)
+                    Picker(
+                        "",
+                        selection: Binding(
+                            get: { selectedAssignedResourceID },
+                            set: { newValue in
+                                didChooseAssignedResourceExplicitly = true
+                                selectedAssignedResourceID = newValue
+                            }
+                        )
+                    ) {
+                        Text(localized("Non assigné")).tag(Optional<UUID>.none)
+                        ForEach(projectResources) { resource in
+                            Text(resource.displayName).tag(Optional(resource.id))
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 300, alignment: .leading)
+
+                    if projectResources.isEmpty {
+                        Text(localized("Aucune ressource liée à ce projet."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text(localized("Sélectionne un projet pour choisir une ressource."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -1236,6 +1306,7 @@ private struct ActionEditorSheet: View {
             hasExpectedDate ? String(expectedDate.timeIntervalSinceReferenceDate) : "",
             flow.rawValue,
             projectID?.uuidString ?? "",
+            selectedAssignedResourceID?.uuidString ?? "unassigned",
             selectedExpectedDeliverableIDs.map(\.uuidString).sorted().joined(separator: ",")
         ].joined(separator: "|")
     }
@@ -1276,6 +1347,7 @@ private struct ActionEditorSheet: View {
                 expectedDate: hasExpectedDate ? expectedDate : nil,
                 flow: flow,
                 projectID: projectID,
+                assignedResourceID: selectedAssignedResourceID,
                 expectedDeliverableIDs: Array(selectedExpectedDeliverableIDs),
                 status: status
             )
@@ -1290,6 +1362,7 @@ private struct ActionEditorSheet: View {
                 expectedDate: hasExpectedDate ? expectedDate : nil,
                 flow: flow,
                 projectID: projectID,
+                assignedResourceID: selectedAssignedResourceID,
                 expectedDeliverableIDs: Array(selectedExpectedDeliverableIDs)
             )
             appState.openAction(createdActionID)
@@ -1303,6 +1376,24 @@ private struct ActionEditorSheet: View {
         didApplyPrimaryProjectDefault = true
         guard action == nil, projectID == nil else { return }
         projectID = appState.resolvedPrimaryProjectID(in: store)
+    }
+
+    private func normalizeAssignedResourceForSelectedProject() {
+        guard let projectID else {
+            selectedAssignedResourceID = nil
+            return
+        }
+
+        let projectResourceIDs = Set(store.resources(for: projectID).map(\.id))
+        if let selectedAssignedResourceID,
+           projectResourceIDs.contains(selectedAssignedResourceID) == false {
+            self.selectedAssignedResourceID = nil
+        }
+
+        if selectedAssignedResourceID == nil,
+           didChooseAssignedResourceExplicitly == false {
+            selectedAssignedResourceID = store.defaultActionAssignedResourceID(projectID: projectID)
+        }
     }
 
     private func pruneExpectedDeliverablesForSelectedProject() {
@@ -1354,6 +1445,7 @@ private enum ActionTableColumn: String, CaseIterable, Identifiable, Hashable {
     case title
     case activity
     case project
+    case assignee
     case dueDate
     case expectedDate
     case deliverables

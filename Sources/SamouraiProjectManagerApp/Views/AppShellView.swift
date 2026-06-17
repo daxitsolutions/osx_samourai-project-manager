@@ -15,6 +15,7 @@ struct AppShellView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isShowingBackupExporter = false
     @State private var isShowingBackupImporter = false
+    @State private var isShowingMerlinImporter = false
     @State private var backupDocument: SamouraiBackupDocument?
     @State private var backupFilename = "samourai-backup"
     @State private var backupFeedbackMessage: String?
@@ -98,6 +99,13 @@ struct AppShellView: View {
             allowsMultipleSelection: false
         ) { result in
             handleBackupImport(result)
+        }
+        .fileImporter(
+            isPresented: $isShowingMerlinImporter,
+            allowedContentTypes: MerlinProjectImportService.allowedContentTypes,
+            allowsMultipleSelection: false
+        ) { result in
+            handleMerlinImport(result)
         }
         .alert(localized("Action impossible"), isPresented: Binding(
             get: { store.lastErrorMessage != nil },
@@ -233,7 +241,8 @@ struct AppShellView: View {
             BackupWorkspaceView(
                 primaryProjectName: primaryProjectName,
                 onExportBackup: exportBackup,
-                onImportBackup: { isShowingBackupImporter = true }
+                onImportBackup: { isShowingBackupImporter = true },
+                onImportMerlinXML: { isShowingMerlinImporter = true }
             )
         case .testing:
             TestingWorkspaceView()
@@ -356,6 +365,52 @@ struct AppShellView: View {
             backupFeedbackMessage = "\(restorationSummary)\n\(restorationMetadata)"
         } catch {
             backupFeedbackMessage = error.localizedDescription
+        }
+    }
+
+    private func handleMerlinImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let fileURL = urls.first else {
+            if case .failure(let error) = result {
+                backupFeedbackMessage = error.localizedDescription
+            }
+            return
+        }
+
+        let tracker = ImportProgressTracker(title: "Import XML Merlin", fileName: fileURL.lastPathComponent)
+        appState.showImportProgress(tracker)
+        tracker.task = Task { @MainActor in
+            let reporter = ImportProgressReporter.forwarding(to: tracker)
+            let didAccessSecurityScope = fileURL.startAccessingSecurityScopedResource()
+            defer {
+                if didAccessSecurityScope {
+                    fileURL.stopAccessingSecurityScopedResource()
+                }
+                appState.clearImportProgress(tracker)
+            }
+
+            do {
+                try Task.checkCancellation()
+                let payload = try MerlinProjectImportService.importProject(from: fileURL, reporter: reporter)
+                try Task.checkCancellation()
+                let importResult = try store.importMerlinProject(payload, reporter: reporter)
+                appState.openProject(importResult.projectID)
+                var message = AppLocalizer.localizedFormat(
+                    "Import Merlin terminé : %@",
+                    language: appState.interfaceLanguage,
+                    importResult.summary
+                )
+                if importResult.warnings.isEmpty == false {
+                    message += "\n" + importResult.warnings.prefix(8).joined(separator: "\n")
+                    if importResult.warnings.count > 8 {
+                        message += "\n..."
+                    }
+                }
+                backupFeedbackMessage = message
+            } catch is CancellationError {
+                backupFeedbackMessage = localized("Import Merlin annulé.")
+            } catch {
+                backupFeedbackMessage = error.localizedDescription
+            }
         }
     }
 

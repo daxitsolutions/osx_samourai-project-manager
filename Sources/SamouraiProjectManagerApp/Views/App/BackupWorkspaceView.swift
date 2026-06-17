@@ -4,6 +4,7 @@ struct BackupWorkspaceView: View {
     let primaryProjectName: String?
     let onExportBackup: () -> Void
     let onImportBackup: () -> Void
+    let onImportMerlinXML: () -> Void
 
     var body: some View {
         ScrollView {
@@ -34,6 +35,11 @@ struct BackupWorkspaceView: View {
 
                         Button(action: onImportBackup) {
                             Label(localized("Restaurer depuis un backup"), systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button(action: onImportMerlinXML) {
+                            Label(localized("Importer XML Merlin"), systemImage: "doc.badge.arrow.up")
                         }
                         .buttonStyle(.bordered)
                     }

@@ -768,6 +768,126 @@ final class SamouraiStore {
         )
     }
 
+    @discardableResult
+    func importMerlinProject(_ payload: MerlinProjectImportPayload, reporter: ImportProgressReporter = .noop) throws -> MerlinProjectImportResult {
+        reporter.setStage(.importing)
+        let total = max(1, payload.resources.count + payload.activities.count)
+        reporter.setTotal(total)
+        reporter.setProcessed(0)
+        reporter.setImported(0)
+
+        let now = Date.now
+        let projectID = MerlinProjectImportService.stableUUID(namespace: "merlin-project", merlinID: payload.project.id)
+        let scenarioID = UUID()
+        let startDate = payload.project.startDate ?? now
+        let targetDate = payload.project.endDate ?? startDate
+        let scenarioName = merlinScenarioName(importedAt: now)
+        let createdProject: Bool
+
+        if let projectIndex = projects.firstIndex(where: { $0.id == projectID }) {
+            createdProject = false
+            let existing = projects[projectIndex]
+            let scenario = ProjectPlanningScenario(
+                id: scenarioID,
+                name: scenarioName,
+                createdAt: merlinScenarioSortDate(for: existing),
+                updatedAt: now
+            )
+            projects[projectIndex].name = payload.project.title
+            projects[projectIndex].summary = payload.project.summary
+            projects[projectIndex].startDate = startDate
+            projects[projectIndex].targetDate = targetDate
+            projects[projectIndex].planningScenarios = ProjectPlanningScenario.normalizedScenarios([scenario] + existing.planningScenarios, fallbackDate: existing.createdAt)
+            projects[projectIndex].updatedAt = now
+        } else {
+            createdProject = true
+            let scenario = ProjectPlanningScenario(id: scenarioID, name: scenarioName, createdAt: now, updatedAt: now)
+            projects.append(
+                Project(
+                    id: projectID,
+                    name: payload.project.title,
+                    summary: payload.project.summary,
+                    sponsor: "",
+                    manager: "",
+                    phase: .planning,
+                    health: payload.warnings.isEmpty ? .green : .amber,
+                    deliveryMode: .waterfall,
+                    startDate: startDate,
+                    targetDate: targetDate,
+                    createdAt: now,
+                    updatedAt: now,
+                    planningScenarios: [scenario]
+                )
+            )
+        }
+
+        let calendarTitlesByID = Dictionary(uniqueKeysWithValues: payload.calendars.map { ($0.id, $0.title) })
+        for (offset, merlinResource) in payload.resources.enumerated() {
+            upsertMerlinResource(
+                merlinResource,
+                projectID: projectID,
+                calendarTitle: merlinResource.baseCalendarID.flatMap { calendarTitlesByID[$0] },
+                activityAssignments: activityAssignmentSummary(resourceID: merlinResource.id, activities: payload.activities)
+            )
+            reporter.setProcessed(offset + 1)
+            reporter.setImported(offset + 1)
+        }
+
+        let localActivityIDsByMerlinID = Dictionary(
+            uniqueKeysWithValues: payload.activities.map {
+                ($0.id, MerlinProjectImportService.stableUUID(namespace: "merlin-activity:\(payload.project.id):\(scenarioID.uuidString)", merlinID: $0.id))
+            }
+        )
+
+        for (offset, merlinActivity) in payload.activities.enumerated() {
+            let activityID = localActivityIDsByMerlinID[merlinActivity.id]
+                ?? MerlinProjectImportService.stableUUID(namespace: "merlin-activity:\(payload.project.id):\(scenarioID.uuidString)", merlinID: merlinActivity.id)
+            let parentID = merlinActivity.parentID.flatMap { localActivityIDsByMerlinID[$0] }
+            let predecessorIDs = merlinActivity.predecessorIDs.compactMap { localActivityIDsByMerlinID[$0] }
+            let datePair = merlinActivityDates(merlinActivity, projectStartDate: startDate)
+            activities.append(
+                ProjectActivity(
+                    id: activityID,
+                    projectID: projectID,
+                    scenarioID: scenarioID,
+                    parentActivityID: parentID,
+                    displayOrder: merlinActivityDisplayOrder(merlinActivity),
+                    hierarchyLevel: hierarchyLevel(forDepth: merlinActivity.depth, isMilestone: merlinActivity.isMilestone),
+                    title: merlinActivity.title,
+                    isDateless: merlinActivity.startDate == nil && merlinActivity.endDate == nil && merlinActivity.isMilestone == false,
+                    estimatedStartDate: datePair.start,
+                    estimatedEndDate: datePair.end,
+                    predecessorActivityIDs: predecessorIDs,
+                    isMilestone: merlinActivity.isMilestone,
+                    createdAt: now,
+                    updatedAt: now
+                )
+            )
+            reporter.setProcessed(payload.resources.count + offset + 1)
+            reporter.setImported(payload.resources.count + offset + 1)
+        }
+
+        projects = sortProjects(projects)
+        resources = sortResources(resources)
+        activities = sortActivities(activities)
+        isPersistenceEnabled = true
+        reporter.setStage(.finalizing)
+        persist()
+
+        return MerlinProjectImportResult(
+            projectID: projectID,
+            projectName: payload.project.title,
+            createdProject: createdProject,
+            resourceCount: payload.resources.count,
+            activityCount: payload.activities.count,
+            assignmentCount: payload.assignmentCount,
+            dependencyCount: payload.dependencies.count,
+            calendarCount: payload.calendars.count,
+            customAttributeCount: payload.customAttributes.count,
+            warnings: payload.warnings
+        )
+    }
+
     func resources(for projectID: UUID) -> [Resource] {
         resourceStore.resources(for: projectID)
     }
@@ -3765,6 +3885,151 @@ final class SamouraiStore {
                     self.lastErrorMessage = "Sauvegarde impossible : \(error.localizedDescription)"
                 }
             }
+        }
+    }
+
+    private func upsertMerlinResource(
+        _ merlinResource: MerlinResourceRecord,
+        projectID: UUID,
+        calendarTitle: String?,
+        activityAssignments: [String]
+    ) {
+        let resourceID = MerlinProjectImportService.stableUUID(namespace: "merlin-resource", merlinID: merlinResource.id)
+        let notes = merlinResourceNotes(merlinResource, activityAssignments: activityAssignments)
+        let resourceCalendar = calendarTitle ?? merlinResource.baseCalendarID
+        let allocationPercent = merlinAllocationPercent(merlinResource.availableUnits)
+        let status: ResourceStatus = allocationPercent >= 100 ? .active : .partiallyAvailable
+        let typeDeRessource = merlinResource.type ?? merlinResource.baseCostType
+
+        if let index = resources.firstIndex(where: { $0.id == resourceID }) {
+            let createdAt = resources[index].createdAt
+            let evaluations = resources[index].performanceEvaluations
+            let favoriteProjectIDs = resources[index].favoriteProjectIDs
+            resources[index] = Resource(
+                id: resourceID,
+                fullName: merlinResource.title,
+                jobTitle: typeDeRessource ?? "Ressource Merlin",
+                department: "Merlin Project",
+                nom: merlinResource.title,
+                primaryResourceRole: typeDeRessource,
+                resourceCalendar: resourceCalendar,
+                typeDeRessource: typeDeRessource,
+                email: "",
+                phone: "",
+                engagement: merlinResource.isUser == true ? .internalEmployee : .externalConsultant,
+                status: status,
+                allocationPercent: allocationPercent,
+                assignedProjectIDs: (resources[index].assignedProjectIDs + [projectID]).removingDuplicateValues(),
+                favoriteProjectIDs: favoriteProjectIDs,
+                performanceEvaluations: evaluations,
+                notes: notes,
+                createdAt: createdAt,
+                updatedAt: .now
+            )
+        } else {
+            resources.append(
+                Resource(
+                    id: resourceID,
+                    fullName: merlinResource.title,
+                    jobTitle: typeDeRessource ?? "Ressource Merlin",
+                    department: "Merlin Project",
+                    nom: merlinResource.title,
+                    primaryResourceRole: typeDeRessource,
+                    resourceCalendar: resourceCalendar,
+                    typeDeRessource: typeDeRessource,
+                    email: "",
+                    phone: "",
+                    engagement: merlinResource.isUser == true ? .internalEmployee : .externalConsultant,
+                    status: status,
+                    allocationPercent: allocationPercent,
+                    assignedProjectIDs: [projectID],
+                    notes: notes
+                )
+            )
+        }
+    }
+
+    private func merlinResourceNotes(_ resource: MerlinResourceRecord, activityAssignments: [String]) -> String {
+        var lines = ["Import Merlin Project", "Merlin ID: \(resource.id)"]
+        if let initials = resource.initials {
+            lines.append("Initiales: \(initials)")
+        }
+        if let availableUnits = resource.availableUnits {
+            lines.append("Disponibilité: \(availableUnits)")
+        }
+        if let baseCalendarID = resource.baseCalendarID {
+            lines.append("Calendrier de base: \(baseCalendarID)")
+        }
+        if resource.fields.isEmpty == false {
+            lines.append("Champs Merlin: " + resource.fields.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: "; "))
+        }
+        if activityAssignments.isEmpty == false {
+            lines.append("Affectations: " + activityAssignments.joined(separator: "; "))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func activityAssignmentSummary(resourceID: String, activities: [MerlinActivityRecord]) -> [String] {
+        activities.compactMap { activity in
+            let matchingAssignments = activity.assignments.filter { $0.resourceID == resourceID }
+            guard matchingAssignments.isEmpty == false else { return nil }
+            let details = matchingAssignments.map { assignment in
+                var label = assignment.id.isEmpty ? "assignment" : assignment.id
+                if assignment.fields.isEmpty == false {
+                    label += " (" + assignment.fields.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: ", ") + ")"
+                }
+                return label
+            }.joined(separator: ", ")
+            return "\(activity.title) [\(activity.id)]: \(details)"
+        }
+    }
+
+    private func merlinScenarioName(importedAt date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return "Import Merlin \(formatter.string(from: date))"
+    }
+
+    private func merlinScenarioSortDate(for project: Project) -> Date {
+        let firstScenarioDate = project.orderedPlanningScenarios.map(\.createdAt).min() ?? project.createdAt
+        return firstScenarioDate.addingTimeInterval(-1)
+    }
+
+    private func merlinAllocationPercent(_ availableUnits: String?) -> Int {
+        guard let availableUnits else { return 100 }
+        let amountPrefix = "amount="
+        guard let amountPart = availableUnits
+            .components(separatedBy: ",")
+            .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            .first(where: { $0.hasPrefix(amountPrefix) }),
+            let amount = Double(amountPart.dropFirst(amountPrefix.count))
+        else {
+            return 100
+        }
+        return min(100, max(0, Int((amount * 100).rounded())))
+    }
+
+    private func merlinActivityDates(_ activity: MerlinActivityRecord, projectStartDate: Date) -> (start: Date, end: Date) {
+        if activity.isMilestone {
+            let milestoneDate = activity.endDate ?? activity.startDate ?? projectStartDate
+            return (milestoneDate, milestoneDate)
+        }
+        let start = activity.startDate ?? activity.endDate ?? projectStartDate
+        let end = max(activity.endDate ?? start, start)
+        return (start, end)
+    }
+
+    private func merlinActivityDisplayOrder(_ activity: MerlinActivityRecord) -> Int {
+        (activity.depth * 10_000) + activity.displayOrder
+    }
+
+    private func hierarchyLevel(forDepth depth: Int, isMilestone: Bool) -> ActivityHierarchyLevel {
+        if isMilestone { return .criticalPhaseMilestone }
+        switch depth {
+        case 0: return .mainDeliverable
+        case 1: return .activityTask
+        default: return .subtaskAction
         }
     }
 

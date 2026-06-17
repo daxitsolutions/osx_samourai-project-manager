@@ -40,7 +40,7 @@ struct SamouraiDatabase: Codable {
         self.governanceReports = governanceReports
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case projects
         case resources
         case unassignedRisks
@@ -50,6 +50,10 @@ struct SamouraiDatabase: Codable {
         case meetings
         case decisions
         case governanceReports
+    }
+
+    static var currentStructureKeys: Set<String> {
+        Set(CodingKeys.allCases.map(\.stringValue))
     }
 
     init(from decoder: Decoder) throws {
@@ -79,6 +83,11 @@ struct SamouraiDatabase: Codable {
     }
 
     static let empty = SamouraiDatabase(projects: [], resources: [])
+}
+
+struct SamouraiPersistenceLoadResult {
+    let database: SamouraiDatabase
+    let structureWarnings: [String]
 }
 
 struct SamouraiBackupEnvelope: Codable {
@@ -328,23 +337,33 @@ actor SamouraiPersistence {
             .appending(path: "auto-backups", directoryHint: .isDirectory)
     }
 
-    func load() throws -> SamouraiDatabase {
+    func load() throws -> SamouraiPersistenceLoadResult {
         let url = fileURL
         if fileManager.fileExists(atPath: url.path()) == false {
             migrateLegacyFileIfNeeded(to: url)
         }
 
         guard fileManager.fileExists(atPath: url.path()) else {
-            return .empty
+            return SamouraiPersistenceLoadResult(
+                database: .empty,
+                structureWarnings: []
+            )
         }
 
         let data = try Data(contentsOf: url)
+        let structureWarnings = dataStructureWarnings(in: data)
         if let database = try? decoder.decode(SamouraiDatabase.self, from: data) {
-            return database
+            return SamouraiPersistenceLoadResult(
+                database: database,
+                structureWarnings: structureWarnings
+            )
         }
 
         let legacyProjects = try decoder.decode([Project].self, from: data)
-        return SamouraiDatabase(projects: legacyProjects, resources: [])
+        return SamouraiPersistenceLoadResult(
+            database: SamouraiDatabase(projects: legacyProjects, resources: []),
+            structureWarnings: structureWarnings
+        )
     }
 
     func save(_ database: SamouraiDatabase) throws {
@@ -404,6 +423,33 @@ actor SamouraiPersistence {
             try? fileManager.removeItem(at: staleURL)
         }
     }
+
+    private func dataStructureWarnings(in data: Data) -> [String] {
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data),
+            let dictionary = object as? [String: Any]
+        else {
+            return [
+                "Le fichier de données existant n'utilise pas la structure objet attendue par le modèle actuel."
+            ]
+        }
+
+        let currentKeys = SamouraiDatabase.currentStructureKeys
+        let existingKeys = Set(dictionary.keys)
+        let missingKeys = currentKeys.subtracting(existingKeys).sorted()
+        let unknownKeys = existingKeys.subtracting(currentKeys).sorted()
+        var warnings: [String] = []
+
+        if missingKeys.isEmpty == false {
+            warnings.append("Champs absents du modèle actuel : \(missingKeys.joined(separator: ", ")).")
+        }
+
+        if unknownKeys.isEmpty == false {
+            warnings.append("Champs inconnus dans le fichier existant : \(unknownKeys.joined(separator: ", ")).")
+        }
+
+        return warnings
+    }
 }
 
 @MainActor
@@ -437,6 +483,7 @@ final class SamouraiStore {
     private(set) var decisions: [ProjectDecision] = []
     private(set) var governanceReports: [GovernanceReportRecord] = []
     private(set) var hasLoaded = false
+    private var isPersistenceEnabled = false
     var lastErrorMessage: String?
 
     init() {
@@ -456,7 +503,7 @@ final class SamouraiStore {
     /// Écriture synchrone de l'état courant avant la terminaison de l'application.
     /// Garantit qu'aucune mutation en attente dans les `Task` d'arrière-plan n'est perdue.
     func flushSynchronously() {
-        guard hasLoaded else { return }
+        guard hasLoaded, isPersistenceEnabled else { return }
         do {
             try SamouraiPersistence.saveSynchronously(makeDatabase())
         } catch {
@@ -528,77 +575,53 @@ final class SamouraiStore {
         hasLoaded = true
 
         do {
-            let database = try await persistence.load()
-            if database.projects.isEmpty, database.resources.isEmpty {
-                let seededProjects = SamouraiSeedFactory.makeDemoProjects()
-                let seededResources = SamouraiSeedFactory.makeDemoResources(projects: seededProjects)
-                projects = sortProjects(seededProjects)
-                resources = sortResources(seededResources)
-                unassignedRisks = []
-                activities = []
-                events = []
-                actions = []
-                meetings = []
-                decisions = []
-                governanceReports = []
-                try await persistence.save(makeDatabase())
-            } else {
-                projects = sortProjects(database.projects)
-                resources = sortResources(sanitizeResourceAssignments(database.resources, projectIDs: Set(projects.map(\.id))))
-                unassignedRisks = sortStandaloneRisks(database.unassignedRisks)
-                activities = sortActivities(sanitizeActivities(database.activities, projectIDs: Set(projects.map(\.id))))
-                events = sortEvents(
-                    sanitizeEvents(
-                        database.events,
-                        projectIDs: Set(projects.map(\.id)),
-                        resourceIDs: Set(resources.map(\.id))
-                    )
-                )
-                let activitiesByID = Dictionary(uniqueKeysWithValues: activities.map { ($0.id, $0) })
-                actions = sortActions(
-                    sanitizeActions(
-                        database.actions,
-                        projectIDs: Set(projects.map(\.id)),
-                        activitiesByID: activitiesByID
-                    )
-                )
-                meetings = sortMeetings(
-                    sanitizeMeetings(database.meetings, projectIDs: Set(projects.map(\.id)))
-                )
-                decisions = sortDecisions(
-                    sanitizeDecisions(
-                        database.decisions,
-                        projectIDs: Set(projects.map(\.id)),
-                        meetingIDs: Set(meetings.map(\.id)),
-                        eventIDs: Set(events.map(\.id)),
-                        resourceIDs: Set(resources.map(\.id))
-                    )
-                )
-                governanceReports = sortGovernanceReports(
-                    sanitizeGovernanceReports(database.governanceReports, projectIDs: Set(projects.map(\.id)))
-                )
-            }
-        } catch {
-            lastErrorMessage = "Chargement impossible : \(error.localizedDescription)"
+            let loadResult = try await persistence.load()
+            isPersistenceEnabled = true
 
-            if projects.isEmpty {
-                let seededProjects = SamouraiSeedFactory.makeDemoProjects()
-                let seededResources = SamouraiSeedFactory.makeDemoResources(projects: seededProjects)
-                projects = sortProjects(seededProjects)
-                resources = sortResources(seededResources)
-                unassignedRisks = []
-                activities = []
-                events = []
-                actions = []
-                meetings = []
-                decisions = []
-                governanceReports = []
-                do {
-                    try await persistence.save(makeDatabase())
-                } catch {
-                    lastErrorMessage = "Persistance impossible : \(error.localizedDescription)"
-                }
+            if loadResult.structureWarnings.isEmpty == false {
+                printDataStructureWarning(loadResult.structureWarnings)
             }
+
+            let database = loadResult.database
+            projects = sortProjects(database.projects)
+            resources = sortResources(sanitizeResourceAssignments(database.resources, projectIDs: Set(projects.map(\.id))))
+            unassignedRisks = sortStandaloneRisks(database.unassignedRisks)
+            activities = sortActivities(sanitizeActivities(database.activities, projectIDs: Set(projects.map(\.id))))
+            events = sortEvents(
+                sanitizeEvents(
+                    database.events,
+                    projectIDs: Set(projects.map(\.id)),
+                    resourceIDs: Set(resources.map(\.id))
+                )
+            )
+            let activitiesByID = Dictionary(uniqueKeysWithValues: activities.map { ($0.id, $0) })
+            actions = sortActions(
+                sanitizeActions(
+                    database.actions,
+                    projectIDs: Set(projects.map(\.id)),
+                    activitiesByID: activitiesByID
+                )
+            )
+            meetings = sortMeetings(
+                sanitizeMeetings(database.meetings, projectIDs: Set(projects.map(\.id)))
+            )
+            decisions = sortDecisions(
+                sanitizeDecisions(
+                    database.decisions,
+                    projectIDs: Set(projects.map(\.id)),
+                    meetingIDs: Set(meetings.map(\.id)),
+                    eventIDs: Set(events.map(\.id)),
+                    resourceIDs: Set(resources.map(\.id))
+                )
+            )
+            governanceReports = sortGovernanceReports(
+                sanitizeGovernanceReports(database.governanceReports, projectIDs: Set(projects.map(\.id)))
+            )
+        } catch {
+            isPersistenceEnabled = false
+            let message = "Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : \(error.localizedDescription)"
+            print("Samourai Project Manager - \(message)")
+            lastErrorMessage = "Chargement impossible : \(error.localizedDescription)"
         }
     }
 
@@ -727,6 +750,7 @@ final class SamouraiStore {
                 projectIDs: Set(normalized.projects.map(\.id))
             )
         )
+        isPersistenceEnabled = true
         persist()
 
         let riskCount = normalized.projects.reduce(0) { $0 + $1.risks.count } + normalized.unassignedRisks.count
@@ -2034,6 +2058,7 @@ final class SamouraiStore {
         meetings = []
         decisions = []
         governanceReports = []
+        isPersistenceEnabled = true
         persist()
     }
 
@@ -3170,6 +3195,7 @@ final class SamouraiStore {
             )
         )
         governanceReports = sortGovernanceReports(sanitizeGovernanceReports(normalized.governanceReports, projectIDs: projectIDs))
+        isPersistenceEnabled = true
         persist()
     }
 
@@ -3612,6 +3638,7 @@ final class SamouraiStore {
     }
 
     private func persist() {
+        guard isPersistenceEnabled else { return }
         let snapshot = makeDatabase()
         Task(priority: .utility) { [persistence] in
             do {
@@ -3622,6 +3649,12 @@ final class SamouraiStore {
                 }
             }
         }
+    }
+
+    private func printDataStructureWarning(_ warnings: [String]) {
+        guard warnings.isEmpty == false else { return }
+        let details = warnings.joined(separator: " ")
+        print("Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas strictement conforme au modèle actuel. Les données existantes sont conservées. \(details)")
     }
 
     private func sortProjects(_ projects: [Project]) -> [Project] {

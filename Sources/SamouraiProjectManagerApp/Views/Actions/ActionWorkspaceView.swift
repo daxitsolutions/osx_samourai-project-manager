@@ -193,6 +193,12 @@ struct ActionWorkspaceView: View {
             Divider()
             List(filteredActions, selection: $selectedActionIDs) { action in
                 actionRow(for: action)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        selectedActionIDs = [action.id]
+                        appState.selectedActionID = action.id
+                        editorContext = .edit(action.id)
+                    }
                     .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                     .listRowSeparator(.visible)
             }

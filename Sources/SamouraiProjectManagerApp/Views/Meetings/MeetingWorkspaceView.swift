@@ -21,6 +21,7 @@ struct MeetingWorkspaceView: View {
     @State private var sortOrder: [KeyPathComparator<ProjectMeeting>] = [
         .init(\.meetingAt, order: .reverse)
     ]
+    @State private var columnCustomization = TableColumnCustomization<ProjectMeeting>()
 
     var body: some View {
         @Bindable var appState = appState
@@ -109,7 +110,7 @@ struct MeetingWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredMeetings, selection: $selectedMeetingIDs, sortOrder: $sortOrder) {
+                    Table(filteredMeetings, selection: $selectedMeetingIDs, sortOrder: $sortOrder, columnCustomization: $columnCustomization) {
                         TableColumnForEach(activeTableColumns) { column in
                             switch column {
                             case .meetingAt:
@@ -117,6 +118,7 @@ struct MeetingWorkspaceView: View {
                                     Text(meeting.meetingAt.formatted(date: .abbreviated, time: .shortened))
                                 }
                                 .width(min: 165, ideal: 190)
+                                .customizationID(column.id)
 
                             case .title:
                                 TableColumn(appState.localized(column.label), value: \.displayTitle) { meeting in
@@ -146,12 +148,14 @@ struct MeetingWorkspaceView: View {
                                     .fontWeight(.medium)
                                 }
                                 .width(min: 220, ideal: 320)
+                                .customizationID(column.id)
 
                             case .project:
                                 TableColumn(appState.localized(column.label), value: \.projectIDSortKey) { meeting in
                                     Text(store.projectName(for: meeting.projectID))
                                 }
                                 .width(min: 150, ideal: 220)
+                                .customizationID(column.id)
 
                             case .mode:
                                 TableColumn(appState.localized(column.label), value: \.modeSortKey) { meeting in
@@ -185,12 +189,14 @@ struct MeetingWorkspaceView: View {
                                     .pickerStyle(.menu)
                                 }
                                 .width(min: 120, ideal: 140)
+                                .customizationID(column.id)
 
                             case .duration:
                                 TableColumn(appState.localized(column.label), value: \.durationMinutes) { meeting in
                                     Text(appState.localizedFormat("%d min", meeting.durationMinutes))
                                 }
                                 .width(min: 90, ideal: 110)
+                                .customizationID(column.id)
 
                             case .aiSummary:
                                 TableColumn(appState.localized(column.label), value: \.aiSummary) { meeting in
@@ -198,10 +204,17 @@ struct MeetingWorkspaceView: View {
                                         .lineLimit(2)
                                 }
                                 .width(min: 260, ideal: 420)
+                                .customizationID(column.id)
                             }
                         }
                     }
                     .scrollIndicators(.visible)
+                    .contextMenu(forSelectionType: ProjectMeeting.ID.self) { _ in
+                    } primaryAction: { ids in
+                        if let id = ids.first {
+                            editorContext = .edit(id)
+                        }
+                    }
                 }
             }
             .frame(minWidth: 860, idealWidth: 980)

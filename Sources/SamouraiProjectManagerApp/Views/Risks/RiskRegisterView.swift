@@ -11,7 +11,6 @@ struct RiskRegisterView: View {
     @State private var isImporting = false
     @State private var searchText = ""
     @State private var selectedRiskIDs: Set<UUID> = []
-    @State private var expandedRiskIDs: Set<UUID> = []
     @State private var isShowingDeleteConfirmation = false
     @State private var isShowingFileExporter = false
     @State private var exportDocument: EntityCSVDocument?
@@ -19,15 +18,13 @@ struct RiskRegisterView: View {
     @State private var sortOrder: [KeyPathComparator<RiskEntry>] = [
         .init(\.severitySortWeight, order: .reverse)
     ]
+    @State private var columnCustomization = TableColumnCustomization<RiskEntry>()
+    @State private var historyRiskID: UUID?
 
-    private enum Col {
-        static let id: CGFloat = 55
-        static let project: CGFloat = 110
-        static let owner: CGFloat = 100
-        static let severity: CGFloat = 88
-        static let status: CGFloat = 148
-        static let score: CGFloat = 48
-        static let expand: CGFloat = 26
+    private var activeTableColumns: [RiskTableColumn] {
+        appState
+            .orderedVisibleTableColumnIDs(for: .risks)
+            .compactMap(RiskTableColumn.init(rawValue:))
     }
 
     var body: some View {
@@ -114,22 +111,144 @@ struct RiskRegisterView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    VStack(spacing: 0) {
-                        riskTableHeader
-                        Divider()
-                        List(filteredRisks, selection: $selectedRiskIDs) { entry in
-                            riskRow(for: entry)
-                                .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
-                                .listRowSeparator(.visible)
+                    Table(filteredRisks, selection: $selectedRiskIDs, sortOrder: $sortOrder, columnCustomization: $columnCustomization) {
+                        TableColumnForEach(activeTableColumns) { column in
+                            switch column {
+                            case .externalID:
+                                TableColumn(appState.localized(column.label), value: \.externalIDSortKey) { entry in
+                                    Text(entry.risk.externalID ?? "-")
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                .width(min: 55, ideal: 80)
+                                .customizationID(column.id)
+
+                            case .title:
+                                TableColumn(appState.localized(column.label), value: \.titleSortKey) { entry in
+                                    TextField(
+                                        "Titre",
+                                        text: Binding(
+                                            get: { entry.risk.displayTitle },
+                                            set: {
+                                                store.updateRiskQuick(
+                                                    riskID: entry.risk.id,
+                                                    title: $0,
+                                                    owner: entry.risk.displayOwner,
+                                                    severity: entry.risk.severity,
+                                                    status: entry.risk.riskStatus ?? ""
+                                                )
+                                            }
+                                        )
+                                    )
+                                    .textFieldStyle(.plain)
+                                    .fontWeight(.medium)
+                                }
+                                .width(min: 200, ideal: 320)
+                                .customizationID(column.id)
+
+                            case .projects:
+                                TableColumn(appState.localized(column.label), value: \.projectsSortKey) { entry in
+                                    Text(entry.risk.projectNames ?? entry.projectName)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                }
+                                .width(min: 110, ideal: 160)
+                                .customizationID(column.id)
+
+                            case .owner:
+                                TableColumn(appState.localized(column.label), value: \.ownerSortKey) { entry in
+                                    TextField(
+                                        "Owner",
+                                        text: Binding(
+                                            get: { entry.risk.displayOwner },
+                                            set: {
+                                                store.updateRiskQuick(
+                                                    riskID: entry.risk.id,
+                                                    title: entry.risk.displayTitle,
+                                                    owner: $0,
+                                                    severity: entry.risk.severity,
+                                                    status: entry.risk.riskStatus ?? ""
+                                                )
+                                            }
+                                        )
+                                    )
+                                    .textFieldStyle(.plain)
+                                }
+                                .width(min: 100, ideal: 140)
+                                .customizationID(column.id)
+
+                            case .severity:
+                                TableColumn(appState.localized(column.label), value: \.severitySortWeight) { entry in
+                                    Picker(
+                                        "Sévérité",
+                                        selection: Binding(
+                                            get: { entry.risk.severity },
+                                            set: {
+                                                store.updateRiskQuick(
+                                                    riskID: entry.risk.id,
+                                                    title: entry.risk.displayTitle,
+                                                    owner: entry.risk.displayOwner,
+                                                    severity: $0,
+                                                    status: entry.risk.riskStatus ?? ""
+                                                )
+                                            }
+                                        )
+                                    ) {
+                                        ForEach(RiskSeverity.allCases) { severity in
+                                            Text(severity.label.appLocalized(language: appState.interfaceLanguage)).tag(severity)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                }
+                                .width(min: 88, ideal: 120)
+                                .customizationID(column.id)
+
+                            case .status:
+                                TableColumn(appState.localized(column.label), value: \.statusSortWeight) { entry in
+                                    RiskStatusMenu(
+                                        status: RiskStatus.from(rawString: entry.risk.riskStatus) ?? .toDo,
+                                        onChange: { newStatus in
+                                            store.updateRiskStatus(riskID: entry.risk.id, status: newStatus)
+                                        }
+                                    )
+                                }
+                                .width(min: 148, ideal: 170)
+                                .customizationID(column.id)
+
+                            case .score:
+                                TableColumn(appState.localized(column.label), value: \.scoreSortValue) { entry in
+                                    Text(scoreLabel(for: entry.risk.score0to10))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .width(min: 48, ideal: 70)
+                                .customizationID(column.id)
+
+                            case .history:
+                                TableColumn(appState.localized(column.label), value: \.historyCountSortValue) { entry in
+                                    Button {
+                                        historyRiskID = entry.risk.id
+                                    } label: {
+                                        Label(
+                                            "\(entry.risk.historyEntriesChronological.count)",
+                                            systemImage: "clock.arrow.circlepath"
+                                        )
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help(localized("Voir l'historique du risque"))
+                                }
+                                .width(min: 90, ideal: 110)
+                                .customizationID(column.id)
+                            }
                         }
-                        .listStyle(.inset)
-                        .focusable()
-                        .onKeyPress(.space) {
-                            guard let id = selectedRiskIDs.singleSelection else { return .ignored }
-                            withAnimation(.easeInOut(duration: 0.18)) { toggleExpansion(id) }
-                            return .handled
+                    }
+                    .scrollIndicators(.visible)
+                    .contextMenu(forSelectionType: RiskEntry.ID.self) { _ in
+                    } primaryAction: { ids in
+                        if let id = ids.first {
+                            appState.selectedRiskID = id
+                            riskEditorContext = .edit(id)
                         }
-                        .scrollIndicators(.visible)
                     }
                 }
             }
@@ -158,6 +277,14 @@ struct RiskRegisterView: View {
                     entry: context.entry(in: store),
                     suggestedProjectID: appState.resolvedPrimaryProjectID(in: store)
                 )
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { historyRiskID != nil },
+            set: { if $0 == false { historyRiskID = nil } }
+        )) {
+            if let historyRiskID {
+                RiskHistorySheet(riskID: historyRiskID)
             }
         }
         .fileExporter(
@@ -200,158 +327,12 @@ struct RiskRegisterView: View {
         .onChange(of: store.risks.map(\.risk.id)) { _, ids in
             let existing = Set(ids)
             selectedRiskIDs = selectedRiskIDs.intersection(existing)
-            expandedRiskIDs = expandedRiskIDs.intersection(existing)
             appState.selectedRiskID = selectedRiskIDs.singleSelection
         }
         .padding(0)
     }
 
-    // MARK: - Table header
-
-    @ViewBuilder
-    private var riskTableHeader: some View {
-        HStack(spacing: 8) {
-            RiskSortHeader(label: "ID", comparator: .init(\.externalIDSortKey), sortOrder: $sortOrder)
-                .frame(width: Col.id, alignment: .leading)
-            RiskSortHeader(label: "Titre", comparator: .init(\.titleSortKey), sortOrder: $sortOrder)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            RiskSortHeader(label: "Projet(s)", comparator: .init(\.projectsSortKey), sortOrder: $sortOrder)
-                .frame(width: Col.project, alignment: .leading)
-            RiskSortHeader(label: "Assigné à", comparator: .init(\.ownerSortKey), sortOrder: $sortOrder)
-                .frame(width: Col.owner, alignment: .leading)
-            RiskSortHeader(label: "Sévérité", comparator: .init(\.severitySortWeight, order: .reverse), sortOrder: $sortOrder)
-                .frame(width: Col.severity, alignment: .leading)
-            RiskSortHeader(label: "Statut", comparator: .init(\.statusSortWeight), sortOrder: $sortOrder)
-                .frame(width: Col.status, alignment: .leading)
-            RiskSortHeader(label: "Score", comparator: .init(\.scoreSortValue, order: .reverse), sortOrder: $sortOrder)
-                .frame(width: Col.score, alignment: .trailing)
-            Spacer().frame(width: Col.expand)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(Color(nsColor: .controlBackgroundColor))
-    }
-
-    // MARK: - Table rows
-
-    @ViewBuilder
-    private func riskRow(for entry: RiskEntry) -> some View {
-        let isExpanded = expandedRiskIDs.contains(entry.risk.id)
-
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Text(entry.risk.externalID ?? "-")
-                    .frame(width: Col.id, alignment: .leading)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                TextField(
-                    "Titre",
-                    text: Binding(
-                        get: { entry.risk.displayTitle },
-                        set: {
-                            store.updateRiskQuick(
-                                riskID: entry.risk.id,
-                                title: $0,
-                                owner: entry.risk.displayOwner,
-                                severity: entry.risk.severity,
-                                status: entry.risk.riskStatus ?? ""
-                            )
-                        }
-                    )
-                )
-                .textFieldStyle(.plain)
-                .frame(maxWidth: .infinity)
-
-                Text(entry.risk.projectNames ?? entry.projectName)
-                    .frame(width: Col.project, alignment: .leading)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                TextField(
-                    "Owner",
-                    text: Binding(
-                        get: { entry.risk.displayOwner },
-                        set: {
-                            store.updateRiskQuick(
-                                riskID: entry.risk.id,
-                                title: entry.risk.displayTitle,
-                                owner: $0,
-                                severity: entry.risk.severity,
-                                status: entry.risk.riskStatus ?? ""
-                            )
-                        }
-                    )
-                )
-                .textFieldStyle(.plain)
-                .frame(width: Col.owner)
-
-                Picker(
-                    "Sévérité",
-                    selection: Binding(
-                        get: { entry.risk.severity },
-                        set: {
-                            store.updateRiskQuick(
-                                riskID: entry.risk.id,
-                                title: entry.risk.displayTitle,
-                                owner: entry.risk.displayOwner,
-                                severity: $0,
-                                status: entry.risk.riskStatus ?? ""
-                            )
-                        }
-                    )
-                ) {
-                    ForEach(RiskSeverity.allCases) { severity in
-                        Text(severity.label.appLocalized(language: appState.interfaceLanguage)).tag(severity)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: Col.severity)
-
-                RiskStatusMenu(
-                    status: RiskStatus.from(rawString: entry.risk.riskStatus) ?? .toDo,
-                    onChange: { newStatus in
-                        store.updateRiskStatus(riskID: entry.risk.id, status: newStatus)
-                    }
-                )
-                .frame(width: Col.status, alignment: .leading)
-
-                Text(scoreLabel(for: entry.risk.score0to10))
-                    .frame(width: Col.score, alignment: .trailing)
-                    .foregroundStyle(.secondary)
-
-                Button {
-                    withAnimation(.easeInOut(duration: 0.18)) { toggleExpansion(entry.risk.id) }
-                } label: {
-                    Image(systemName: isExpanded ? "chevron.down.circle.fill" : "chevron.right.circle")
-                        .foregroundStyle(isExpanded ? Color.accentColor : Color.secondary)
-                        .font(.system(size: 13))
-                }
-                .buttonStyle(.plain)
-                .frame(width: Col.expand)
-            }
-            .frame(height: 36)
-
-            if isExpanded {
-                RiskHistoryInlinePanel(riskID: entry.risk.id)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .top)),
-                        removal: .opacity
-                    ))
-            }
-        }
-    }
-
     // MARK: - Helpers
-
-    private func toggleExpansion(_ id: UUID) {
-        if expandedRiskIDs.contains(id) {
-            expandedRiskIDs.remove(id)
-        } else {
-            expandedRiskIDs.insert(id)
-        }
-    }
 
     private func handleImportSelection(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let fileURL = urls.first else {
@@ -474,80 +455,82 @@ struct RiskRegisterView: View {
     }
 }
 
-// MARK: - Sort header
+// MARK: - Table columns
 
-private struct RiskSortHeader: View {
-    @Environment(AppState.self) private var appState
+private enum RiskTableColumn: String, CaseIterable, Identifiable, Hashable {
+    case externalID
+    case title
+    case projects
+    case owner
+    case severity
+    case status
+    case score
+    case history
 
-    let label: String
-    let comparator: KeyPathComparator<RiskEntry>
-    @Binding var sortOrder: [KeyPathComparator<RiskEntry>]
+    var id: String { rawValue }
 
-    private var isActive: Bool {
-        sortOrder.first?.keyPath == comparator.keyPath
-    }
-
-    var body: some View {
-        Button {
-            if isActive, var first = sortOrder.first {
-                first.order = first.order == .forward ? .reverse : .forward
-                sortOrder = [first]
-            } else {
-                sortOrder = [comparator]
-            }
-        } label: {
-            HStack(spacing: 3) {
-                Text(label.appLocalized(language: appState.interfaceLanguage))
-                    .font(.caption.weight(.medium))
-                if isActive {
-                    Image(systemName: sortOrder.first?.order == .forward ? "chevron.up" : "chevron.down")
-                        .font(.caption2)
-                }
-            }
-            .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
+    var label: String {
+        AppTableID.risks.columnTitle(for: rawValue)
     }
 }
 
-// MARK: - Inline history panel
+// MARK: - History sheet
 
-private struct RiskHistoryInlinePanel: View {
+private struct RiskHistorySheet: View {
     @Environment(AppState.self) private var appState
     @Environment(SamouraiStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
     let riskID: UUID
 
     var body: some View {
-        let entries = store.risks.first(where: { $0.risk.id == riskID })?.risk.historyEntriesChronological ?? []
+        let entry = store.risks.first(where: { $0.risk.id == riskID })
+        let entries = entry?.risk.historyEntriesChronological ?? []
 
         VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(appState.localized("Historique du risque"))
+                        .font(.headline)
+                    if let title = entry?.risk.displayTitle {
+                        Text(title)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer()
+                Button(appState.localized("Fermer")) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(16)
+
             Divider()
-                .padding(.top, 4)
 
             if entries.isEmpty {
-                Text(appState.localized("Aucune entrée d'historique pour ce risque."))
-                    .font(.callout)
-                    .foregroundStyle(.tertiary)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 4)
+                ContentUnavailableView(
+                    "Aucun historique",
+                    systemImage: "clock.badge.questionmark",
+                    description: Text(appState.localized("Aucune entrée d'historique pour ce risque."))
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ForEach(entries) { entry in
+                List(entries) { historyEntry in
                     HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: entry.kind.symbolName)
+                        Image(systemName: historyEntry.kind.symbolName)
                             .font(.caption)
-                            .foregroundStyle(entry.kind == .manual ? Color.accentColor : Color.secondary)
+                            .foregroundStyle(historyEntry.kind == .manual ? Color.accentColor : Color.secondary)
                             .frame(width: 14)
                             .padding(.top, 2)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(entry.text)
+                            Text(historyEntry.text)
                                 .font(.callout)
                             HStack(spacing: 4) {
-                                Text(entry.kind.label.appLocalized(language: appState.interfaceLanguage))
+                                Text(historyEntry.kind.label.appLocalized(language: appState.interfaceLanguage))
                                     .font(.caption2.weight(.medium))
                                     .foregroundStyle(.secondary)
                                 Text("·")
                                     .foregroundStyle(.tertiary)
-                                Text(entry.date.formatted(date: .abbreviated, time: .shortened))
+                                Text(historyEntry.date.formatted(date: .abbreviated, time: .shortened))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -556,10 +539,10 @@ private struct RiskHistoryInlinePanel: View {
                     }
                     .padding(.vertical, 3)
                 }
+                .listStyle(.inset)
             }
         }
-        .padding(.horizontal, 4)
-        .padding(.bottom, 10)
+        .frame(minWidth: 420, minHeight: 360)
     }
 }
 
@@ -575,6 +558,7 @@ private extension RiskEntry {
         (RiskStatus.from(rawString: risk.riskStatus) ?? .toDo).sortWeight
     }
     var scoreSortValue: Double { risk.score0to10 ?? -1 }
+    var historyCountSortValue: Int { risk.historyEntriesChronological.count }
 }
 
 // MARK: - Status badge & menu

@@ -17,6 +17,8 @@ struct ResourceWorkspaceView: View {
 
     @State private var editorContext: ResourceEditorContext?
     @State private var resourcePendingDeletion: Resource?
+    @State private var resourcesPendingBulkDeletion: [Resource] = []
+    @State private var resourcePendingProjectRemoval: Resource?
     @State private var isShowingFileImporter = false
     @State private var isShowingDirectoryPicker = false
     @State private var importFeedbackMessage: String?
@@ -41,6 +43,7 @@ struct ResourceWorkspaceView: View {
     @State private var sortOrder: [KeyPathComparator<Resource>] = [
         .init(\.fullName, order: .reverse)
     ]
+    @State private var columnCustomization = TableColumnCustomization<Resource>()
     @FocusState private var focusedInlineCell: ResourceInlineCellKey?
 
     init(scopeMode: ResourceWorkspaceScopeMode = .contextualProject) {
@@ -62,6 +65,17 @@ struct ResourceWorkspaceView: View {
 
                     Spacer()
 
+                    if scopeMode == .globalDirectory {
+                        Toggle(isOn: Binding(
+                            get: { allFilteredResourcesSelected },
+                            set: { _ in toggleSelectAllFilteredResources() }
+                        )) {
+                            Text(appState.localizedFormat("Tout sélectionner (%d)", filteredResources.count))
+                        }
+                        .toggleStyle(.checkbox)
+                        .disabled(isImporting || filteredResources.isEmpty)
+                    }
+
                     if let selectedResource = selectedResource {
                         if canAssignSelectedResourceToScopedProject {
                             Button {
@@ -72,7 +86,7 @@ struct ResourceWorkspaceView: View {
                             .disabled(isImporting)
                         } else if canRemoveSelectedResourceFromScopedProject {
                             Button {
-                                removeSelectedResourceFromScopedProject()
+                                resourcePendingProjectRemoval = selectedResource
                             } label: {
                                 Label(localized("Retirer du projet"), systemImage: "minus.circle")
                             }
@@ -96,16 +110,23 @@ struct ResourceWorkspaceView: View {
                             }
                             .disabled(isImporting)
                         }
+                    }
 
+                    if !resourceDeletionTargets.isEmpty {
                         Button {
-                            editorContext = .edit(selectedResource.id)
+                            if let id = resourceEditTargetID { editorContext = .edit(id) }
                         } label: {
                             Label(localized("Modifier"), systemImage: "pencil")
                         }
-                        .disabled(isImporting)
+                        .disabled(isImporting || resourceEditTargetID == nil)
 
                         Button(role: .destructive) {
-                            resourcePendingDeletion = selectedResource
+                            let targets = resourceDeletionTargets
+                            if targets.count <= 1 {
+                                resourcePendingDeletion = targets.first
+                            } else {
+                                resourcesPendingBulkDeletion = targets
+                            }
                         } label: {
                             Label(localized("Supprimer"), systemImage: "trash")
                         }
@@ -352,6 +373,41 @@ struct ResourceWorkspaceView: View {
         } message: {
             Text(localized("Cette action retirera la ressource du référentiel local."))
         }
+        .alert(localized("Supprimer les ressources"), isPresented: Binding(
+            get: { resourcesPendingBulkDeletion.isEmpty == false },
+            set: { if $0 == false { resourcesPendingBulkDeletion = [] } }
+        )) {
+            Button(localized("Supprimer"), role: .destructive) {
+                deleteResources(resourcesPendingBulkDeletion)
+                resourcesPendingBulkDeletion = []
+            }
+            Button(localized("Annuler"), role: .cancel) {
+                resourcesPendingBulkDeletion = []
+            }
+        } message: {
+            Text(appState.localizedFormat(
+                "Voulez-vous vraiment supprimer %d ressources du référentiel local ?",
+                resourcesPendingBulkDeletion.count
+            ))
+        }
+        .alert(localized("Retirer la ressource du projet"), isPresented: Binding(
+            get: { resourcePendingProjectRemoval != nil },
+            set: { if $0 == false { resourcePendingProjectRemoval = nil } }
+        )) {
+            Button(localized("Oui"), role: .destructive) {
+                if let resource = resourcePendingProjectRemoval {
+                    removeResourceFromScopedProject(resource.id)
+                }
+                resourcePendingProjectRemoval = nil
+            }
+            Button(localized("Non"), role: .cancel) {
+                resourcePendingProjectRemoval = nil
+            }
+        } message: {
+            if let resource = resourcePendingProjectRemoval {
+                Text(projectRemovalConfirmationMessage(for: resource))
+            }
+        }
         .alert(localized("Import des ressources"), isPresented: Binding(
             get: { importFeedbackMessage != nil },
             set: { if $0 == false { importFeedbackMessage = nil } }
@@ -413,6 +469,43 @@ struct ResourceWorkspaceView: View {
 
     private var selectedResourcesForExport: [Resource] {
         scopedResources.filter { selectedResourceIDs.contains($0.id) }
+    }
+
+    private var allFilteredResourcesSelected: Bool {
+        filteredResources.isEmpty == false
+            && filteredResources.allSatisfy { selectedResourceIDs.contains($0.id) }
+    }
+
+    private func toggleSelectAllFilteredResources() {
+        let ids = filteredResources.map(\.id)
+        if allFilteredResourcesSelected {
+            selectedResourceIDs.subtract(ids)
+        } else {
+            selectedResourceIDs.formUnion(ids)
+        }
+    }
+
+    // Cibles d'action : la sélection multiple (cases à cocher) prime, sinon la ligne active.
+    private var resourceDeletionTargets: [Resource] {
+        if selectedResourceIDs.isEmpty == false {
+            return scopedResources.filter { selectedResourceIDs.contains($0.id) }
+        }
+        return selectedResource.map { [$0] } ?? []
+    }
+
+    // « Modifier » n'est actif que pour une seule ressource.
+    private var resourceEditTargetID: UUID? {
+        if selectedResourceIDs.count == 1 { return selectedResourceIDs.first }
+        if selectedResourceIDs.isEmpty { return appState.selectedResourceID }
+        return nil
+    }
+
+    private func deleteResources(_ resources: [Resource]) {
+        for resource in resources {
+            if appState.selectedResourceID == resource.id { appState.selectedResourceID = nil }
+            selectedResourceIDs.remove(resource.id)
+            store.deleteResource(resourceID: resource.id)
+        }
     }
 
     private var scopedProjectID: UUID? {
@@ -610,7 +703,7 @@ struct ResourceWorkspaceView: View {
             .scrollIndicators(.visible)
         case .table:
             VStack(alignment: .leading, spacing: 6) {
-                Table(filteredResources, selection: selectedResourceID, sortOrder: $sortOrder) {
+                Table(filteredResources, selection: selectedResourceID, sortOrder: $sortOrder, columnCustomization: $columnCustomization) {
                     TableColumn("") { resource in
                         HStack(spacing: 8) {
                             Button {
@@ -649,6 +742,7 @@ struct ResourceWorkspaceView: View {
                                 }
                             }
                             .width(min: 160, ideal: 220)
+                            .customizationID(column.id)
 
                         case .primaryResourceRole:
                             TableColumn(appState.localized(column.label), value: \.primaryResourceRoleSortKey) { (resource: Resource) in
@@ -663,6 +757,7 @@ struct ResourceWorkspaceView: View {
                                 }
                             }
                             .width(min: 150, ideal: 200)
+                            .customizationID(column.id)
 
                         case .parentDescription:
                             TableColumn(appState.localized(column.label), value: \.parentDescriptionSortKey) { (resource: Resource) in
@@ -677,6 +772,7 @@ struct ResourceWorkspaceView: View {
                                 }
                             }
                             .width(min: 130, ideal: 180)
+                            .customizationID(column.id)
 
                         case .projects:
                             TableColumn(appState.localized(column.label), value: \.assignedProjectCount) { (resource: Resource) in
@@ -684,6 +780,7 @@ struct ResourceWorkspaceView: View {
                                 Text(assignedProjectNames.isEmpty ? "-" : assignedProjectNames.joined(separator: ", "))
                             }
                             .width(min: 180, ideal: 260)
+                            .customizationID(column.id)
 
                         case .allocationPercent:
                             TableColumn(appState.localized(column.label), value: \.allocationPercent) { (resource: Resource) in
@@ -699,6 +796,7 @@ struct ResourceWorkspaceView: View {
                                 }
                             }
                             .width(min: 70, ideal: 90)
+                            .customizationID(column.id)
 
                         case .status:
                             TableColumn(appState.localized(column.label), value: \.statusSortKey) { (resource: Resource) in
@@ -714,6 +812,7 @@ struct ResourceWorkspaceView: View {
                                 .pickerStyle(.menu)
                             }
                             .width(min: 100, ideal: 130)
+                            .customizationID(column.id)
 
                         case .engagement:
                             TableColumn(appState.localized(column.label), value: \.engagementSortKey) { (resource: Resource) in
@@ -729,6 +828,7 @@ struct ResourceWorkspaceView: View {
                                 .pickerStyle(.menu)
                             }
                             .width(min: 100, ideal: 140)
+                            .customizationID(column.id)
 
                         case .email:
                             TableColumn(appState.localized(column.label), value: \.email) { (resource: Resource) in
@@ -743,6 +843,7 @@ struct ResourceWorkspaceView: View {
                                 }
                             }
                             .width(min: 180, ideal: 240)
+                            .customizationID(column.id)
 
                         case .phone:
                             TableColumn(appState.localized(column.label), value: \.phone) { (resource: Resource) in
@@ -757,90 +858,105 @@ struct ResourceWorkspaceView: View {
                                 }
                             }
                             .width(min: 120, ideal: 160)
+                            .customizationID(column.id)
 
                         case .resourceRoles:
                             TableColumn(appState.localized(column.label), value: \.resourceRolesSortKey) { (resource: Resource) in
                                 Text(resource.resourceRoles ?? "-")
                             }
                             .width(min: 140, ideal: 190)
+                            .customizationID(column.id)
 
                         case .organizationalResource:
                             TableColumn(appState.localized(column.label), value: \.organizationalResourceSortKey) { (resource: Resource) in
                                 Text(resource.organizationalResource ?? "-")
                             }
                             .width(min: 140, ideal: 190)
+                            .customizationID(column.id)
 
                         case .competence1:
                             TableColumn(appState.localized(column.label), value: \.competence1SortKey) { (resource: Resource) in
                                 Text(resource.competence1 ?? "-")
                             }
                             .width(min: 120, ideal: 160)
+                            .customizationID(column.id)
 
                         case .resourceCalendar:
                             TableColumn(appState.localized(column.label), value: \.resourceCalendarSortKey) { (resource: Resource) in
                                 Text(resource.resourceCalendar ?? "-")
                             }
                             .width(min: 120, ideal: 160)
+                            .customizationID(column.id)
 
                         case .resourceStartDate:
                             TableColumn(appState.localized(column.label), value: \.resourceStartDateSortKey) { (resource: Resource) in
                                 Text(resource.resourceStartDate?.formatted(date: .abbreviated, time: .omitted) ?? "-")
                             }
                             .width(min: 110, ideal: 140)
+                            .customizationID(column.id)
 
                         case .resourceFinishDate:
                             TableColumn(appState.localized(column.label), value: \.resourceFinishDateSortKey) { (resource: Resource) in
                                 Text(resource.resourceFinishDate?.formatted(date: .abbreviated, time: .omitted) ?? "-")
                             }
                             .width(min: 110, ideal: 140)
+                            .customizationID(column.id)
 
                         case .responsableOperationnel:
                             TableColumn(appState.localized(column.label), value: \.responsableOperationnelSortKey) { (resource: Resource) in
                                 Text(resource.responsableOperationnel ?? "-")
                             }
                             .width(min: 120, ideal: 170)
+                            .customizationID(column.id)
 
                         case .responsableInterne:
                             TableColumn(appState.localized(column.label), value: \.responsableInterneSortKey) { (resource: Resource) in
                                 Text(resource.responsableInterne ?? "-")
                             }
                             .width(min: 130, ideal: 170)
+                            .customizationID(column.id)
 
                         case .localisation:
                             TableColumn(appState.localized(column.label), value: \.localisationSortKey) { (resource: Resource) in
                                 Text(resource.localisation ?? "-")
                             }
                             .width(min: 110, ideal: 150)
+                            .customizationID(column.id)
 
                         case .typeDeRessource:
                             TableColumn(appState.localized(column.label), value: \.typeDeRessourceSortKey) { (resource: Resource) in
                                 Text(resource.typeDeRessource ?? "-")
                             }
                             .width(min: 100, ideal: 140)
+                            .customizationID(column.id)
 
                         case .journeesTempsPartiel:
                             TableColumn(appState.localized(column.label), value: \.journeesTempsPartielSortKey) { (resource: Resource) in
                                 Text(resource.journeesTempsPartiel ?? "-")
                             }
                             .width(min: 100, ideal: 140)
+                            .customizationID(column.id)
 
                         case .notes:
                             TableColumn(appState.localized(column.label), value: \.notes) { (resource: Resource) in
                                 Text(resource.notes.isEmpty ? "-" : resource.notes)
                             }
                             .width(min: 160, ideal: 260)
+                            .customizationID(column.id)
 
                         case .createdAt:
                             TableColumn(appState.localized(column.label), value: \.createdAt) { (resource: Resource) in
                                 Text(resource.createdAt.formatted(date: .abbreviated, time: .omitted))
                             }
                             .width(min: 110, ideal: 140)
+                            .customizationID(column.id)
 
                         case .updatedAt:
                             TableColumn(appState.localized(column.label), value: \.updatedAt) { (resource: Resource) in
                                 Text(resource.updatedAt.formatted(date: .abbreviated, time: .omitted))
                             }
                             .width(min: 110, ideal: 140)
+                            .customizationID(column.id)
                         }
                     }
                 }
@@ -848,6 +964,12 @@ struct ResourceWorkspaceView: View {
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .scrollIndicators(.visible)
+                .contextMenu(forSelectionType: Resource.ID.self) { _ in
+                } primaryAction: { ids in
+                    if let id = ids.first {
+                        editorContext = .edit(id)
+                    }
+                }
             }
         }
     }
@@ -1053,11 +1175,6 @@ struct ResourceWorkspaceView: View {
         assignResourceToScopedProject(selectedResource.id)
     }
 
-    private func removeSelectedResourceFromScopedProject() {
-        guard let selectedResource else { return }
-        removeResourceFromScopedProject(selectedResource.id)
-    }
-
     private func assignResourceToScopedProject(_ resourceID: UUID) {
         guard let scopedProjectID else { return }
         store.assignResource(resourceID: resourceID, to: scopedProjectID)
@@ -1066,6 +1183,36 @@ struct ResourceWorkspaceView: View {
     private func removeResourceFromScopedProject(_ resourceID: UUID) {
         guard let scopedProjectID else { return }
         store.unassignResource(resourceID: resourceID, from: scopedProjectID)
+    }
+
+    private func projectRemovalConfirmationMessage(for resource: Resource) -> String {
+        let projectID = scopedProjectID
+        let activities = store.actions.filter {
+            $0.assignedResourceID == resource.id && (projectID == nil || $0.projectID == projectID)
+        }.count
+        let events = store.events.filter {
+            $0.resourceIDs.contains(resource.id) && (projectID == nil || $0.projectID == projectID)
+        }.count
+        let decisions = store.decisions.filter {
+            $0.impactedResourceIDs.contains(resource.id) && (projectID == nil || $0.projectID == projectID)
+        }.count
+
+        var links: [String] = []
+        if activities > 0 { links.append("\(activities) " + localized(activities > 1 ? "activités" : "activité")) }
+        if events > 0 { links.append("\(events) " + localized(events > 1 ? "événements" : "événement")) }
+        if decisions > 0 { links.append("\(decisions) " + localized(decisions > 1 ? "décisions" : "décision")) }
+
+        let name = resource.displayName
+        if links.isEmpty {
+            return AppLocalizer.localizedFormat(
+                "Voulez-vous vraiment retirer %@ du projet ?",
+                language: appState.interfaceLanguage, name
+            )
+        }
+        return AppLocalizer.localizedFormat(
+            "Voulez-vous vraiment retirer %@ du projet ? %@ est lié à %@.",
+            language: appState.interfaceLanguage, name, name, links.joined(separator: ", ")
+        )
     }
 
     private func toggleFavoriteForScopedProject(_ resourceID: UUID) {

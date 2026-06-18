@@ -12,6 +12,7 @@ struct TestingWorkspaceView: View {
     @State private var sortOrder: [KeyPathComparator<TestingRow>] = [
         .init(\TestingRow.projectName, order: .reverse)
     ]
+    @State private var columnCustomization = TableColumnCustomization<TestingRow>()
     @State private var isShowingAddSheet = false
     @State private var isShowingDeleteConfirmation = false
     @State private var isShowingFileExporter = false
@@ -119,7 +120,7 @@ struct TestingWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredRows, selection: $selectedRows, sortOrder: $sortOrder) {
+                    Table(filteredRows, selection: $selectedRows, sortOrder: $sortOrder, columnCustomization: $columnCustomization) {
                         TableColumnForEach(activeTableColumns) { column in
                             switch column {
                             case .project:
@@ -127,6 +128,7 @@ struct TestingWorkspaceView: View {
                                     Text(row.projectName)
                                 }
                                 .width(min: 170, ideal: 230)
+                                .customizationID(column.id)
 
                             case .phase:
                                 TableColumn(appState.localized(column.label), value: \.phaseOrder) { row in
@@ -134,6 +136,7 @@ struct TestingWorkspaceView: View {
                                         .font(.callout.weight(.semibold))
                                 }
                                 .width(min: 70, ideal: 90)
+                                .customizationID(column.id)
 
                             case .status:
                                 TableColumn(appState.localized(column.label), value: \.statusSortKey) { row in
@@ -156,6 +159,7 @@ struct TestingWorkspaceView: View {
                                     .pickerStyle(.menu)
                                 }
                                 .width(min: 150, ideal: 180)
+                                .customizationID(column.id)
 
                             case .progress:
                                 TableColumn(appState.localized(column.label), value: \.progressPercentSortKey) { row in
@@ -175,6 +179,7 @@ struct TestingWorkspaceView: View {
                                     .frame(width: 62)
                                 }
                                 .width(min: 90, ideal: 100)
+                                .customizationID(column.id)
 
                             case .owner:
                                 TableColumn(appState.localized(column.label), value: \.ownerSortKey) { row in
@@ -192,6 +197,7 @@ struct TestingWorkspaceView: View {
                                     .textFieldStyle(.plain)
                                 }
                                 .width(min: 150, ideal: 220)
+                                .customizationID(column.id)
 
                             case .blocked:
                                 TableColumn(appState.localized(column.label), value: \.blockedSortKey) { row in

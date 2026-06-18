@@ -18,6 +18,7 @@ struct DecisionWorkspaceView: View {
     @State private var sortOrder: [KeyPathComparator<ProjectDecision>] = [
         .init(\.sequenceNumber, order: .reverse)
     ]
+    @State private var columnCustomization = TableColumnCustomization<ProjectDecision>()
 
     var body: some View {
         @Bindable var appState = appState
@@ -102,7 +103,7 @@ struct DecisionWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredDecisions, selection: $selectedDecisionIDs, sortOrder: $sortOrder) {
+                    Table(filteredDecisions, selection: $selectedDecisionIDs, sortOrder: $sortOrder, columnCustomization: $columnCustomization) {
                         TableColumnForEach(activeTableColumns) { column in
                             switch column {
                             case .reference:
@@ -111,6 +112,7 @@ struct DecisionWorkspaceView: View {
                                         .monospacedDigit()
                                 }
                                 .width(min: 70, ideal: 80)
+                                .customizationID(column.id)
 
                             case .status:
                                 TableColumn(appState.localized(column.label), value: \.statusSortKey) { decision in
@@ -141,6 +143,7 @@ struct DecisionWorkspaceView: View {
                                     .pickerStyle(.menu)
                                 }
                                 .width(min: 130, ideal: 160)
+                                .customizationID(column.id)
 
                             case .title:
                                 TableColumn(appState.localized(column.label), value: \.displayTitle) { decision in
@@ -167,40 +170,52 @@ struct DecisionWorkspaceView: View {
                                     .fontWeight(.medium)
                                 }
                                 .width(min: 240, ideal: 340)
+                                .customizationID(column.id)
 
                             case .project:
                                 TableColumn(appState.localized(column.label), value: \.projectIDSortKey) { decision in
                                     Text(store.projectName(for: decision.projectID))
                                 }
                                 .width(min: 150, ideal: 220)
+                                .customizationID(column.id)
 
                             case .meetings:
                                 TableColumn(appState.localized(column.label), value: \.meetingCount) { decision in
                                     Text("\(decision.meetingIDs.count)")
                                 }
                                 .width(min: 90, ideal: 110)
+                                .customizationID(column.id)
 
                             case .events:
                                 TableColumn(appState.localized(column.label), value: \.eventCount) { decision in
                                     Text("\(decision.eventIDs.count)")
                                 }
                                 .width(min: 100, ideal: 120)
+                                .customizationID(column.id)
 
                             case .revisions:
                                 TableColumn(appState.localized(column.label), value: \.revisionCount) { decision in
                                     Text("\(decision.history.count)")
                                 }
                                 .width(min: 90, ideal: 110)
+                                .customizationID(column.id)
 
                             case .comments:
                                 TableColumn(appState.localized(column.label), value: \.commentCount) { decision in
                                     Text("\(decision.comments.count)")
                                 }
                                 .width(min: 110, ideal: 130)
+                                .customizationID(column.id)
                             }
                         }
                     }
                     .scrollIndicators(.visible)
+                    .contextMenu(forSelectionType: ProjectDecision.ID.self) { _ in
+                    } primaryAction: { ids in
+                        if let id = ids.first {
+                            editorContext = .edit(id)
+                        }
+                    }
                 }
             }
             .frame(minWidth: 900, idealWidth: 1050)

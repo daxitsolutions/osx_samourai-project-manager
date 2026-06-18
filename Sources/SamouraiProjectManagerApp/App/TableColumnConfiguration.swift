@@ -15,6 +15,7 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
     case events
     case meetings
     case decisions
+    case risks
     case resources
     case planning
     case testing
@@ -31,6 +32,8 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
             "Réunions"
         case .decisions:
             "Décisions"
+        case .risks:
+            "Risques"
         case .resources:
             "Ressources"
         case .planning:
@@ -50,6 +53,8 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
             "Registre des réunions."
         case .decisions:
             "Registre de gouvernance des décisions."
+        case .risks:
+            "Registre global des risques."
         case .resources:
             "Table de l'annuaire et des ressources projet."
         case .planning:
@@ -69,6 +74,8 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
             "person.2.badge.gearshape"
         case .decisions:
             "scale.3d"
+        case .risks:
+            "exclamationmark.triangle"
         case .resources:
             "person.3"
         case .planning:
@@ -125,6 +132,17 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
                 .init(id: "events", title: "Events / news liés"),
                 .init(id: "revisions", title: "Révisions"),
                 .init(id: "comments", title: "Commentaires")
+            ]
+        case .risks:
+            [
+                .init(id: "externalID", title: "ID"),
+                .init(id: "title", title: "Titre"),
+                .init(id: "projects", title: "Projet(s)"),
+                .init(id: "owner", title: "Assigné à"),
+                .init(id: "severity", title: "Sévérité"),
+                .init(id: "status", title: "Statut"),
+                .init(id: "score", title: "Score"),
+                .init(id: "history", title: "Historique")
             ]
         case .resources:
             [
@@ -190,7 +208,7 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
                 "email",
                 "phone"
             ]
-        case .actions, .events, .meetings, .decisions, .planning, .testing:
+        case .actions, .events, .meetings, .decisions, .risks, .planning, .testing:
             defaultColumnOrder
         }
     }

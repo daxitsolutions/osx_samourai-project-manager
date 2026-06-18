@@ -229,6 +229,14 @@ struct SamouraiDebugPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(context.formattedLogEntry(), forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.clipboard")
+                }
+                .buttonStyle(.borderless)
+                .help(localized("Copier les informations de debug"))
                 Image(systemName: "ladybug.fill")
                     .foregroundStyle(Color.samouraiWarn)
                 Text(

@@ -15,6 +15,7 @@ struct EventWorkspaceView: View {
     @State private var sortOrder: [KeyPathComparator<ProjectEvent>] = [
         .init(\.publishedAt, order: .reverse)
     ]
+    @State private var columnCustomization = TableColumnCustomization<ProjectEvent>()
 
     var body: some View {
         @Bindable var appState = appState
@@ -99,7 +100,7 @@ struct EventWorkspaceView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    Table(filteredEvents, selection: $selectedEventIDs, sortOrder: $sortOrder) {
+                    Table(filteredEvents, selection: $selectedEventIDs, sortOrder: $sortOrder, columnCustomization: $columnCustomization) {
                         TableColumnForEach(activeTableColumns) { column in
                             switch column {
                             case .createdAt:
@@ -107,12 +108,14 @@ struct EventWorkspaceView: View {
                                     Text(event.createdAt.formatted(date: .abbreviated, time: .shortened))
                                 }
                                 .width(min: 160, ideal: 190)
+                                .customizationID(column.id)
 
                             case .publishedAt:
                                 TableColumn(appState.localized(column.label), value: \.publishedAt) { event in
                                     Text(event.publishedAt.formatted(date: .abbreviated, time: .shortened))
                                 }
                                 .width(min: 160, ideal: 190)
+                                .customizationID(column.id)
 
                             case .subject:
                                 TableColumn(appState.localized(column.label), value: \.displayTitle) { event in
@@ -139,6 +142,7 @@ struct EventWorkspaceView: View {
                                     .fontWeight(.medium)
                                 }
                                 .width(min: 220, ideal: 320)
+                                .customizationID(column.id)
 
                             case .communication:
                                 TableColumn(appState.localized(column.label), value: \.communicationSortKey) { event in
@@ -147,6 +151,7 @@ struct EventWorkspaceView: View {
                                         .lineLimit(2)
                                 }
                                 .width(min: 240, ideal: 360)
+                                .customizationID(column.id)
 
                             case .author:
                                 TableColumn(appState.localized(column.label), value: \.authorSortKey) { event in
@@ -154,6 +159,7 @@ struct EventWorkspaceView: View {
                                         .foregroundStyle(event.hasAuthor ? .primary : .secondary)
                                 }
                                 .width(min: 150, ideal: 210)
+                                .customizationID(column.id)
 
                             case .distribution:
                                 TableColumn(appState.localized(column.label), value: \.distributionSortKey) { event in
@@ -162,12 +168,14 @@ struct EventWorkspaceView: View {
                                         .lineLimit(2)
                                 }
                                 .width(min: 180, ideal: 260)
+                                .customizationID(column.id)
 
                             case .project:
                                 TableColumn(appState.localized(column.label), value: \.projectIDSortKey) { event in
                                     Text(store.projectName(for: event.projectID))
                                 }
                                 .width(min: 150, ideal: 220)
+                                .customizationID(column.id)
 
                             case .resources:
                                 TableColumn(appState.localized(column.label), value: \.resourceCount) { event in
@@ -176,6 +184,7 @@ struct EventWorkspaceView: View {
                                         .lineLimit(2)
                                 }
                                 .width(min: 200, ideal: 320)
+                                .customizationID(column.id)
                             }
                         }
                     }

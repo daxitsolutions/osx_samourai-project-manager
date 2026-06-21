@@ -24,6 +24,21 @@ struct ResourceEditorSheet: View {
     @State private var email: String
     @State private var phone: String
     @State private var assignedProjectIDs: Set<UUID>
+    @State private var memoFunctionName: String
+    @State private var memoFunction: String
+    @State private var memoHolder: String
+    @State private var memoReportsTo: String
+    @State private var memoMainMission: String
+    @State private var memoResponsibleFor: String
+    @State private var memoDeliverables: String
+    @State private var memoWhatIDo: String
+    @State private var memoWhatIDoButShouldNot: String
+    @State private var memoWhatIDoNotDo: String
+    @State private var memoNeeds: String
+    @State private var memoProvidesTo: String
+    @State private var memoMainTools: String
+    @State private var memoCurrentProjectOccupancyRate: String
+    @State private var memoUpdatedAt: Date?
     @State private var notes: String
     @State private var templateResourceID: UUID?
     @State private var didApplyPrimaryProjectDefault = false
@@ -51,7 +66,27 @@ struct ResourceEditorSheet: View {
         _phone = State(initialValue: resource?.phone ?? "")
         _assignedProjectIDs = State(initialValue: Set(resource?.assignedProjectIDs ?? []))
         _templateResourceID = State(initialValue: resource?.templateResourceID)
+        _memoFunctionName = State(initialValue: Self.memoInitial(resource?.memo.functionName, fallback: resource?.displayPrimaryRole ?? ""))
+        _memoFunction = State(initialValue: Self.memoInitial(resource?.memo.function, fallback: resource?.displayPrimaryRole ?? ""))
+        _memoHolder = State(initialValue: Self.memoInitial(resource?.memo.holder, fallback: resource?.displayName ?? ""))
+        _memoReportsTo = State(initialValue: Self.memoInitial(resource?.memo.reportsTo, fallback: resource?.responsableOperationnel ?? resource?.responsableInterne ?? ""))
+        _memoMainMission = State(initialValue: resource?.memo.mainMission ?? "")
+        _memoResponsibleFor = State(initialValue: resource?.memo.responsibleFor ?? "")
+        _memoDeliverables = State(initialValue: resource?.memo.deliverables ?? "")
+        _memoWhatIDo = State(initialValue: resource?.memo.whatIDo ?? "")
+        _memoWhatIDoButShouldNot = State(initialValue: resource?.memo.whatIDoButShouldNot ?? "")
+        _memoWhatIDoNotDo = State(initialValue: resource?.memo.whatIDoNotDo ?? "")
+        _memoNeeds = State(initialValue: resource?.memo.needs ?? "")
+        _memoProvidesTo = State(initialValue: resource?.memo.providesTo ?? "")
+        _memoMainTools = State(initialValue: Self.memoInitial(resource?.memo.mainTools, fallback: resource?.resourceCalendar ?? ""))
+        _memoCurrentProjectOccupancyRate = State(initialValue: Self.memoInitial(resource?.memo.currentProjectOccupancyRate, fallback: resource.map { "\($0.allocationPercent)%" } ?? ""))
+        _memoUpdatedAt = State(initialValue: resource?.memo.updatedAt)
         _notes = State(initialValue: resource?.notes ?? "")
+    }
+
+    private static func memoInitial(_ value: String?, fallback: String) -> String {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? fallback : trimmed
     }
 
     var body: some View {
@@ -65,6 +100,7 @@ struct ResourceEditorSheet: View {
                     applicationSection
                     projectsSection
                     if assignedProjectIDs.isEmpty == false { templateSection }
+                    memoSection
                     notesSection
                 }
                 .padding(24)
@@ -279,6 +315,104 @@ struct ResourceEditorSheet: View {
         }
     }
 
+    private var memoSection: some View {
+        formSection(
+            title: localized("Fiche de poste - Ressource Humaine : \(memoDisplayFunctionName)"),
+            subtitle: localized("Mémo fonctionnel rattaché à cette ressource.")
+        ) {
+            VStack(alignment: .leading, spacing: 24) {
+                memoIdentitySection
+                memoResponsibilitiesSection
+                memoBoundariesSection
+                memoDependenciesSection
+                memoPracticalSection
+            }
+        }
+    }
+
+    private var memoIdentitySection: some View {
+        memoGroup(title: localized("1. Identité & mission")) {
+            VStack(alignment: .leading, spacing: 14) {
+                textField(label: localized("Nom de la fonction"),
+                          placeholder: localized("Nom de la fonction"),
+                          binding: $memoFunctionName)
+                textField(label: localized("Fonction"),
+                          placeholder: localized("Fonction exercée"),
+                          binding: $memoFunction)
+                textField(label: localized("Titulaire"),
+                          placeholder: localized("Nom du titulaire"),
+                          binding: $memoHolder)
+                textField(label: localized("Reporte à"),
+                          placeholder: localized("Responsable ou rattachement"),
+                          binding: $memoReportsTo)
+                memoTextField(label: localized("Mission principale"),
+                              placeholder: localized("Mission principale de la ressource"),
+                              binding: $memoMainMission)
+            }
+        }
+    }
+
+    private var memoResponsibilitiesSection: some View {
+        memoGroup(title: localized("2. Responsabilités clés & livrables attendus")) {
+            VStack(alignment: .leading, spacing: 14) {
+                memoTextField(label: localized("Responsable de"),
+                              placeholder: localized("Activités, périmètres ou responsabilités"),
+                              binding: $memoResponsibleFor)
+                memoTextField(label: localized("Livrables"),
+                              placeholder: localized("Livrables attendus"),
+                              binding: $memoDeliverables)
+            }
+        }
+    }
+
+    private var memoBoundariesSection: some View {
+        memoGroup(title: localized("3. Frontières du rôle")) {
+            VStack(alignment: .leading, spacing: 14) {
+                memoTextField(label: localized("Ce que je fais"),
+                              placeholder: localized("Activités réalisées"),
+                              binding: $memoWhatIDo)
+                memoTextField(label: localized("Ce que je fais mais que je ne devrais pas faire"),
+                              placeholder: localized("Activités à transférer ou clarifier"),
+                              binding: $memoWhatIDoButShouldNot)
+                memoTextField(label: localized("Ce que je ne fais pas"),
+                              placeholder: localized("Hors périmètre explicite"),
+                              binding: $memoWhatIDoNotDo)
+            }
+        }
+    }
+
+    private var memoDependenciesSection: some View {
+        memoGroup(title: localized("4. Interdépendances")) {
+            VStack(alignment: .leading, spacing: 14) {
+                memoTextField(label: localized("J’ai besoin de"),
+                              placeholder: localized("Entrants, décisions, validations ou supports nécessaires"),
+                              binding: $memoNeeds)
+                memoTextField(label: localized("Je fournis à"),
+                              placeholder: localized("Destinataires et contributions fournies"),
+                              binding: $memoProvidesTo)
+            }
+        }
+    }
+
+    private var memoPracticalSection: some View {
+        memoGroup(title: localized("5. Infos pratiques")) {
+            VStack(alignment: .leading, spacing: 14) {
+                memoTextField(label: localized("Outils principaux"),
+                              placeholder: localized("Applications, référentiels, canaux"),
+                              binding: $memoMainTools)
+                textField(label: localized("Taux d’occupation actuel sur le projet"),
+                          placeholder: localized("Ex.: 80%"),
+                          binding: $memoCurrentProjectOccupancyRate)
+                fieldStack(label: localized("Date de mise à jour")) {
+                    DatePicker("", selection: optionalDateBinding($memoUpdatedAt), displayedComponents: .date)
+                        .labelsHidden()
+                        .frame(minHeight: 44)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func textField(label: String, placeholder: String, binding: Binding<String>) -> some View {
         fieldStack(label: label) {
@@ -286,6 +420,26 @@ struct ResourceEditorSheet: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(minHeight: 44)
         }
+    }
+
+    @ViewBuilder
+    private func memoTextField(label: String, placeholder: String, binding: Binding<String>) -> some View {
+        fieldStack(label: label) {
+            TextField(placeholder, text: binding, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(3...7)
+        }
+    }
+
+    @ViewBuilder
+    private func memoGroup<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -330,8 +484,18 @@ struct ResourceEditorSheet: View {
             journeesTempsPartiel, email, phone,
             assignedProjectIDs.map(\.uuidString).sorted().joined(separator: ","),
             templateResourceID?.uuidString ?? "",
+            memoFunctionName, memoFunction, memoHolder, memoReportsTo, memoMainMission,
+            memoResponsibleFor, memoDeliverables, memoWhatIDo, memoWhatIDoButShouldNot,
+            memoWhatIDoNotDo, memoNeeds, memoProvidesTo, memoMainTools,
+            memoCurrentProjectOccupancyRate,
+            memoUpdatedAt.map { String($0.timeIntervalSinceReferenceDate) } ?? "",
             notes
         ].joined(separator: "|")
+    }
+
+    private var memoDisplayFunctionName: String {
+        let trimmed = memoFunctionName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? localized("Nom de la Fonction") : trimmed
     }
 
     private var hasUnsavedChanges: Bool {
@@ -375,6 +539,7 @@ struct ResourceEditorSheet: View {
                 email: email.trimmingCharacters(in: .whitespacesAndNewlines),
                 phone: phone.trimmingCharacters(in: .whitespacesAndNewlines),
                 assignedProjectIDs: normalizedAssignedProjectIDs(),
+                memo: memoPayload(),
                 notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
             )
             applyTemplateLink(resourceID: resource.id)
@@ -398,6 +563,7 @@ struct ResourceEditorSheet: View {
                 email: email.trimmingCharacters(in: .whitespacesAndNewlines),
                 phone: phone.trimmingCharacters(in: .whitespacesAndNewlines),
                 assignedProjectIDs: normalizedAssignedProjectIDs(),
+                memo: memoPayload(),
                 notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
             )
             applyTemplateLink(resourceID: resourceID)
@@ -411,6 +577,30 @@ struct ResourceEditorSheet: View {
     private func trimmedOptional(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func trimmed(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func memoPayload() -> ResourceMemo {
+        ResourceMemo(
+            functionName: trimmed(memoFunctionName),
+            function: trimmed(memoFunction),
+            holder: trimmed(memoHolder),
+            reportsTo: trimmed(memoReportsTo),
+            mainMission: trimmed(memoMainMission),
+            responsibleFor: trimmed(memoResponsibleFor),
+            deliverables: trimmed(memoDeliverables),
+            whatIDo: trimmed(memoWhatIDo),
+            whatIDoButShouldNot: trimmed(memoWhatIDoButShouldNot),
+            whatIDoNotDo: trimmed(memoWhatIDoNotDo),
+            needs: trimmed(memoNeeds),
+            providesTo: trimmed(memoProvidesTo),
+            mainTools: trimmed(memoMainTools),
+            currentProjectOccupancyRate: trimmed(memoCurrentProjectOccupancyRate),
+            updatedAt: memoUpdatedAt
+        )
     }
 
     private func optionalDateBinding(_ binding: Binding<Date?>) -> Binding<Date> {

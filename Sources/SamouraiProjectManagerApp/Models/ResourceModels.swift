@@ -357,6 +357,66 @@ struct ResourceProfilingReport: Hashable {
     }
 }
 
+struct ResourceMemo: Codable, Hashable {
+    var functionName: String
+    var function: String
+    var holder: String
+    var reportsTo: String
+    var mainMission: String
+    var responsibleFor: String
+    var deliverables: String
+    var whatIDo: String
+    var whatIDoButShouldNot: String
+    var whatIDoNotDo: String
+    var needs: String
+    var providesTo: String
+    var mainTools: String
+    var currentProjectOccupancyRate: String
+    var updatedAt: Date?
+
+    init(
+        functionName: String = "",
+        function: String = "",
+        holder: String = "",
+        reportsTo: String = "",
+        mainMission: String = "",
+        responsibleFor: String = "",
+        deliverables: String = "",
+        whatIDo: String = "",
+        whatIDoButShouldNot: String = "",
+        whatIDoNotDo: String = "",
+        needs: String = "",
+        providesTo: String = "",
+        mainTools: String = "",
+        currentProjectOccupancyRate: String = "",
+        updatedAt: Date? = nil
+    ) {
+        self.functionName = functionName
+        self.function = function
+        self.holder = holder
+        self.reportsTo = reportsTo
+        self.mainMission = mainMission
+        self.responsibleFor = responsibleFor
+        self.deliverables = deliverables
+        self.whatIDo = whatIDo
+        self.whatIDoButShouldNot = whatIDoButShouldNot
+        self.whatIDoNotDo = whatIDoNotDo
+        self.needs = needs
+        self.providesTo = providesTo
+        self.mainTools = mainTools
+        self.currentProjectOccupancyRate = currentProjectOccupancyRate
+        self.updatedAt = updatedAt
+    }
+
+    var isEmpty: Bool {
+        [
+            functionName, function, holder, reportsTo, mainMission, responsibleFor,
+            deliverables, whatIDo, whatIDoButShouldNot, whatIDoNotDo, needs,
+            providesTo, mainTools, currentProjectOccupancyRate
+        ].allSatisfy { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } && updatedAt == nil
+    }
+}
+
 struct Resource: Identifiable, Codable, Hashable {
     var id: UUID
     var fullName: String
@@ -386,6 +446,7 @@ struct Resource: Identifiable, Codable, Hashable {
     /// Identifiant de la ressource template dont cette ressource de projet est issue (0..1).
     var templateResourceID: UUID?
     var performanceEvaluations: [ResourcePerformanceEvaluation]
+    var memo: ResourceMemo
     var notes: String
     var createdAt: Date
     var updatedAt: Date
@@ -418,6 +479,7 @@ struct Resource: Identifiable, Codable, Hashable {
         favoriteProjectIDs: [UUID] = [],
         templateResourceID: UUID? = nil,
         performanceEvaluations: [ResourcePerformanceEvaluation] = [],
+        memo: ResourceMemo = ResourceMemo(),
         notes: String,
         createdAt: Date = .now,
         updatedAt: Date = .now
@@ -452,6 +514,7 @@ struct Resource: Identifiable, Codable, Hashable {
             .filter { normalizedAssignedProjectIDs.contains($0) }
         self.templateResourceID = templateResourceID
         self.performanceEvaluations = performanceEvaluations.sorted { $0.evaluatedAt < $1.evaluatedAt }
+        self.memo = memo
         self.notes = notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -466,7 +529,7 @@ struct Resource: Identifiable, Codable, Hashable {
         case engagement, status, allocationPercent
         case assignedProjectIDs, favoriteProjectIDs, assignedProjectID
         case templateResourceID
-        case performanceEvaluations, notes, createdAt, updatedAt
+        case performanceEvaluations, memo, notes, createdAt, updatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -517,6 +580,7 @@ struct Resource: Identifiable, Codable, Hashable {
 
         performanceEvaluations = (try container.decodeIfPresent([ResourcePerformanceEvaluation].self, forKey: .performanceEvaluations) ?? [])
             .sorted { $0.evaluatedAt < $1.evaluatedAt }
+        memo = try container.decodeIfPresent(ResourceMemo.self, forKey: .memo) ?? ResourceMemo()
     }
 
     func encode(to encoder: Encoder) throws {
@@ -550,6 +614,7 @@ struct Resource: Identifiable, Codable, Hashable {
         try container.encode(assignedProjectIDs.first, forKey: .assignedProjectID)
         try container.encodeIfPresent(templateResourceID, forKey: .templateResourceID)
         try container.encode(performanceEvaluations, forKey: .performanceEvaluations)
+        try container.encode(memo, forKey: .memo)
         try container.encode(notes, forKey: .notes)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)

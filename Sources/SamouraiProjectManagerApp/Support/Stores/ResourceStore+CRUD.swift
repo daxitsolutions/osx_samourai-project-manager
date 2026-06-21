@@ -42,6 +42,7 @@ extension ResourceStore {
         email: String,
         phone: String,
         assignedProjectIDs: [UUID],
+        memo: ResourceMemo,
         notes: String
     ) -> UUID {
         let normalized = normalizedResourceFields(
@@ -85,6 +86,7 @@ extension ResourceStore {
             status: normalized.status,
             allocationPercent: normalized.allocationPercent,
             assignedProjectIDs: assignedProjectIDs,
+            memo: memo,
             notes: notes
         )
 
@@ -113,6 +115,7 @@ extension ResourceStore {
         email: String,
         phone: String,
         assignedProjectIDs: [UUID],
+        memo: ResourceMemo,
         notes: String
     ) -> Bool {
         guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return false }
@@ -158,6 +161,7 @@ extension ResourceStore {
         resources[index].allocationPercent = normalized.allocationPercent
         resources[index].assignedProjectIDs = assignedProjectIDs
         resources[index].favoriteProjectIDs = resources[index].favoriteProjectIDs.filter { assignedProjectIDs.contains($0) }
+        resources[index].memo = memo
         resources[index].notes = notes
         resources[index].updatedAt = .now
         resources = sortResources(resources)

@@ -38,6 +38,7 @@ struct ResourceWorkspaceView: View {
     @State private var inlineEditFeedbackMessage: String?
     @State private var evaluationContext: ResourceEvaluationContext?
     @State private var evaluationFeedbackMessage: String?
+    @State private var memoPreviewResourceID: UUID?
     @State private var templateManagementResourceID: UUID?
     @State private var projectFavoriteFilter: ResourceProjectFavoriteFilter = .all
     @State private var sortOrder: [KeyPathComparator<Resource>] = [
@@ -94,6 +95,13 @@ struct ResourceWorkspaceView: View {
                         }
 
                         if scopeMode == .contextualProject {
+                            Button {
+                                memoPreviewResourceID = selectedResource.id
+                            } label: {
+                                Label(localized("Mémo"), systemImage: "doc.text.magnifyingglass")
+                            }
+                            .disabled(isImporting)
+
                             Button {
                                 evaluationContext = .init(resourceID: selectedResource.id)
                             } label: {
@@ -326,6 +334,17 @@ struct ResourceWorkspaceView: View {
                     onLink: { resourceID in store.assignTemplate(resourceID: resourceID, templateID: tid) },
                     onUnlink: { resourceID in store.unassignTemplate(resourceID: resourceID) }
                 )
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { memoPreviewResourceID != nil },
+            set: { if $0 == false { memoPreviewResourceID = nil } }
+        )) {
+            if let resourceID = memoPreviewResourceID, let resource = store.resource(with: resourceID) {
+                ResourceMemoPreviewSheet(resource: resource)
+            } else {
+                Text(localized("Ressource introuvable."))
+                    .padding(24)
             }
         }
         .sheet(isPresented: $isShowingImportReview) {
@@ -680,6 +699,7 @@ struct ResourceWorkspaceView: View {
                             onToggleFavorite: canToggleFavorite(resource)
                                 ? ({ toggleFavoriteForScopedProject(resource.id) })
                                 : nil,
+                            onShowMemo: { memoPreviewResourceID = resource.id },
                             onEdit: { editorContext = .edit(resource.id) }
                         )
                         .contentShape(Rectangle())
@@ -689,6 +709,10 @@ struct ResourceWorkspaceView: View {
                         .contextMenu {
                             Button(localized("Modifier")) {
                                 editorContext = .edit(resource.id)
+                            }
+
+                            Button(localized("Consulter le mémo")) {
+                                memoPreviewResourceID = resource.id
                             }
 
                             Button(localized("Supprimer"), role: .destructive) {
@@ -2074,6 +2098,7 @@ private struct ResourceGridCard: View {
     let linkedProjectResourceCount: Int
     let onToggleExportSelection: () -> Void
     let onToggleFavorite: (() -> Void)?
+    let onShowMemo: () -> Void
     let onEdit: (() -> Void)?
 
     var body: some View {
@@ -2098,6 +2123,12 @@ private struct ResourceGridCard: View {
                     }
                     .buttonStyle(.plain)
                 }
+                Button(action: onShowMemo) {
+                    Image(systemName: resource.memo.isEmpty ? "doc.text" : "doc.text.fill")
+                        .foregroundStyle(resource.memo.isEmpty ? .secondary : Color.accentColor)
+                }
+                .buttonStyle(.plain)
+                .help("Consulter le mémo")
                 Button(action: onToggleExportSelection) {
                     Image(systemName: isMarkedForExport ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(isMarkedForExport ? Color.accentColor : .secondary)
@@ -2133,6 +2164,99 @@ private struct ResourceGridCard: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
         }
+    }
+}
+
+private struct ResourceMemoPreviewSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
+
+    let resource: Resource
+
+    private var memo: ResourceMemo { resource.memo }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(appState.localizedFormat("Fiche de poste - Ressource Humaine : %@", display(memo.functionName, fallback: resource.displayPrimaryRole)))
+                            .font(.title2.weight(.semibold))
+                        Text(resource.displayName)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    previewSection(title: "1. Identité & mission", rows: [
+                        ("Fonction", display(memo.function, fallback: resource.displayPrimaryRole)),
+                        ("Titulaire", display(memo.holder, fallback: resource.displayName)),
+                        ("Reporte à", display(memo.reportsTo, fallback: resource.responsableOperationnel ?? resource.responsableInterne ?? "")),
+                        ("Mission principale", memo.mainMission)
+                    ])
+
+                    previewSection(title: "2. Responsabilités clés & livrables attendus", rows: [
+                        ("Responsable de", memo.responsibleFor),
+                        ("Livrables", memo.deliverables)
+                    ])
+
+                    previewSection(title: "3. Frontières du rôle", rows: [
+                        ("Ce que je fais", memo.whatIDo),
+                        ("Ce que je fais mais que je ne devrais pas faire", memo.whatIDoButShouldNot),
+                        ("Ce que je ne fais pas", memo.whatIDoNotDo)
+                    ])
+
+                    previewSection(title: "4. Interdépendances", rows: [
+                        ("J’ai besoin de", memo.needs),
+                        ("Je fournis à", memo.providesTo)
+                    ])
+
+                    previewSection(title: "5. Infos pratiques", rows: [
+                        ("Outils principaux", display(memo.mainTools, fallback: resource.resourceCalendar ?? "")),
+                        ("Taux d’occupation actuel sur le projet", display(memo.currentProjectOccupancyRate, fallback: resource.allocationLabel)),
+                        ("Date de mise à jour", memo.updatedAt?.formatted(date: .abbreviated, time: .omitted) ?? "-")
+                    ])
+                }
+                .padding(24)
+            }
+            .navigationTitle(appState.localized("Mémo ressource"))
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(appState.localized("Fermer")) { dismiss() }
+                }
+            }
+        }
+        .frame(minWidth: 620, idealWidth: 720, minHeight: 640, idealHeight: 760)
+    }
+
+    @ViewBuilder
+    private func previewSection(title: String, rows: [(String, String)]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(appState.localized(title))
+                .font(.headline)
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(rows, id: \.0) { label, value in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(appState.localized(label))
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                        Text(display(value))
+                            .foregroundStyle(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary : .primary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.background.secondary)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    private func display(_ value: String, fallback: String = "-") -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty == false { return trimmed }
+        let fallback = fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+        return fallback.isEmpty ? "-" : fallback
     }
 }
 

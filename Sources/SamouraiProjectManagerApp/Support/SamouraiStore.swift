@@ -3194,6 +3194,7 @@ final class SamouraiStore {
         email: String,
         phone: String,
         assignedProjectIDs: [UUID],
+        memo: ResourceMemo,
         notes: String
     ) -> UUID {
         let resourceID = resourceStore.addResource(
@@ -3214,6 +3215,7 @@ final class SamouraiStore {
             email: email,
             phone: phone,
             assignedProjectIDs: assignedProjectIDs,
+            memo: memo,
             notes: notes
         )
         persist()
@@ -3239,6 +3241,7 @@ final class SamouraiStore {
         email: String,
         phone: String,
         assignedProjectIDs: [UUID],
+        memo: ResourceMemo,
         notes: String
     ) {
         let didUpdate = resourceStore.updateResource(
@@ -3260,6 +3263,7 @@ final class SamouraiStore {
             email: email,
             phone: phone,
             assignedProjectIDs: assignedProjectIDs,
+            memo: memo,
             notes: notes
         )
         if didUpdate {

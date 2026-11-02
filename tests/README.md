@@ -62,6 +62,7 @@ Les sauvegardes manuelles utilisent une enveloppe JSON pour les deux extensions 
 | 2026-11-02 | Issue #38 — doublons internes d’un import de ressources | [Résultats et limites](reports/2026-11-02-issue-38.md) |
 | 2026-11-02 | Issue #46 — socle métier et allers-retours des sauvegardes | [Résultats et limites](reports/2026-11-02-issue-46.md) |
 | 2026-11-02 | Issue #39 — API REST limitée à la boucle locale | [Résultats et limites](reports/2026-11-02-issue-39.md) |
+| 2026-11-02 | Issue #41 — validation, normalisation et publication communes | [Résultats et limites](reports/2026-11-02-issue-41.md) |
 
 ## Modèle à suivre
 

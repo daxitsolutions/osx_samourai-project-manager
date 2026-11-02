@@ -1,0 +1,55 @@
+# Tests et historique de validation
+
+Le dossier `tests/` contient les tests exécutables et les comptes rendus de validation. Les consignes applicables aux contributions et aux agents sont dans [AGENTS.md](../AGENTS.md).
+
+## Commandes de référence
+
+Depuis la racine du dépôt, avec une chaîne Xcode compatible avec Swift 6.2 ou plus récent :
+
+```bash
+swift test --parallel
+swift build -c release --product SamouraiProjectManager
+```
+
+Pour le smoke test Merlin indépendant :
+
+```bash
+test_binary_dir="$(mktemp -d)"
+swiftc -swift-version 6 \
+  Sources/SamouraiProjectManagerApp/Support/MerlinProjectImportService.swift \
+  tests/MerlinImportSmoke/main.swift \
+  -o "$test_binary_dir/merlin-import-smoke"
+"$test_binary_dir/merlin-import-smoke"
+rm -r "$test_binary_dir"
+```
+
+L'échec d'une commande de compilation doit être traité avant d'exécuter le binaire. En CI, le shell arrête automatiquement l'étape au premier échec.
+
+## Checks GitHub Actions
+
+Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts sur chaque pull request et sur les mises à jour de `main` :
+
+| Check | Ce qu'il vérifie |
+|---|---|
+| Tests de non-régression | Suite Swift Testing, dont la protection du chargement contre les identifiants dupliqués. |
+| Import Merlin | Import XML, hiérarchie, dépendances, namespace et rejet d'un format non pris en charge. |
+| Compilation Release | Compilation complète du produit, sans lancement ni validation visuelle de l'interface. |
+
+## Comptes rendus
+
+| Date | Sujet | Compte rendu |
+|---|---|---|
+| 2026-11-02 | Issue #32 — identifiants dupliqués au chargement | [Résultats et limites](reports/2026-11-02-issue-32.md) |
+
+## Modèle à suivre
+
+Créer `reports/AAAA-MM-JJ-issue-N.md` avec les rubriques suivantes :
+
+1. **Périmètre** : issue, PR, commit testé et éventuelles modifications non commitées.
+2. **Environnement** : système, Swift/Xcode, banc utilisé et adaptations.
+3. **Exécution datée** : commandes exactes, résultats observés et codes de sortie lorsque disponibles.
+4. **Scénarios** : nom du test, comportement attendu et résultat.
+5. **Preuves** : extrait de sortie, journal nettoyé ou lien vers le job CI du commit testé.
+6. **Limites** : tests bloqués, non exécutés, en attente et suites restant à valider.
+
+Ne pas remplacer un résultat en attente par une réussite supposée. Lors d'une nouvelle exécution, ajouter une section datée et identifier le nouveau commit testé.

@@ -24,7 +24,7 @@ let package = Package(
         .testTarget(
             name: "SamouraiProjectManagerTests",
             dependencies: ["SamouraiProjectManagerApp"],
-            path: "Tests/SamouraiProjectManagerTests"
+            path: "tests/SamouraiProjectManagerTests"
         )
     ]
 )

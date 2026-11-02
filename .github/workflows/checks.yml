@@ -30,7 +30,7 @@ jobs:
             command: |
               swiftc -swift-version 6 \
                 Sources/SamouraiProjectManagerApp/Support/MerlinProjectImportService.swift \
-                Tests/MerlinImportSmoke/main.swift \
+                tests/MerlinImportSmoke/main.swift \
                 -o "$RUNNER_TEMP/merlin-import-smoke"
               "$RUNNER_TEMP/merlin-import-smoke"
           - name: Compilation Release

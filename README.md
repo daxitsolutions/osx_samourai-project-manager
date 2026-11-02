@@ -137,6 +137,8 @@ swift run SamouraiProjectManager
 
 ## Tests
 
+Les sources, commandes et comptes rendus sont regroupés dans [tests/](tests/README.md). Les [directives du dépôt](AGENTS.md) imposent de documenter les exécutions, leurs preuves et leurs limites pour chaque correction.
+
 ```bash
 swift test
 ```

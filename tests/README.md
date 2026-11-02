@@ -7,9 +7,11 @@ Le dossier `tests/` contient les tests exécutables et les comptes rendus de val
 Depuis la racine du dépôt, avec une chaîne Xcode compatible avec Swift 6.2 ou plus récent :
 
 ```bash
-swift test --parallel
+./tests/check.sh
 swift build -c release --product SamouraiProjectManager
 ```
+
+`./tests/check.sh` exécute `swift test --parallel`, puis compile et exécute le smoke Merlin. Le script s’arrête au premier échec et nettoie son binaire temporaire. La compilation Release reste une vérification distincte.
 
 Pour le smoke test Merlin indépendant :
 
@@ -35,6 +37,20 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 | Import Merlin | Import XML, hiérarchie, dépendances, namespace et rejet d'un format non pris en charge. |
 | Compilation Release | Compilation complète du produit, sans lancement ni validation visuelle de l'interface. |
 
+## Couverture métier B1 à B7
+
+| Risque | Suite de non-régression |
+|---|---|
+| B1 — identifiants dupliqués | `StoreLoadingTests` |
+| B2 — restauration manuelle et automatique | `BackupRoundTripTests` : enveloppe et JSON brut, fichier principal, rechargement, liens/identités, copie avant remplacement et refus sans écriture |
+| B3 — récupération et interdiction des mutations | `StoreRecoveryTests` |
+| B4 — édition rapide / changements externes | `ResourceInlineEditTests`, portée par la PR #62 ; intégration et validation GUI encore en attente |
+| B5 — identité et historique des risques | `RiskImportTests` |
+| B6 — annulation et mutations concurrentes | `ImportCancellationTests` |
+| B7 — doublons dans un lot de ressources | `ResourceImportDuplicateTests` |
+
+Les sauvegardes manuelles utilisent une enveloppe JSON pour les deux extensions `.samourai-backup` et `.json` ; les sauvegardes automatiques contiennent une base JSON brute. Les tests d’aller-retour couvrent les deux contenus et les deux extensions, avec fixtures et stockages temporaires. La couverture B4 ne sera présente sur `main` qu’après intégration de #62 ; ce socle ne valide pas son interface à lui seul.
+
 ## Comptes rendus
 
 | Date | Sujet | Compte rendu |
@@ -44,6 +60,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 | 2026-11-02 | Issue #36 — réimport des risques sans perte d’identité ni d’historique | [Résultats et limites](reports/2026-11-02-issue-36.md) |
 | 2026-11-02 | Issue #37 — annulation d’import sans résultat partiel | [Résultats et limites](reports/2026-11-02-issue-37.md) |
 | 2026-11-02 | Issue #38 — doublons internes d’un import de ressources | [Résultats et limites](reports/2026-11-02-issue-38.md) |
+| 2026-11-02 | Issue #46 — socle métier et allers-retours des sauvegardes | [Résultats et limites](reports/2026-11-02-issue-46.md) |
 | 2026-11-02 | Issue #39 — API REST limitée à la boucle locale | [Résultats et limites](reports/2026-11-02-issue-39.md) |
 
 ## Modèle à suivre

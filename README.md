@@ -105,7 +105,7 @@ L'application s'appuie sur :
 ### Prérequis
 
 - macOS 15 ou plus récent
-- Xcode ou une toolchain Swift 6.2 installée
+- Xcode (Swift 6.2 ou plus) installé et sa licence acceptée (`sudo xcodebuild -license`). Les Command Line Tools seuls ne suffisent pas : ils ne fournissent pas les macros SwiftUI. `run.sh` et `package.sh` utilisent Xcode automatiquement même si `xcode-select` pointe vers les Command Line Tools.
 
 ### Lancement recommandé
 

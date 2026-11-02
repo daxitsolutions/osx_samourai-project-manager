@@ -31,7 +31,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 
 | Check | Ce qu'il vérifie |
 |---|---|
-| Tests de non-régression | Suite Swift Testing, dont la protection du chargement contre les identifiants dupliqués. |
+| Tests de non-régression | Suite Swift Testing, dont la protection du chargement contre les identifiants dupliqués et l'accès restreint à l'API REST locale. |
 | Import Merlin | Import XML, hiérarchie, dépendances, namespace et rejet d'un format non pris en charge. |
 | Compilation Release | Compilation complète du produit, sans lancement ni validation visuelle de l'interface. |
 
@@ -44,6 +44,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 | 2026-11-02 | Issue #36 — réimport des risques sans perte d’identité ni d’historique | [Résultats et limites](reports/2026-11-02-issue-36.md) |
 | 2026-11-02 | Issue #37 — annulation d’import sans résultat partiel | [Résultats et limites](reports/2026-11-02-issue-37.md) |
 | 2026-11-02 | Issue #38 — doublons internes d’un import de ressources | [Résultats et limites](reports/2026-11-02-issue-38.md) |
+| 2026-11-02 | Issue #39 — API REST limitée à la boucle locale | [Résultats et limites](reports/2026-11-02-issue-39.md) |
 
 ## Modèle à suivre
 

@@ -1651,32 +1651,6 @@ final class SamouraiStore {
         return ScopeCoverageReport(entries: entries)
     }
 
-    func scopeBaselineExecutionProgress(projectID: UUID) -> ScopeBaselineExecutionProgress? {
-        guard let project = project(with: projectID),
-              let baseline = project.scopeBaselines.last
-        else {
-            return nil
-        }
-
-        let currentMainDeliverables = project.deliverables.filter(\.isMainDeliverable)
-        let snapshotMainDeliverables = baseline.deliverableSnapshots.filter(\.isMainDeliverable)
-        let currentByID = Dictionary(uniqueKeysWithValues: currentMainDeliverables.map { ($0.id, $0) })
-        let currentByTitle = Dictionary(uniqueKeysWithValues: currentMainDeliverables.map { ($0.title, $0) })
-
-        let acceptedCount = snapshotMainDeliverables.reduce(0) { partial, baselineDeliverable in
-            if let match = currentByID[baselineDeliverable.id] ?? currentByTitle[baselineDeliverable.title] {
-                return partial + (match.isAccepted ? 1 : 0)
-            }
-            return partial
-        }
-
-        return ScopeBaselineExecutionProgress(
-            baselineLabel: baseline.milestoneLabel,
-            acceptedCount: acceptedCount,
-            totalCount: snapshotMainDeliverables.count
-        )
-    }
-
     func createPlanningBaseline(projectID: UUID, label: String, validatedBy: String, scenarioID: UUID? = nil) -> String? {
         guard allowMutation() else { return mutationBlockedMessage }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return nil }

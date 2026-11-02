@@ -42,6 +42,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 | 2026-11-02 | Issue #32 — identifiants dupliqués au chargement | [Résultats et limites](reports/2026-11-02-issue-32.md) |
 | 2026-11-02 | Issue #34 — récupération après échec de chargement | [Résultats et limites](reports/2026-11-02-issue-34.md) |
 | 2026-11-02 | Issue #36 — réimport des risques sans perte d’identité ni d’historique | [Résultats et limites](reports/2026-11-02-issue-36.md) |
+| 2026-11-02 | Issue #37 — annulation d’import sans résultat partiel | [Résultats et limites](reports/2026-11-02-issue-37.md) |
 
 ## Modèle à suivre
 

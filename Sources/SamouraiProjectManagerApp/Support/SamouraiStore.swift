@@ -708,12 +708,7 @@ final class SamouraiStore {
         guard loadState != .loading else {
             throw RESTAPIError.serviceUnavailable(mutationBlockedMessage)
         }
-        let envelope: SamouraiBackupEnvelope
-        do {
-            envelope = try backupDecoder.decode(SamouraiBackupEnvelope.self, from: data)
-        } catch {
-            throw SamouraiBackupError.invalidFormat
-        }
+        let envelope = try SamouraiBackupEnvelope.decodeBackup(data, using: backupDecoder)
 
         guard envelope.format == SamouraiBackupEnvelope.formatIdentifier else {
             throw SamouraiBackupError.invalidFormat
@@ -727,9 +722,7 @@ final class SamouraiStore {
 
         // Ne débloquer l'édition qu'après une écriture réussie. En récupération,
         // conserver d'abord le fichier rejeté, même s'il n'est pas décodable.
-        if loadState != .ready {
-            try SamouraiPersistence.preserveFileBeforeRecovery(at: persistence.fileURL)
-        }
+        try SamouraiPersistence.preserveFileBeforeRecovery(at: persistence.fileURL)
         try SamouraiPersistence.saveSynchronously(normalized, to: persistence.fileURL)
 
         projects = sortProjects(normalized.projects)

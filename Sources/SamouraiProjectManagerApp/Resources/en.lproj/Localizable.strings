@@ -886,3 +886,5 @@
 "Impact sécurité IT" = "IT security impact";
 "Niveau d’escalade" = "Escalation level";
 "Statut du risque" = "Risk status";
+
+"Doublon de la ligne %d : les valeurs sont cumulées dans l'ordre du fichier." = "Duplicate of row %d: values are combined in file order.";

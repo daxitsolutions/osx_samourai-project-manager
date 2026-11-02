@@ -1807,6 +1807,19 @@ private struct ResourceImportReviewSheet: View {
                                     .foregroundStyle(actionColor(for: decision.reviewItem.action))
                             }
 
+                            if let firstRow = decision.reviewItem.duplicateOfRowNumber {
+                                Label(
+                                    AppLocalizer.localizedFormat(
+                                        "Doublon de la ligne %d : les valeurs sont cumulées dans l'ordre du fichier.",
+                                        language: appState.interfaceLanguage,
+                                        firstRow
+                                    ),
+                                    systemImage: "doc.on.doc"
+                                )
+                                .font(.caption)
+                                .foregroundStyle(SamouraiColorTheme.color(.healthOrange))
+                            }
+
                             switch decision.reviewItem.action {
                             case .create, .update:
                                 Toggle(

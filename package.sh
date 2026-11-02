@@ -22,6 +22,24 @@ log() {
   printf '[package.sh] %s\n' "$*"
 }
 
+# Issue #75 : les Command Line Tools ne fournissent pas les macros SwiftUI.
+# Si elles sont la chaîne active, on bascule sur Xcode pour ce script uniquement.
+use_xcode_toolchain() {
+  [[ -n "${DEVELOPER_DIR:-}" ]] && return
+  [[ "$(xcode-select -p 2>/dev/null)" == *CommandLineTools* ]] || return 0
+  local developer_dir
+  for developer_dir in /Applications/Xcode.app/Contents/Developer /Applications/Xcode*.app/Contents/Developer; do
+    if [[ -d "$developer_dir" ]]; then
+      export DEVELOPER_DIR="$developer_dir"
+      log "Chaîne Xcode utilisée : $DEVELOPER_DIR"
+      return
+    fi
+  done
+  log "Xcode est requis : les Command Line Tools ne fournissent pas les macros SwiftUI."
+  log "Installez Xcode, acceptez sa licence (sudo xcodebuild -license), puis relancez."
+  exit 1
+}
+
 build_binary() {
   log "Compilation ($CONFIGURATION) en cours..."
   mkdir -p "$ROOT_DIR/.build/clang-cache" "$ROOT_DIR/.build/swift-cache"
@@ -155,6 +173,7 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$ROOT_DIR"
+use_xcode_toolchain
 build_binary
 create_bundle
 

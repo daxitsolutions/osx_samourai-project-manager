@@ -870,3 +870,24 @@
 "Abandonner la saisie" = "Discard edits";
 
 "Le champ « %@ » a été modifié ailleurs. Ta saisie n'a pas été enregistrée. Vérifie la valeur actuelle ou abandonne la saisie." = "The “%@” field was changed elsewhere. Your edits were not saved. Check the current value or discard your edits.";
+"Import — %@ : %@ → %@" = "Import — %@: %@ → %@";
+"Identifiant externe" = "External ID";
+"Projets" = "Projects";
+"Détecté par" = "Detected by";
+"Type de risque" = "Risk type";
+"Réponse" = "Response";
+"Titre du risque" = "Risk title";
+"Origine du risque" = "Risk origin";
+"Description de l’impact" = "Impact description";
+"Contre-mesure" = "Countermeasure";
+"Commentaire de suivi" = "Follow-up comment";
+"Proximité" = "Proximity";
+"Probabilité" = "Probability";
+"Impact périmètre" = "Scope impact";
+"Impact budget" = "Budget impact";
+"Impact planning" = "Schedule impact";
+"Impact ressources" = "Resource impact";
+"Impact transition" = "Transition impact";
+"Impact sécurité IT" = "IT security impact";
+"Niveau d’escalade" = "Escalation level";
+"Statut du risque" = "Risk status";

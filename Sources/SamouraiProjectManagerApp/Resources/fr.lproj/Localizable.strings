@@ -870,3 +870,24 @@
 "Abandonner la saisie" = "Abandonner la saisie";
 
 "Le champ « %@ » a été modifié ailleurs. Ta saisie n'a pas été enregistrée. Vérifie la valeur actuelle ou abandonne la saisie." = "Le champ « %@ » a été modifié ailleurs. Ta saisie n'a pas été enregistrée. Vérifie la valeur actuelle ou abandonne la saisie.";
+"Import — %@ : %@ → %@" = "Import — %@ : %@ → %@";
+"Identifiant externe" = "Identifiant externe";
+"Projets" = "Projets";
+"Détecté par" = "Détecté par";
+"Type de risque" = "Type de risque";
+"Réponse" = "Réponse";
+"Titre du risque" = "Titre du risque";
+"Origine du risque" = "Origine du risque";
+"Description de l’impact" = "Description de l’impact";
+"Contre-mesure" = "Contre-mesure";
+"Commentaire de suivi" = "Commentaire de suivi";
+"Proximité" = "Proximité";
+"Probabilité" = "Probabilité";
+"Impact périmètre" = "Impact périmètre";
+"Impact budget" = "Impact budget";
+"Impact planning" = "Impact planning";
+"Impact ressources" = "Impact ressources";
+"Impact transition" = "Impact transition";
+"Impact sécurité IT" = "Impact sécurité IT";
+"Niveau d’escalade" = "Niveau d’escalade";
+"Statut du risque" = "Statut du risque";

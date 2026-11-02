@@ -566,6 +566,7 @@ struct ResourceEditorSheet: View {
                 memo: memoPayload(),
                 notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
             )
+            guard let resourceID else { return }
             applyTemplateLink(resourceID: resourceID)
             appState.selectedResourceID = resourceID
         }

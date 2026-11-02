@@ -850,3 +850,17 @@
 "IDs livrables dupliqués." = "IDs livrables dupliqués.";
 
 "IDs rapports dupliqués." = "IDs rapports dupliqués.";
+
+"Les modifications sont bloquées tant que les données ne sont pas chargées. Réessaie le chargement ou restaure une sauvegarde." = "Les modifications sont bloquées tant que les données ne sont pas chargées. Réessaie le chargement ou restaure une sauvegarde.";
+
+"Récupération des données" = "Récupération des données";
+
+"Les données n'ont pas pu être chargées. Les modifications sont bloquées pour éviter de perdre tes nouvelles saisies." = "Les données n'ont pas pu être chargées. Les modifications sont bloquées pour éviter de perdre tes nouvelles saisies.";
+
+"Le fichier existant est conservé. Corrige-le puis réessaie, ou restaure une sauvegarde. Une copie du fichier rejeté sera conservée dans recovery-backups avant la restauration." = "Le fichier existant est conservé. Corrige-le puis réessaie, ou restaure une sauvegarde. Une copie du fichier rejeté sera conservée dans recovery-backups avant la restauration.";
+
+"Réessayer le chargement" = "Réessayer le chargement";
+
+"Restaurer une sauvegarde" = "Restaurer une sauvegarde";
+
+"Chargement des données…" = "Chargement des données…";

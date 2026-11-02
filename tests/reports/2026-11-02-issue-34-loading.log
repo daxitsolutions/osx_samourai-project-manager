@@ -1,0 +1,56 @@
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite StoreRecoveryTests started.
+◇ Suite StoreLoadingTests started.
+◇ Test restorePreservesRejectedBytesAndWritesBeforeUnlocking() started.
+◇ Test APIAndImportsCannotBypassRecovery() started.
+◇ Test unsuccessfulRetryKeepsRecoveryActive() started.
+◇ Test retryOnTheSameStoreLoadsTheRepairedFile() started.
+◇ Test failedLegacyMigrationCannotStartAnEmptyEditableDatabase() started.
+◇ Test restorationAndAPIAlsoRejectDuplicateNestedIdentifiers() started.
+◇ Test failedLoadBlocksMutationsEvenAfterDismissingTheAlert() started.
+◇ Test rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test validDatabaseStillLoadsAndNormalizesOrphanReferences() started.
+◇ Test invalidRestoreDoesNotUnlockOrReplaceTheFile() started.
+◇ Test distinctDeliverablesMayHaveTheSameTitle() started.
+◇ Test failedRestoreWriteDoesNotUnlockEditing() started.
+◇ Test failedPreservationDoesNotUnlockOrOverwriteTheFile() started.
+◇ Test case passing 1 argument kind → .activities to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .resources to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .projects to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test validDatabaseCanBeSavedToItsInjectedLocation() started.
+◇ Test case passing 1 argument kind → .sharedRisk to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .deliverables to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test restorePreservesRejectedBytesAndWritesBeforeUnlocking() passed after 0.035 seconds.
+✔ Test restorationAndAPIAlsoRejectDuplicateNestedIdentifiers() passed after 0.037 seconds.
+✔ Test validDatabaseStillLoadsAndNormalizesOrphanReferences() passed after 0.037 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs activités dupliqués.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs ressources dupliqués.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The file “obstacle” couldn’t be saved in the folder “samourai-recovery-612D931D-FF8B-4CE4-B0AF-E6DE3ACFAA6F” because a file with the same name already exists.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs risques dupliqués.
+✔ Test failedLegacyMigrationCannotStartAnEmptyEditableDatabase() passed after 0.139 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test failedRestoreWriteDoesNotUnlockEditing() passed after 0.145 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs projets dupliqués.
+✔ Test distinctDeliverablesMayHaveTheSameTitle() passed after 0.145 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test validDatabaseCanBeSavedToItsInjectedLocation() passed after 0.147 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test invalidRestoreDoesNotUnlockOrReplaceTheFile() passed after 0.148 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test failedLoadBlocksMutationsEvenAfterDismissingTheAlert() passed after 0.148 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test failedPreservationDoesNotUnlockOrOverwriteTheFile() passed after 0.150 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs livrables dupliqués.
+✔ Test rejectsDuplicateIdentifiersBeforePublishing(_:) with 5 test cases passed after 0.150 seconds.
+✔ Suite StoreLoadingTests passed after 0.151 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test retryOnTheSameStoreLoadsTheRepairedFile() passed after 0.152 seconds.
+✔ Test unsuccessfulRetryKeepsRecoveryActive() passed after 0.153 seconds.
+✔ Test APIAndImportsCannotBypassRecovery() passed after 0.153 seconds.
+✔ Suite StoreRecoveryTests passed after 0.153 seconds.
+✔ Test run with 14 tests in 2 suites passed after 0.153 seconds.

@@ -25,8 +25,20 @@ struct AppShellView: View {
             sidebarView
         } detail: {
             VStack(spacing: 0) {
-                selectedSectionView
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if store.canEdit {
+                    selectedSectionView
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let failure = store.loadFailureMessage {
+                    StoreRecoveryView(
+                        message: failure,
+                        filePath: store.dataFileURL.path,
+                        onRetry: { Task { await store.loadIfNeeded() } },
+                        onRestore: { isShowingBackupImporter = true }
+                    )
+                } else {
+                    ProgressView(localized("Chargement des données…"))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
 
                 if appState.isDebugEnabled {
                     SamouraiDebugPanel(
@@ -56,6 +68,10 @@ struct AppShellView: View {
         .onChange(of: store.projects.map(\.id)) { _, _ in
             ensureDefaultProjectSelection()
         }
+        .onChange(of: store.loadState) { _, _ in
+            if store.canEdit { ensureDefaultProjectSelection() }
+            synchronizeRESTAPIService()
+        }
         .onChange(of: appState.isRESTAPIEnabled) { _, _ in
             synchronizeRESTAPIService()
         }
@@ -63,7 +79,7 @@ struct AppShellView: View {
             synchronizeRESTAPIService()
         }
         .toolbar {
-            if currentSection.showsProjectPicker {
+            if store.canEdit && currentSection.showsProjectPicker {
                 ToolbarItem(placement: .navigation) {
                     projectScopePicker
                 }
@@ -183,6 +199,7 @@ struct AppShellView: View {
         .scrollIndicators(.visible)
         .scrollContentBackground(.hidden)
         .background(SamouraiSurface.sidebar)
+        .disabled(!store.canEdit)
     }
 
     private func sidebarButton(for section: AppSection) -> some View {
@@ -204,7 +221,10 @@ struct AppShellView: View {
     }
 
     private func synchronizeRESTAPIService() {
-        guard store.hasLoaded else { return }
+        guard store.canEdit else {
+            restAPIService.stop()
+            return
+        }
         if appState.isRESTAPIEnabled == false {
             restAPIService.stop()
             return

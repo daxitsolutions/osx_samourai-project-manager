@@ -27,7 +27,7 @@ struct StoreLoadingTests {
         try await withStoredDatabase(database) { store, fileURL, originalData in
             await store.loadIfNeeded()
 
-            #expect(store.hasLoaded)
+            #expect(!store.hasLoaded)
             #expect(store.lastErrorMessage != nil)
             #expect(store.projects.isEmpty)
             #expect(store.resources.isEmpty)
@@ -102,17 +102,19 @@ struct StoreLoadingTests {
     }
 
     @Test
-    func restorationAndAPIAlsoRejectDuplicateNestedIdentifiers() throws {
+    func restorationAndAPIAlsoRejectDuplicateNestedIdentifiers() async throws {
         var database = makeDatabase()
         database.projects[0].deliverables.append(database.projects[0].deliverables[0])
-        let store = SamouraiStore()
         let backup = try SamouraiPersistence.makeEncoder().encode(
             SamouraiBackupEnvelope(appVersion: "test", database: database)
         )
 
-        #expect(throws: SamouraiBackupError.self) { try store.restoreBackupData(backup) }
-        #expect(throws: SamouraiBackupError.self) { try store.apiReplaceDatabase(database) }
-        #expect(store.projects.isEmpty)
+        try await withStoredDatabase(.empty) { store, _, _ in
+            await store.loadIfNeeded()
+            #expect(throws: SamouraiBackupError.self) { try store.restoreBackupData(backup) }
+            #expect(throws: SamouraiBackupError.self) { try store.apiReplaceDatabase(database) }
+            #expect(store.projects.isEmpty)
+        }
     }
 
     private func makeDatabase() -> SamouraiDatabase {

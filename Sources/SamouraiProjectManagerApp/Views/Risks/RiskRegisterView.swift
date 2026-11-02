@@ -208,6 +208,7 @@ struct RiskRegisterView: View {
                                 TableColumn(appState.localized(column.label), value: \.statusSortWeight) { entry in
                                     RiskStatusMenu(
                                         status: RiskStatus.from(rawString: entry.risk.riskStatus) ?? .toDo,
+                                        language: appState.interfaceLanguage,
                                         onChange: { newStatus in
                                             store.updateRiskStatus(riskID: entry.risk.id, status: newStatus)
                                         }
@@ -563,17 +564,18 @@ private extension RiskEntry {
 
 // MARK: - Status badge & menu
 
+// Langue passée explicitement : ces vues sont rendues dans des cellules de Table et un label de Menu,
+// hébergés par AppKit, où @Environment(AppState.self) peut manquer et faire planter l'app au défilement.
 struct RiskStatusBadge: View {
-    @Environment(AppState.self) private var appState
-
     let status: RiskStatus
+    let language: AppLanguage
 
     var body: some View {
         HStack(spacing: 6) {
             Circle()
                 .fill(status.tintColor)
                 .frame(width: 8, height: 8)
-            Text(status.label.appLocalized(language: appState.interfaceLanguage))
+            Text(status.label.appLocalized(language: language))
                 .font(.caption.weight(.medium))
                 .foregroundStyle(status.tintColor)
                 .lineLimit(1)
@@ -590,9 +592,8 @@ struct RiskStatusBadge: View {
 }
 
 struct RiskStatusMenu: View {
-    @Environment(AppState.self) private var appState
-
     let status: RiskStatus
+    let language: AppLanguage
     let onChange: (RiskStatus) -> Void
 
     var body: some View {
@@ -605,7 +606,7 @@ struct RiskStatusMenu: View {
                         Circle()
                             .fill(option.tintColor)
                             .frame(width: 10, height: 10)
-                        Text(option.label.appLocalized(language: appState.interfaceLanguage))
+                        Text(option.label.appLocalized(language: language))
                         if option == status {
                             Spacer()
                             Image(systemName: "checkmark")
@@ -614,7 +615,7 @@ struct RiskStatusMenu: View {
                 }
             }
         } label: {
-            RiskStatusBadge(status: status)
+            RiskStatusBadge(status: status, language: language)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

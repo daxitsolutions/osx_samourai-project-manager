@@ -49,6 +49,9 @@ extension ResourceStore {
         var updatedCount = 0
         var skippedCount = 0
         var firstImportedOrUpdatedResourceID: UUID?
+        // Copie de travail : une annulation, à n'importe quelle étape, laisse l'annuaire intact.
+        let initialResources = resources
+        var workingResources = initialResources
 
         for (index, item) in reviewItems.enumerated() {
             try Task.checkCancellation()
@@ -61,7 +64,7 @@ extension ResourceStore {
                     skippedCount += 1
                     break
                 }
-                resources.append(createdResource)
+                workingResources.append(createdResource)
                 importedCount += 1
                 if firstImportedOrUpdatedResourceID == nil {
                     firstImportedOrUpdatedResourceID = createdResource.id
@@ -71,11 +74,11 @@ extension ResourceStore {
                     skippedCount += 1
                     break
                 }
-                guard let resourceIndex = resources.firstIndex(where: { $0.id == updatedResource.id }) else {
+                guard let resourceIndex = workingResources.firstIndex(where: { $0.id == updatedResource.id }) else {
                     skippedCount += 1
                     break
                 }
-                resources[resourceIndex] = updatedResource
+                workingResources[resourceIndex] = updatedResource
                 updatedCount += 1
                 if firstImportedOrUpdatedResourceID == nil {
                     firstImportedOrUpdatedResourceID = updatedResource.id
@@ -92,7 +95,12 @@ extension ResourceStore {
         }
 
         reporter.setStage(.finalizing)
-        resources = sortResources(resources)
+        try Task.checkCancellation()
+        // Publication en un bloc, sans écraser une modification faite pendant l'import (API, autre vue).
+        guard resources == initialResources else {
+            throw RESTAPIError.conflict("L'annuaire a été modifié pendant l'import. Aucune ressource n'a été importée ; relance l'import.")
+        }
+        resources = sortResources(workingResources)
 
         return ResourceImportResult(
             importedCount: importedCount,

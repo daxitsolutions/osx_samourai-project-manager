@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 import Synchronization
 import Testing
 @testable import SamouraiProjectManagerApp
@@ -8,6 +9,7 @@ import Testing
 struct MerlinBackgroundImportTests {
     @Test func xmlParsingRunsOffMainThread() async throws {
         let url = try fixture(activityCount: 50)
+        defer { try? FileManager.default.removeItem(at: url) }
         let stagesOnMain = Mutex<[Bool]>([])
         let reporter = recordingReporter { _ in stagesOnMain.withLock { $0.append(pthread_main_np() != 0) } }
 
@@ -36,6 +38,7 @@ struct MerlinBackgroundImportTests {
     @Test(arguments: [ImportProgressStage.parsing, .analyzing])
     func cancellationDuringParsingStopsImport(at stage: ImportProgressStage) async throws {
         let url = try fixture(activityCount: 200)
+        defer { try? FileManager.default.removeItem(at: url) }
         let reporter = recordingReporter { current in
             if current == stage { withUnsafeCurrentTask { $0?.cancel() } }
         }
@@ -46,6 +49,7 @@ struct MerlinBackgroundImportTests {
 
     @Test func backgroundResultMatchesSynchronousParsing() async throws {
         let url = try fixture(activityCount: 5_000)
+        defer { try? FileManager.default.removeItem(at: url) }
         let clock = ContinuousClock()
         let start = clock.now
         let background = try await MerlinProjectImportService.importProjectInBackground(from: url)
@@ -61,6 +65,7 @@ struct MerlinBackgroundImportTests {
 
     @Test func mainActorStaysResponsiveDuringLargeImport() async throws {
         let url = try fixture(activityCount: 20_000)
+        defer { try? FileManager.default.removeItem(at: url) }
         let clock = ContinuousClock()
         let start = clock.now
         async let payload = MerlinProjectImportService.importProjectInBackground(from: url)
@@ -79,6 +84,49 @@ struct MerlinBackgroundImportTests {
         // Analyse sur le MainActor : un seul tick, écart ≈ durée totale (1,4 s mesuré). Hors MainActor : ≈ 6 ms.
         #expect(maxGap < .milliseconds(500))
         print("[#55] 20000 activités : \(clock.now - start) au total, \(ticks) ticks MainActor, écart max \(maxGap)")
+    }
+
+    @Test func largeNativeDatabaseStaysResponsiveAndMatchesSync() async throws {
+        let package = FileManager.default.temporaryDirectory.appending(path: "samourai-native-\(UUID()).mproject", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: package) }
+        var db: OpaquePointer?
+        #expect(sqlite3_open(package.appending(path: "state.sql").path, &db) == SQLITE_OK)
+        defer { sqlite3_close(db) }
+        let schema = """
+        CREATE TABLE ZPROJECT (Z_PK, ZTITLE, ZUNIQUEID, ZROOTACTIVITY, ZHOURSPERDAY, ZHOURSPERWEEK, ZDAYSPERMONTH, ZCURRENCYSYMBOL);
+        INSERT INTO ZPROJECT VALUES (1, 'Synthetic native project', 'P55', NULL, 8, 40, 20, 'EUR');
+        CREATE TABLE ZSCHEDULEITEM (Z_PK, Z_ENT, ZTITLE, ZUNIQUEID, ZPROJECT, ZPARENTACTIVITY_, Z45_PARENTACTIVITY_, ZACTIVITY_, Z45_ACTIVITY_, ZRESOURCE, ZORDERINPARENTACTIVITY, ZORDERINACTIVITY, ZISMILESTONE, ZPRIORITY, ZGIVENSTARTDATEMIN_, ZGIVENSTARTDATEMAX_, ZGIVENENDDATEMIN_, ZGIVENENDDATEMAX_, ZGIVENWORK_, ZRESOURCEUNITS_, ZOBJECTDESCRIPTION);
+        WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n<20000)
+        INSERT INTO ZSCHEDULEITEM (Z_PK, Z_ENT, ZTITLE, ZUNIQUEID, ZPROJECT, ZORDERINPARENTACTIVITY) SELECT n, 45, 'Activity '||n, 'A'||n, 1, n FROM seq;
+        CREATE TABLE ZRESOURCE (Z_PK, ZTITLE_, ZUNIQUEID, ZTYPE, ZISUSER, ZINITIALS_, ZEMAIL, ZPHONE, ZORDERINPROJECT, ZRESOURCECALENDAR, ZAVAILABLEUNITS_, ZPROJECT);
+        CREATE TABLE ZDEPENDENCY (Z_PK, ZTYPE, ZNEXTACTIVITY_, ZPREVIOUSACTIVITY_, ZUNIQUEID, ZPROJECT);
+        CREATE TABLE ZCALENDAR (Z_PK, ZTITLE, ZUNIQUEID, ZBASECALENDAR, ZRESOURCE, ZPROJECT);
+        CREATE TABLE ZCUSTOMATTRIBUTE (Z_PK, ZTITLE_, ZUNIQUEID, ZTARGETENTITYNAME, ZTYPE, ZUNIT, ZPROJECT);
+        """
+        #expect(sqlite3_exec(db, schema, nil, nil, nil) == SQLITE_OK)
+        let stages = Mutex<[Bool]>([])
+        let reporter = recordingReporter { _ in stages.withLock { $0.append(pthread_main_np() != 0) } }
+        let clock = ContinuousClock()
+        let start = clock.now
+        async let payload = MerlinProjectImportService.importProjectInBackground(from: package, reporter: reporter)
+        var last = clock.now
+        var maxGap = Duration.zero
+        var ticks = 0
+        while clock.now - start < .milliseconds(300) {
+            try await Task.sleep(for: .milliseconds(5))
+            maxGap = max(maxGap, clock.now - last)
+            last = clock.now
+            ticks += 1
+        }
+        let result = try await payload
+        let elapsed = clock.now - start
+        #expect(result.activities.count == 20_000)
+        #expect(stages.withLock { $0 } == [false, false])
+        #expect(maxGap < .milliseconds(500))
+        let sync = try await Task.detached { try MerlinProjectImportService.importProject(from: package) }.value
+        #expect(result.activities.map(\.id) == sync.activities.map(\.id))
+        print("[#55] SQLite 20000 activities: \(elapsed), \(ticks) MainActor ticks, max gap \(maxGap)")
     }
 
     // MARK: - Fixtures

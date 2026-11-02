@@ -581,48 +581,13 @@ final class SamouraiStore {
 
         do {
             let loadResult = try await persistence.load()
-            let database = loadResult.database
-            // Un doublon est une erreur récupérable, avant toute publication ou indexation.
-            try database.validateUniqueIdentifiers()
+            let database = try validatedDatabase(from: loadResult.database, rejectInvalidLinks: false)
 
             if loadResult.structureWarnings.isEmpty == false {
                 printDataStructureWarning(loadResult.structureWarnings)
             }
 
-            projects = sortProjects(database.projects)
-            resources = sortResources(sanitizeResourceAssignments(database.resources, projectIDs: Set(projects.map(\.id))))
-            unassignedRisks = sortStandaloneRisks(database.unassignedRisks)
-            activities = sortActivities(sanitizeActivities(database.activities, projectIDs: Set(projects.map(\.id))))
-            events = sortEvents(
-                sanitizeEvents(
-                    database.events,
-                    projectIDs: Set(projects.map(\.id)),
-                    resourceIDs: Set(resources.map(\.id))
-                )
-            )
-            let activitiesByID = Dictionary(uniqueKeysWithValues: activities.map { ($0.id, $0) })
-            actions = sortActions(
-                sanitizeActions(
-                    database.actions,
-                    projectIDs: Set(projects.map(\.id)),
-                    activitiesByID: activitiesByID
-                )
-            )
-            meetings = sortMeetings(
-                sanitizeMeetings(database.meetings, projectIDs: Set(projects.map(\.id)))
-            )
-            decisions = sortDecisions(
-                sanitizeDecisions(
-                    database.decisions,
-                    projectIDs: Set(projects.map(\.id)),
-                    meetingIDs: Set(meetings.map(\.id)),
-                    eventIDs: Set(events.map(\.id)),
-                    resourceIDs: Set(resources.map(\.id))
-                )
-            )
-            governanceReports = sortGovernanceReports(
-                sanitizeGovernanceReports(database.governanceReports, projectIDs: Set(projects.map(\.id)))
-            )
+            applyDatabase(database)
             loadState = .ready
         } catch {
             loadState = .failed
@@ -732,43 +697,7 @@ final class SamouraiStore {
         }
         try SamouraiPersistence.saveSynchronously(normalized, to: persistence.fileURL)
 
-        projects = sortProjects(normalized.projects)
-        resources = sortResources(sanitizeResourceAssignments(normalized.resources, projectIDs: Set(normalized.projects.map(\.id))))
-        unassignedRisks = sortStandaloneRisks(normalized.unassignedRisks)
-        activities = sortActivities(sanitizeActivities(normalized.activities, projectIDs: Set(normalized.projects.map(\.id))))
-        events = sortEvents(
-            sanitizeEvents(
-                normalized.events,
-                projectIDs: Set(normalized.projects.map(\.id)),
-                resourceIDs: Set(normalized.resources.map(\.id))
-            )
-        )
-        let activitiesByID = Dictionary(uniqueKeysWithValues: activities.map { ($0.id, $0) })
-        actions = sortActions(
-            sanitizeActions(
-                normalized.actions,
-                projectIDs: Set(normalized.projects.map(\.id)),
-                activitiesByID: activitiesByID
-            )
-        )
-        meetings = sortMeetings(
-            sanitizeMeetings(normalized.meetings, projectIDs: Set(normalized.projects.map(\.id)))
-        )
-        decisions = sortDecisions(
-            sanitizeDecisions(
-                normalized.decisions,
-                projectIDs: Set(normalized.projects.map(\.id)),
-                meetingIDs: Set(normalized.meetings.map(\.id)),
-                eventIDs: Set(normalized.events.map(\.id)),
-                resourceIDs: Set(normalized.resources.map(\.id))
-            )
-        )
-        governanceReports = sortGovernanceReports(
-            sanitizeGovernanceReports(
-                normalized.governanceReports,
-                projectIDs: Set(normalized.projects.map(\.id))
-            )
-        )
+        applyDatabase(normalized)
         loadState = .ready
         loadFailureMessage = nil
         lastErrorMessage = nil
@@ -3521,31 +3450,7 @@ final class SamouraiStore {
     func apiReplaceDatabase(_ database: SamouraiDatabase) throws {
         try requireEditableState()
         let normalized = try validatedDatabase(from: database)
-        let projectIDs = Set(normalized.projects.map(\.id))
-        projects = sortProjects(normalized.projects)
-        resources = sortResources(sanitizeResourceAssignments(normalized.resources, projectIDs: projectIDs))
-        unassignedRisks = sortStandaloneRisks(normalized.unassignedRisks)
-        activities = sortActivities(sanitizeActivities(normalized.activities, projectIDs: projectIDs))
-        events = sortEvents(
-            sanitizeEvents(
-                normalized.events,
-                projectIDs: projectIDs,
-                resourceIDs: Set(normalized.resources.map(\.id))
-            )
-        )
-        let activitiesByID = Dictionary(uniqueKeysWithValues: activities.map { ($0.id, $0) })
-        actions = sortActions(sanitizeActions(normalized.actions, projectIDs: projectIDs, activitiesByID: activitiesByID))
-        meetings = sortMeetings(sanitizeMeetings(normalized.meetings, projectIDs: projectIDs))
-        decisions = sortDecisions(
-            sanitizeDecisions(
-                normalized.decisions,
-                projectIDs: projectIDs,
-                meetingIDs: Set(meetings.map(\.id)),
-                eventIDs: Set(events.map(\.id)),
-                resourceIDs: Set(resources.map(\.id))
-            )
-        )
-        governanceReports = sortGovernanceReports(sanitizeGovernanceReports(normalized.governanceReports, projectIDs: projectIDs))
+        applyDatabase(normalized)
         persist()
     }
 
@@ -4325,13 +4230,16 @@ final class SamouraiStore {
         }
     }
 
-    private func validatedDatabase(from database: SamouraiDatabase) throws -> SamouraiDatabase {
+    private func validatedDatabase(
+        from database: SamouraiDatabase,
+        rejectInvalidLinks: Bool = true
+    ) throws -> SamouraiDatabase {
         try database.validateUniqueIdentifiers()
 
         let projectIDs = database.projects.map(\.id)
         let validProjectIDs = Set(projectIDs)
         let invalidActivityProjects = database.activities.contains { validProjectIDs.contains($0.projectID) == false }
-        guard invalidActivityProjects == false else {
+        guard !rejectInvalidLinks || !invalidActivityProjects else {
             throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("Activité rattachée à un projet inexistant."))
         }
 
@@ -4341,11 +4249,44 @@ final class SamouraiStore {
             guard let activity = activitiesByID[activityID], let actionProjectID = action.projectID else { return true }
             return activity.projectID != actionProjectID
         }
-        guard invalidActionActivityLink == false else {
+        guard !rejectInvalidLinks || !invalidActionActivityLink else {
             throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("Lien action-activité invalide."))
         }
 
-        return database
+        // Normaliser uniquement les données entrantes, avant toute publication ou écriture.
+        // Le chargement historique répare les liens orphelins ; restauration/API les refusent.
+        var normalized = database
+        normalized.projects = sortProjects(database.projects)
+        normalized.resources = sortResources(sanitizeResourceAssignments(database.resources, projectIDs: validProjectIDs))
+        normalized.unassignedRisks = sortStandaloneRisks(database.unassignedRisks)
+        normalized.activities = sortActivities(sanitizeActivities(database.activities, projects: normalized.projects))
+        normalized.events = sortEvents(sanitizeEvents(database.events, projectIDs: validProjectIDs, resourceIDs: Set(normalized.resources.map(\.id))))
+        normalized.actions = sortActions(sanitizeActions(
+            database.actions, projectIDs: validProjectIDs,
+            activitiesByID: Dictionary(uniqueKeysWithValues: normalized.activities.map { ($0.id, $0) }),
+            projects: normalized.projects, resources: normalized.resources
+        ))
+        normalized.meetings = sortMeetings(sanitizeMeetings(database.meetings, projectIDs: validProjectIDs))
+        normalized.decisions = sortDecisions(sanitizeDecisions(
+            database.decisions, projectIDs: validProjectIDs,
+            meetingIDs: Set(normalized.meetings.map(\.id)), eventIDs: Set(normalized.events.map(\.id)),
+            resourceIDs: Set(normalized.resources.map(\.id))
+        ))
+        normalized.governanceReports = sortGovernanceReports(sanitizeGovernanceReports(database.governanceReports, projectIDs: validProjectIDs))
+        return normalized
+    }
+
+    /// Publication sans suspension ni validation tardive : la base est déjà validée et normalisée.
+    private func applyDatabase(_ database: SamouraiDatabase) {
+        projects = database.projects
+        resources = database.resources
+        unassignedRisks = database.unassignedRisks
+        activities = database.activities
+        events = database.events
+        actions = database.actions
+        meetings = database.meetings
+        decisions = database.decisions
+        governanceReports = database.governanceReports
     }
 
     private func sanitizeResourceAssignments(_ resources: [Resource], projectIDs: Set<UUID>) -> [Resource] {
@@ -4359,13 +4300,14 @@ final class SamouraiStore {
         }
     }
 
-    private func sanitizeActivities(_ activities: [ProjectActivity], projectIDs: Set<UUID>) -> [ProjectActivity] {
+    private func sanitizeActivities(_ activities: [ProjectActivity], projects: [Project]) -> [ProjectActivity] {
+        let projectIDs = Set(projects.map(\.id))
         let filteredActivities = activities
             .filter { projectIDs.contains($0.projectID) }
         let activitiesByID = Dictionary(uniqueKeysWithValues: filteredActivities.map { ($0.id, $0) })
         let effectiveScenarioIDs = Dictionary(uniqueKeysWithValues: filteredActivities.map { activity in
             let scenarioID: UUID
-            if let project = project(with: activity.projectID) {
+            if let project = projects.first(where: { $0.id == activity.projectID }) {
                 let validScenarioIDs = Set(project.orderedPlanningScenarios.map(\.id))
                 scenarioID = validScenarioIDs.contains(activity.scenarioID)
                     ? activity.scenarioID
@@ -4414,7 +4356,7 @@ final class SamouraiStore {
                 } else {
                     normalized.parentActivityID = nil
                 }
-                if let project = project(with: activity.projectID) {
+                if let project = projects.first(where: { $0.id == activity.projectID }) {
                     let validDeliverableIDs = Set(project.deliverables.map(\.id))
                     normalized.linkedDeliverableIDs = activity.linkedDeliverableIDs.filter { validDeliverableIDs.contains($0) }
                 } else {
@@ -4442,21 +4384,25 @@ final class SamouraiStore {
     private func sanitizeActions(
         _ actions: [ProjectAction],
         projectIDs: Set<UUID>,
-        activitiesByID: [UUID: ProjectActivity]
+        activitiesByID: [UUID: ProjectActivity],
+        projects: [Project],
+        resources: [Resource]
     ) -> [ProjectAction] {
         actions.map { action in
             var normalizedAction = action
             if let projectID = action.projectID, projectIDs.contains(projectID) == false {
                 normalizedAction.projectID = nil
             }
-            normalizedAction.assignedResourceID = sanitizedAssignedResourceID(
-                projectID: normalizedAction.projectID,
-                assignedResourceID: .some(action.assignedResourceID)
-            )
-            normalizedAction.expectedDeliverableIDs = sanitizedExpectedDeliverableIDs(
-                projectID: normalizedAction.projectID,
-                deliverableIDs: action.expectedDeliverableIDs
-            )
+            let project = projects.first { $0.id == normalizedAction.projectID }
+            normalizedAction.assignedResourceID = action.assignedResourceID.flatMap { resourceID in
+                guard let project else { return nil }
+                return resources.contains { $0.id == resourceID && $0.assignedProjectIDs.contains(project.id) } ? resourceID : nil
+            }
+            let validDeliverableIDs = Set(project?.deliverables.map(\.id) ?? [])
+            var seen = Set<UUID>()
+            normalizedAction.expectedDeliverableIDs = action.expectedDeliverableIDs.filter {
+                validDeliverableIDs.contains($0) && seen.insert($0).inserted
+            }
             if let activityID = action.activityID {
                 guard let activity = activitiesByID[activityID],
                       let actionProjectID = normalizedAction.projectID,

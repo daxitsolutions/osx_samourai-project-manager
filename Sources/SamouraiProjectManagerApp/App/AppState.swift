@@ -5,6 +5,8 @@ import SwiftUI
 @MainActor
 @Observable
 final class AppState {
+    @ObservationIgnored let preferences: UserDefaults
+
     private enum StorageKeys {
         static let selectedSection = "app.selectedSection"
         static let primaryProjectID = "app.primaryProjectID"
@@ -23,9 +25,9 @@ final class AppState {
     var selectedSection: AppSection? = .dashboard {
         didSet {
             if let selectedSection {
-                UserDefaults.standard.set(selectedSection.rawValue, forKey: StorageKeys.selectedSection)
+                preferences.set(selectedSection.rawValue, forKey: StorageKeys.selectedSection)
             } else {
-                UserDefaults.standard.removeObject(forKey: StorageKeys.selectedSection)
+                preferences.removeObject(forKey: StorageKeys.selectedSection)
             }
         }
     }
@@ -40,28 +42,28 @@ final class AppState {
     var primaryProjectID: UUID? {
         didSet {
             if let primaryProjectID {
-                UserDefaults.standard.set(primaryProjectID.uuidString, forKey: StorageKeys.primaryProjectID)
+                preferences.set(primaryProjectID.uuidString, forKey: StorageKeys.primaryProjectID)
             } else {
-                UserDefaults.standard.removeObject(forKey: StorageKeys.primaryProjectID)
+                preferences.removeObject(forKey: StorageKeys.primaryProjectID)
             }
         }
     }
     var fontSizeOffset: Double = 0.0 {
         didSet {
-            UserDefaults.standard.set(fontSizeOffset, forKey: StorageKeys.fontSizeOffset)
+            preferences.set(fontSizeOffset, forKey: StorageKeys.fontSizeOffset)
         }
     }
 
     var interfaceLanguage: AppLanguage = .fr {
         didSet {
-            UserDefaults.standard.set(interfaceLanguage.rawValue, forKey: StorageKeys.interfaceLanguage)
+            preferences.set(interfaceLanguage.rawValue, forKey: StorageKeys.interfaceLanguage)
             AppLocalizer.ambientLanguage = interfaceLanguage
         }
     }
 
     var isDebugEnabled: Bool = false {
         didSet {
-            UserDefaults.standard.set(isDebugEnabled, forKey: StorageKeys.debugEnabled)
+            preferences.set(isDebugEnabled, forKey: StorageKeys.debugEnabled)
             if isDebugEnabled == false {
                 debugKeepFullHistory = false
             }
@@ -70,25 +72,25 @@ final class AppState {
 
     var debugKeepFullHistory: Bool = false {
         didSet {
-            UserDefaults.standard.set(debugKeepFullHistory, forKey: StorageKeys.debugHistory)
+            preferences.set(debugKeepFullHistory, forKey: StorageKeys.debugHistory)
         }
     }
 
     var debugFilePath: String = AppState.debugDefaultFilePath {
         didSet {
-            UserDefaults.standard.set(debugFilePath, forKey: StorageKeys.debugFilePath)
+            preferences.set(debugFilePath, forKey: StorageKeys.debugFilePath)
         }
     }
 
     var isRESTAPIEnabled: Bool = false {
         didSet {
-            UserDefaults.standard.set(isRESTAPIEnabled, forKey: StorageKeys.restAPIEnabled)
+            preferences.set(isRESTAPIEnabled, forKey: StorageKeys.restAPIEnabled)
         }
     }
 
     var restAPIPort: Int = AppState.defaultRESTAPIPort {
         didSet {
-            UserDefaults.standard.set(restAPIPort, forKey: StorageKeys.restAPIPort)
+            preferences.set(restAPIPort, forKey: StorageKeys.restAPIPort)
         }
     }
 
@@ -116,23 +118,24 @@ final class AppState {
         Locale(identifier: interfaceLanguage.localeIdentifier)
     }
 
-    init() {
-        if let rawSection = UserDefaults.standard.string(forKey: StorageKeys.selectedSection),
+    init(preferences: UserDefaults = .standard) {
+        self.preferences = preferences
+        if let rawSection = preferences.string(forKey: StorageKeys.selectedSection),
            let storedSection = AppSection(rawValue: rawSection) {
             selectedSection = storedSection
         } else {
             selectedSection = .dashboard
         }
 
-        if let rawValue = UserDefaults.standard.string(forKey: StorageKeys.primaryProjectID) {
+        if let rawValue = preferences.string(forKey: StorageKeys.primaryProjectID) {
             primaryProjectID = UUID(uuidString: rawValue)
         } else {
             primaryProjectID = nil
         }
 
-        fontSizeOffset = UserDefaults.standard.double(forKey: StorageKeys.fontSizeOffset)
+        fontSizeOffset = preferences.double(forKey: StorageKeys.fontSizeOffset)
 
-        if let rawLanguage = UserDefaults.standard.string(forKey: StorageKeys.interfaceLanguage),
+        if let rawLanguage = preferences.string(forKey: StorageKeys.interfaceLanguage),
            let storedLanguage = AppLanguage(rawValue: rawLanguage) {
             interfaceLanguage = storedLanguage
         } else {
@@ -140,22 +143,22 @@ final class AppState {
         }
         AppLocalizer.ambientLanguage = interfaceLanguage
 
-        isDebugEnabled = UserDefaults.standard.bool(forKey: StorageKeys.debugEnabled)
-        debugKeepFullHistory = UserDefaults.standard.bool(forKey: StorageKeys.debugHistory)
-        if let storedPath = UserDefaults.standard.string(forKey: StorageKeys.debugFilePath),
+        isDebugEnabled = preferences.bool(forKey: StorageKeys.debugEnabled)
+        debugKeepFullHistory = preferences.bool(forKey: StorageKeys.debugHistory)
+        if let storedPath = preferences.string(forKey: StorageKeys.debugFilePath),
            storedPath.isEmpty == false {
             debugFilePath = storedPath
         } else {
             debugFilePath = AppState.debugDefaultFilePath
         }
 
-        isRESTAPIEnabled = UserDefaults.standard.bool(forKey: StorageKeys.restAPIEnabled)
-        let storedRESTAPIPort = UserDefaults.standard.integer(forKey: StorageKeys.restAPIPort)
+        isRESTAPIEnabled = preferences.bool(forKey: StorageKeys.restAPIEnabled)
+        let storedRESTAPIPort = preferences.integer(forKey: StorageKeys.restAPIPort)
         restAPIPort = Self.isValidRESTAPIPort(storedRESTAPIPort)
             ? storedRESTAPIPort
             : AppState.defaultRESTAPIPort
 
-        tableColumnConfigurations = Self.loadPersistedTableColumnConfigurations()
+        tableColumnConfigurations = Self.loadPersistedTableColumnConfigurations(defaults: preferences)
         persistTableColumnConfigurations()
     }
 

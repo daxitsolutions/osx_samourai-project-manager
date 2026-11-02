@@ -283,8 +283,7 @@ private enum AppTableColumnConfigurationStorage {
 }
 
 extension AppState {
-    static func loadPersistedTableColumnConfigurations() -> [AppTableID: TableColumnConfiguration] {
-        let defaults = UserDefaults.standard
+    static func loadPersistedTableColumnConfigurations(defaults: UserDefaults = .standard) -> [AppTableID: TableColumnConfiguration] {
         if let data = defaults.data(forKey: AppTableColumnConfigurationStorage.key),
            let decoded = try? JSONDecoder().decode([String: TableColumnConfiguration].self, from: data) {
             return normalizeTableColumnConfigurations(decoded)
@@ -320,7 +319,7 @@ extension AppState {
             (tableID.rawValue, tableID.normalizedConfiguration(configuration))
         })
         if let data = try? JSONEncoder().encode(payload) {
-            UserDefaults.standard.set(data, forKey: AppTableColumnConfigurationStorage.key)
+            preferences.set(data, forKey: AppTableColumnConfigurationStorage.key)
         }
     }
 

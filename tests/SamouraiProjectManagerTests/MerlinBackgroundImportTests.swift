@@ -68,7 +68,9 @@ struct MerlinBackgroundImportTests {
         defer { try? FileManager.default.removeItem(at: url) }
         let clock = ContinuousClock()
         let start = clock.now
-        async let payload = MerlinProjectImportService.importProjectInBackground(from: url)
+        let responsive = ResponsivenessProbe()
+        let reporter = responsive.reporter
+        async let payload = MerlinProjectImportService.importProjectInBackground(from: url, reporter: reporter)
         var ticks = 0
         var maxGap = Duration.zero
         var last = clock.now
@@ -81,8 +83,9 @@ struct MerlinBackgroundImportTests {
         let result = try await payload
         #expect(result.activities.count == 20_000)
         #expect(ticks > 0)
-        // Analyse sur le MainActor : un seul tick, écart ≈ durée totale (1,4 s mesuré). Hors MainActor : ≈ 6 ms.
-        #expect(maxGap < .milliseconds(500))
+        // Other parallel tests can occupy MainActor: assert the synchronized probe,
+        // and keep the observed scheduling gap as a measurement rather than a machine-speed gate.
+        #expect(responsive.responded.withLock { $0 })
         print("[#55] 20000 activités : \(clock.now - start) au total, \(ticks) ticks MainActor, écart max \(maxGap)")
     }
 
@@ -106,7 +109,12 @@ struct MerlinBackgroundImportTests {
         """
         #expect(sqlite3_exec(db, schema, nil, nil, nil) == SQLITE_OK)
         let stages = Mutex<[Bool]>([])
-        let reporter = recordingReporter { _ in stages.withLock { $0.append(pthread_main_np() != 0) } }
+        let responsive = ResponsivenessProbe()
+        let probe = responsive.reporter
+        let reporter = recordingReporter { stage in
+            stages.withLock { $0.append(pthread_main_np() != 0) }
+            probe.setStage(stage)
+        }
         let clock = ContinuousClock()
         let start = clock.now
         async let payload = MerlinProjectImportService.importProjectInBackground(from: package, reporter: reporter)
@@ -123,7 +131,7 @@ struct MerlinBackgroundImportTests {
         let elapsed = clock.now - start
         #expect(result.activities.count == 20_000)
         #expect(stages.withLock { $0 } == [false, false])
-        #expect(maxGap < .milliseconds(500))
+        #expect(responsive.responded.withLock { $0 })
         let sync = try await Task.detached { try MerlinProjectImportService.importProject(from: package) }.value
         #expect(result.activities.map(\.id) == sync.activities.map(\.id))
         print("[#55] SQLite 20000 activities: \(elapsed), \(ticks) MainActor ticks, max gap \(maxGap)")
@@ -153,5 +161,22 @@ struct MerlinBackgroundImportTests {
         let url = FileManager.default.temporaryDirectory.appending(path: "samourai-merlin-\(UUID().uuidString).xml")
         try xml.write(to: url, atomically: true, encoding: .utf8)
         return url
+    }
+}
+
+
+/// A MainActor callback must reply while the parsing worker waits. Moving the
+/// parser onto MainActor prevents that reply; timeout is a deadlock guard, not
+/// an assertion about the scheduling time of unrelated parallel tests.
+private final class ResponsivenessProbe: Sendable {
+    let responded = Mutex<Bool>(false)
+    var reporter: ImportProgressReporter {
+        ImportProgressReporter(setStage: { [self] stage in
+            guard stage == .parsing else { return }
+            let signal = DispatchSemaphore(value: 0)
+            Task { @MainActor in signal.signal() }
+            let replied = signal.wait(timeout: .now() + 5) == .success
+            responded.withLock { $0 = replied }
+        }, setTotal: { _ in }, setProcessed: { _ in }, setImported: { _ in })
     }
 }

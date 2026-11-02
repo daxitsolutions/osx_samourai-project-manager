@@ -65,15 +65,19 @@ struct ResourcePerformanceTests {
         assertEqual(store.performanceSnapshot(for: r.id, scopedProjectID: p), store.originalPerformanceSnapshot(for: r.id, scopedProjectID: p))
         #expect(store.performanceSnapshot(for: r.id, scopedProjectID: p)?.alerts.map(\.kind) == [.belowGroupAverage])
     }
-    @Test func measureLargeGroupsAgainstOriginal() {
+    @Test func measureLargeGroupsAgainstOriginal() async {
         for count in [1_000, 3_000] {
             let store = ResourceStore()
             store.resources = (0..<count).map { i in
                 resource("Person \(i)", projects: [], evaluations: [evaluation(.solide, day: 3), evaluation(.fragile, day: 1), evaluation(i.isMultiple(of: 2) ? .expert : .lacunaire, day: 2)])
             }
-            let clock = ContinuousClock(), start = clock.now
-            let expected = store.originalComparativePerformance(for: nil)
-            let old = clock.now - start, next = clock.now
+            let resources = store.resources
+            let (expected, old) = await Task.detached {
+                let clock = ContinuousClock(), start = clock.now
+                let expected = PerformanceReference(resources: resources).originalComparativePerformance(for: nil)
+                return (expected, clock.now - start)
+            }.value
+            let clock = ContinuousClock(), next = clock.now
             let actual = store.comparativePerformance(for: nil)
             let new = clock.now - next
             #expect(actual.count == expected.count)

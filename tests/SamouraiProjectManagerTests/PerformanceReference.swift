@@ -3,6 +3,20 @@ import Foundation
 @testable import SamouraiProjectManagerApp
 
 extension ResourceStore {
+    func originalPerformanceSnapshot(for resourceID: UUID, scopedProjectID: UUID?) -> ResourcePerformanceSnapshot? {
+        PerformanceReference(resources: resources).originalPerformanceSnapshot(for: resourceID, scopedProjectID: scopedProjectID)
+    }
+    func originalComparativePerformance(for projectID: UUID?) -> [ResourcePerformanceSnapshot] {
+        PerformanceReference(resources: resources).originalComparativePerformance(for: projectID)
+    }
+}
+
+/// The frozen algorithm operates on a snapshot, so its slow benchmark does not
+/// occupy MainActor while other suites probe parsing responsiveness.
+struct PerformanceReference {
+    let resources: [Resource]
+    private func resource(with id: UUID) -> Resource? { resources.first { $0.id == id } }
+
     func originalResources(for projectID: UUID) -> [Resource] {
         resources
             .filter { $0.assignedProjectIDs.contains(projectID) }

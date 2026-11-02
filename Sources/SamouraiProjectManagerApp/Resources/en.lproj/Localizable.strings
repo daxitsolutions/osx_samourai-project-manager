@@ -864,3 +864,25 @@
 "Restaurer une sauvegarde" = "Restore a backup";
 
 "Chargement des données…" = "Loading data…";
+
+"Import — %@ : %@ → %@" = "Import — %@: %@ → %@";
+"Identifiant externe" = "External ID";
+"Projets" = "Projects";
+"Détecté par" = "Detected by";
+"Type de risque" = "Risk type";
+"Réponse" = "Response";
+"Titre du risque" = "Risk title";
+"Origine du risque" = "Risk origin";
+"Description de l’impact" = "Impact description";
+"Contre-mesure" = "Countermeasure";
+"Commentaire de suivi" = "Follow-up comment";
+"Proximité" = "Proximity";
+"Probabilité" = "Probability";
+"Impact périmètre" = "Scope impact";
+"Impact budget" = "Budget impact";
+"Impact planning" = "Schedule impact";
+"Impact ressources" = "Resource impact";
+"Impact transition" = "Transition impact";
+"Impact sécurité IT" = "IT security impact";
+"Niveau d’escalade" = "Escalation level";
+"Statut du risque" = "Risk status";

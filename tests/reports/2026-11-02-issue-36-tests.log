@@ -1,0 +1,55 @@
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite RiskImportTests started.
+◇ Suite StoreLoadingTests started.
+◇ Suite StoreRecoveryTests started.
+◇ Test reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) started.
+◇ Test changedImportedFieldsAreRecordedWithoutRemovingComments(asynchronous:) started.
+◇ Test whitespaceCellsPreserveLocalValuesAndDistinctRisksStayDistinct() started.
+◇ Test validDatabaseStillLoadsAndNormalizesOrphanReferences() started.
+◇ Test restorationAndAPIAlsoRejectDuplicateNestedIdentifiers() started.
+◇ Test validDatabaseCanBeSavedToItsInjectedLocation() started.
+◇ Test distinctDeliverablesMayHaveTheSameTitle() started.
+◇ Test failedPreservationDoesNotUnlockOrOverwriteTheFile() started.
+◇ Test invalidRestoreDoesNotUnlockOrReplaceTheFile() started.
+◇ Test case passing 1 argument asynchronous → false to changedImportedFieldsAreRecordedWithoutRemovingComments(asynchronous:) started.
+◇ Test case passing 1 argument asynchronous → true to changedImportedFieldsAreRecordedWithoutRemovingComments(asynchronous:) started.
+◇ Test failedLoadBlocksMutationsEvenAfterDismissingTheAlert() started.
+◇ Test restorePreservesRejectedBytesAndWritesBeforeUnlocking() started.
+◇ Test failedLegacyMigrationCannotStartAnEmptyEditableDatabase() started.
+◇ Test case passing 2 arguments inProject → false, asynchronous → false to reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) started.
+◇ Test rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test failedRestoreWriteDoesNotUnlockEditing() started.
+◇ Test APIAndImportsCannotBypassRecovery() started.
+◇ Test case passing 2 arguments inProject → true, asynchronous → true to reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) started.
+◇ Test retryOnTheSameStoreLoadsTheRepairedFile() started.
+◇ Test unsuccessfulRetryKeepsRecoveryActive() started.
+◇ Test case passing 1 argument kind → .activities to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .projects to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .deliverables to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 2 arguments inProject → false, asynchronous → true to reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) started.
+◇ Test case passing 1 argument kind → .sharedRisk to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .resources to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 2 arguments inProject → true, asynchronous → false to reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) started.
+✔ Test whitespaceCellsPreserveLocalValuesAndDistinctRisksStayDistinct() passed after 0.065 seconds.
+✔ Test validDatabaseCanBeSavedToItsInjectedLocation() passed after 0.071 seconds.
+✔ Test validDatabaseStillLoadsAndNormalizesOrphanReferences() passed after 0.071 seconds.
+✔ Test failedPreservationDoesNotUnlockOrOverwriteTheFile() passed after 0.151 seconds.
+✔ Test invalidRestoreDoesNotUnlockOrReplaceTheFile() passed after 0.151 seconds.
+✔ Test failedLoadBlocksMutationsEvenAfterDismissingTheAlert() passed after 0.151 seconds.
+✔ Test failedLegacyMigrationCannotStartAnEmptyEditableDatabase() passed after 0.152 seconds.
+✔ Test failedRestoreWriteDoesNotUnlockEditing() passed after 0.155 seconds.
+✔ Test distinctDeliverablesMayHaveTheSameTitle() passed after 0.155 seconds.
+✔ Test restorePreservesRejectedBytesAndWritesBeforeUnlocking() passed after 0.157 seconds.
+✔ Test rejectsDuplicateIdentifiersBeforePublishing(_:) with 5 test cases passed after 0.157 seconds.
+✔ Test restorationAndAPIAlsoRejectDuplicateNestedIdentifiers() passed after 0.160 seconds.
+✔ Suite StoreLoadingTests passed after 0.160 seconds.
+✔ Test unsuccessfulRetryKeepsRecoveryActive() passed after 0.160 seconds.
+✔ Test retryOnTheSameStoreLoadsTheRepairedFile() passed after 0.162 seconds.
+✔ Test APIAndImportsCannotBypassRecovery() passed after 0.167 seconds.
+✔ Suite StoreRecoveryTests passed after 0.167 seconds.
+✔ Test reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) with 4 test cases passed after 0.170 seconds.
+✔ Test changedImportedFieldsAreRecordedWithoutRemovingComments(asynchronous:) with 2 test cases passed after 0.174 seconds.
+✔ Suite RiskImportTests passed after 0.174 seconds.
+✔ Test run with 17 tests in 3 suites passed after 0.174 seconds.

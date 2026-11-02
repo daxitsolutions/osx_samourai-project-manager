@@ -726,6 +726,14 @@
 "Chef de Projet" = "Chef de Projet";
 "Choisissez un projet" = "Choisissez un projet";
 "Cockpit portefeuille" = "Cockpit portefeuille";
+"Portefeuille" = "Portefeuille";
+"Pilotage du portefeuille" = "Pilotage du portefeuille";
+"Pilotage du projet" = "Pilotage du projet";
+"Signaux, tensions et échéances du projet actif." = "Signaux, tensions et échéances du projet actif.";
+"Signaux, tensions et échéances de tous les projets." = "Signaux, tensions et échéances de tous les projets.";
+"Santé du projet" = "Santé du projet";
+"Cible : %@" = "Cible : %@";
+"Projet suivi" = "Projet suivi";
 "Creee le" = "Creee le";
 "Création de la décision" = "Création de la décision";
 "Crée un livrable principal puis ses sous-livrables par phase." = "Crée un livrable principal puis ses sous-livrables par phase.";

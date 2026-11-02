@@ -39,6 +39,9 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 
 | Date | Sujet | Compte rendu |
 |---|---|---|
+| 2026-11-02 | Issue #57 — index des activités et enfants du planning | [Résultats et limites](reports/2026-11-02-issue-57.md) |
+| 2026-11-02 | Issue #58 — agrégats de performance des ressources | [Résultats et limites](reports/2026-11-02-issue-58.md) |
+| 2026-11-02 | Issue #56 — cache de recherche des ressources | [Résultats et limites](reports/2026-11-02-issue-56.md) |
 | 2026-11-02 | Issue #32 — identifiants dupliqués au chargement | [Résultats et limites](reports/2026-11-02-issue-32.md) |
 | 2026-11-02 | Issue #34 — récupération après échec de chargement | [Résultats et limites](reports/2026-11-02-issue-34.md) |
 | 2026-11-02 | Issue #36 — réimport des risques sans perte d’identité ni d’historique | [Résultats et limites](reports/2026-11-02-issue-36.md) |
@@ -47,6 +50,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 | 2026-11-02 | Issue #39 — API REST limitée à la boucle locale | [Résultats et limites](reports/2026-11-02-issue-39.md) |
 | 2026-11-02 | Issue #42 — moteur métier commun des imports | [Résultats et limites](reports/2026-11-02-issue-42.md) |
 | 2026-11-02 | Issue #41 — validation, normalisation et publication communes | [Résultats et limites](reports/2026-11-02-issue-41.md) |
+| 2026-11-02 | Issue #54 — écritures ordonnées, flush et fréquence des sauvegardes | [Résultats et limites](reports/2026-11-02-issue-54.md) |
 | 2026-11-02 | Issue #55 — analyse Merlin hors du MainActor, XML et SQLite volumineux | [Résultats et limites](reports/2026-11-02-issue-55.md) |
 | 2026-11-02 | Issue #75 — compilation avec Xcode quand les Command Line Tools sont actifs | [Résultats et limites](reports/2026-11-02-issue-75.md) |
 | 2026-11-02 | Issue #49 — dashboard aligné sur le projet actif ou le portefeuille | [Résultats et limites](reports/2026-11-02-issue-49.md) |

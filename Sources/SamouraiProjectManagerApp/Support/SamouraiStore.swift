@@ -280,13 +280,14 @@ actor SamouraiPersistence {
     static let primaryFileName = "projects.json"
 
     private let fileManager = FileManager.default
-    private let backupRetentionCount = 120
     nonisolated let fileURL: URL
     private let migrationSourceURL: URL?
+    nonisolated let writer: SamouraiPersistenceWriter
 
     init(fileURL: URL = SamouraiPersistence.primaryFileURL, migrationSourceURL: URL? = SamouraiPersistence.legacyFileURL) {
         self.fileURL = fileURL
         self.migrationSourceURL = migrationSourceURL
+        self.writer = SamouraiPersistenceWriter(fileURL: fileURL)
     }
 
     nonisolated static func makeEncoder() -> JSONEncoder {
@@ -334,14 +335,7 @@ actor SamouraiPersistence {
         try data.write(to: url, options: [.atomic])
     }
 
-    private let encoder: JSONEncoder = SamouraiPersistence.makeEncoder()
     private let decoder: JSONDecoder = SamouraiPersistence.makeDecoder()
-
-    private var backupDirectoryURL: URL {
-        fileURL
-            .deletingLastPathComponent()
-            .appending(path: "auto-backups", directoryHint: .isDirectory)
-    }
 
     func load() throws -> SamouraiPersistenceLoadResult {
         let url = fileURL
@@ -373,11 +367,7 @@ actor SamouraiPersistence {
     }
 
     func save(_ database: SamouraiDatabase) throws {
-        let url = fileURL
-        try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try encoder.encode(database)
-        try data.write(to: url, options: [.atomic])
-        try writeAutoBackup(data)
+        try writer.flush(database)
     }
 
     private func migrateLegacyFileIfNeeded(to destinationURL: URL) throws {
@@ -388,41 +378,6 @@ actor SamouraiPersistence {
             withIntermediateDirectories: true
         )
         try fileManager.copyItem(at: legacyURL, to: destinationURL)
-    }
-
-    private func writeAutoBackup(_ data: Data) throws {
-        let backupDirectoryURL = backupDirectoryURL
-        try fileManager.createDirectory(at: backupDirectoryURL, withIntermediateDirectories: true)
-
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
-
-        let fileName = "projects-\(formatter.string(from: .now)).json"
-        let backupURL = backupDirectoryURL.appending(path: fileName)
-        try data.write(to: backupURL, options: [.atomic])
-
-        try trimOldBackups(in: backupDirectoryURL)
-    }
-
-    private func trimOldBackups(in directoryURL: URL) throws {
-        let backupURLs = try fileManager.contentsOfDirectory(
-            at: directoryURL,
-            includingPropertiesForKeys: [.creationDateKey],
-            options: [.skipsHiddenFiles]
-        )
-        .filter { $0.pathExtension.lowercased() == "json" }
-        .sorted { lhs, rhs in
-            let lhsDate = (try? lhs.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-            let rhsDate = (try? rhs.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-            return lhsDate > rhsDate
-        }
-
-        guard backupURLs.count > backupRetentionCount else { return }
-        for staleURL in backupURLs.dropFirst(backupRetentionCount) {
-            try? fileManager.removeItem(at: staleURL)
-        }
     }
 
     private func dataStructureWarnings(in data: Data) -> [String] {
@@ -508,7 +463,7 @@ final class SamouraiStore {
     func flushSynchronously() {
         guard canEdit else { return }
         do {
-            try SamouraiPersistence.saveSynchronously(makeDatabase(), to: persistence.fileURL)
+            try persistence.writer.flush(makeDatabase())
         } catch {
             lastErrorMessage = "Sauvegarde finale impossible : \(error.localizedDescription)"
         }
@@ -692,10 +647,7 @@ final class SamouraiStore {
 
         // Ne débloquer l'édition qu'après une écriture réussie. En récupération,
         // conserver d'abord le fichier rejeté, même s'il n'est pas décodable.
-        if loadState != .ready {
-            try SamouraiPersistence.preserveFileBeforeRecovery(at: persistence.fileURL)
-        }
-        try SamouraiPersistence.saveSynchronously(normalized, to: persistence.fileURL)
+        try persistence.writer.flush(normalized, preservingCurrentFile: loadState != .ready, createAutoBackup: false)
 
         applyDatabase(normalized)
         loadState = .ready
@@ -3922,14 +3874,9 @@ final class SamouraiStore {
 
     private func persist() {
         guard canEdit else { return }
-        let snapshot = makeDatabase()
-        Task(priority: .utility) { [persistence] in
-            do {
-                try await persistence.save(snapshot)
-            } catch {
-                await MainActor.run {
-                    self.lastErrorMessage = "Sauvegarde impossible : \(error.localizedDescription)"
-                }
+        persistence.writer.schedule(makeDatabase()) { [weak self] error in
+            Task { @MainActor [weak self] in
+                self?.lastErrorMessage = "Sauvegarde impossible : \(error.localizedDescription)"
             }
         }
     }
@@ -4291,69 +4238,7 @@ final class SamouraiStore {
     }
 
     private func sanitizeActivities(_ activities: [ProjectActivity], projects: [Project]) -> [ProjectActivity] {
-        let projectIDs = Set(projects.map(\.id))
-        let filteredActivities = activities
-            .filter { projectIDs.contains($0.projectID) }
-        let activitiesByID = Dictionary(uniqueKeysWithValues: filteredActivities.map { ($0.id, $0) })
-        let effectiveScenarioIDs = Dictionary(uniqueKeysWithValues: filteredActivities.map { activity in
-            let scenarioID: UUID
-            if let project = projects.first(where: { $0.id == activity.projectID }) {
-                let validScenarioIDs = Set(project.orderedPlanningScenarios.map(\.id))
-                scenarioID = validScenarioIDs.contains(activity.scenarioID)
-                    ? activity.scenarioID
-                    : project.defaultPlanningScenarioID
-            } else {
-                scenarioID = activity.scenarioID
-            }
-            return (activity.id, scenarioID)
-        })
-
-        return filteredActivities.map { activity in
-                var normalized = activity
-                normalized.scenarioID = effectiveScenarioIDs[activity.id] ?? activity.scenarioID
-                if !activity.isDateless {
-                    normalized.estimatedEndDate = max(activity.estimatedEndDate, activity.estimatedStartDate)
-                }
-                let projectActivityIDs = Set(
-                    filteredActivities
-                        .filter { $0.projectID == activity.projectID && effectiveScenarioIDs[$0.id] == normalized.scenarioID }
-                        .map(\.id)
-                )
-                normalized.predecessorActivityIDs = activity.predecessorActivityIDs.filter {
-                    $0 != activity.id && projectActivityIDs.contains($0)
-                }
-                if let parentActivityID = activity.parentActivityID {
-                    let parentIsValid = {
-                        guard parentActivityID != activity.id,
-                              let parent = activitiesByID[parentActivityID],
-                              parent.projectID == activity.projectID,
-                              effectiveScenarioIDs[parentActivityID] == normalized.scenarioID,
-                              parent.hierarchyLevel.sortRank < activity.hierarchyLevel.sortRank
-                        else { return false }
-
-                        var cursor: UUID? = parentActivityID
-                        var visited = Set<UUID>()
-                        while let cursorID = cursor, visited.insert(cursorID).inserted {
-                            if cursorID == activity.id {
-                                return false
-                            }
-                            cursor = activitiesByID[cursorID]?.parentActivityID
-                        }
-                        return true
-                    }()
-
-                    normalized.parentActivityID = parentIsValid ? parentActivityID : nil
-                } else {
-                    normalized.parentActivityID = nil
-                }
-                if let project = projects.first(where: { $0.id == activity.projectID }) {
-                    let validDeliverableIDs = Set(project.deliverables.map(\.id))
-                    normalized.linkedDeliverableIDs = activity.linkedDeliverableIDs.filter { validDeliverableIDs.contains($0) }
-                } else {
-                    normalized.linkedDeliverableIDs = []
-                }
-                return normalized
-            }
+        ActivityNormalizer.normalize(activities, projects: projects)
     }
 
     private func sanitizeEvents(_ events: [ProjectEvent], projectIDs: Set<UUID>, resourceIDs: Set<UUID>) -> [ProjectEvent] {

@@ -153,10 +153,14 @@ install_bundle() {
   DEST_APP="$DEST_DIR/$APP_NAME.app"
   log "Installation dans $DEST_APP ..."
 
+  # ditto fusionne avec l'existant : supprimer d'abord l'ancienne app, sinon ses
+  # fichiers obsolètes restent dans le bundle et invalident la signature.
   if [[ -w "$DEST_DIR" ]]; then
+    rm -rf "$DEST_APP"
     ditto "$APP_BUNDLE" "$DEST_APP"
   else
     log "Le dossier $DEST_DIR nécessite des droits administrateur."
+    sudo rm -rf "$DEST_APP"
     sudo ditto "$APP_BUNDLE" "$DEST_APP"
   fi
 

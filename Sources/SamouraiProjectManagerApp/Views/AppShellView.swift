@@ -410,7 +410,7 @@ struct AppShellView: View {
 
             do {
                 try Task.checkCancellation()
-                let payload = try MerlinProjectImportService.importProject(from: fileURL, reporter: reporter)
+                let payload = try await MerlinProjectImportService.importProjectInBackground(from: fileURL, reporter: reporter)
                 try Task.checkCancellation()
                 let importResult = try store.importMerlinProject(payload, reporter: reporter)
                 appState.openProject(importResult.projectID)

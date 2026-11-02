@@ -28,6 +28,7 @@ struct ResourceWorkspaceView: View {
     @State private var exportFilename = "ressources"
     @State private var exportFeedbackMessage: String?
     @State private var searchText = ""
+    @State private var searchCache = ResourceSearchCache()
     @State private var selectedResourceIDs: Set<UUID> = []
     @State private var importReviewItems: [ResourceImportReviewDecision] = []
     @State private var isShowingImportReview = false
@@ -597,38 +598,15 @@ struct ResourceWorkspaceView: View {
     }
 
     private var filteredResources: [Resource] {
-        let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedQuery.isEmpty == false else {
-            return scopedResources
-                .filter(matchesScopedFavoriteFilter)
-                .sorted(using: sortOrder)
-        }
-
-        let terms = trimmedQuery
-            .split(whereSeparator: \.isWhitespace)
-            .map(String.init)
-            .map(normalize)
-            .filter { $0.isEmpty == false }
-
-        guard terms.isEmpty == false else { return scopedResources.sorted(using: sortOrder) }
-
-        return searchBaseResources.filter { resource in
-            guard matchesScopedFavoriteFilter(resource) else { return false }
-            let resourceProjectNames = projectNames(for: resource.assignedProjectIDs)
-            let searchableValues = allSearchableValues(for: resource, assignedProjectNames: resourceProjectNames)
-            let normalizedEmail = normalize(resource.email)
-
-            return terms.allSatisfy { term in
-                if term.hasPrefix("@") {
-                    let domainToken = String(term.dropFirst())
-                    guard domainToken.isEmpty == false else { return true }
-                    return normalizedEmail.contains(domainToken)
-                }
-
-                return searchableValues.contains { normalize($0).contains(term) }
-            }
-        }
-        .sorted(using: sortOrder)
+        searchCache.results(
+            resources: store.resources,
+            projectNames: Dictionary(uniqueKeysWithValues: store.projects.map { ($0.id, $0.name) }),
+            query: searchText,
+            projectID: scopedProjectID,
+            favoritesOnly: projectFavoriteFilter == .favoritesOnly,
+            sortOrder: sortOrder,
+            language: appState.interfaceLanguage
+        )
     }
 
     private var scopedResources: [Resource] {
@@ -636,16 +614,6 @@ struct ResourceWorkspaceView: View {
             return store.resources.filter { $0.assignedProjectIDs.contains(primaryProjectID) }
         }
         return store.resources
-    }
-
-    private func matchesScopedFavoriteFilter(_ resource: Resource) -> Bool {
-        guard let scopedProjectID else { return true }
-        switch projectFavoriteFilter {
-        case .all:
-            return true
-        case .favoritesOnly:
-            return resource.isFavorite(in: scopedProjectID)
-        }
     }
 
     private var assignmentContextNote: String? {
@@ -1006,43 +974,6 @@ struct ResourceWorkspaceView: View {
         let evaluations = resource.performanceEvaluations.sorted { $0.evaluatedAt < $1.evaluatedAt }
         guard let scopedProjectID else { return evaluations }
         return evaluations.filter { $0.projectID == nil || $0.projectID == scopedProjectID }
-    }
-
-    private func allSearchableValues(for resource: Resource, assignedProjectNames: [String]) -> [String] {
-        [
-            resource.displayName,
-            resource.fullName,
-            resource.nom ?? "",
-            resource.displayPrimaryRole,
-            resource.primaryResourceRole ?? "",
-            resource.resourceRoles ?? "",
-            resource.jobTitle,
-            resource.displayDepartment,
-            resource.parentDescription ?? "",
-            resource.organizationalResource ?? "",
-            assignedProjectNames.joined(separator: ", "),
-            resource.engagement.label.appLocalized(language: appState.interfaceLanguage),
-            resource.status.label.appLocalized(language: appState.interfaceLanguage),
-            resource.allocationLabel,
-            "\(resource.allocationPercent)",
-            resource.email,
-            resource.phone,
-            resource.notes,
-            resource.localisation ?? "",
-            resource.typeDeRessource ?? "",
-            resource.competence1 ?? "",
-            resource.resourceCalendar ?? "",
-            resource.responsableOperationnel ?? "",
-            resource.responsableInterne ?? "",
-            resource.createdAt.formatted(date: .abbreviated, time: .omitted),
-            resource.updatedAt.formatted(date: .abbreviated, time: .omitted)
-        ]
-    }
-
-    private func normalize(_ value: String) -> String {
-        value
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func inlineTextBinding(for resource: Resource, field: WritableKeyPath<ResourceInlineDraft, String>) -> Binding<String> {

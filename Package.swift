@@ -20,6 +20,11 @@ let package = Package(
             resources: [
                 .process("Resources")
             ]
+        ),
+        .testTarget(
+            name: "SamouraiProjectManagerTests",
+            dependencies: ["SamouraiProjectManagerApp"],
+            path: "Tests/SamouraiProjectManagerTests"
         )
     ]
 )

@@ -135,6 +135,14 @@ swift build
 swift run SamouraiProjectManager
 ```
 
+## Tests
+
+```bash
+swift test
+```
+
+Les tests de chargement vérifient le rejet des identifiants dupliqués, la conservation du fichier original et la normalisation des références orphelines. Ils utilisent des dossiers temporaires indépendants des données utilisateur.
+
 ## Générer une application `.app`
 
 ```bash

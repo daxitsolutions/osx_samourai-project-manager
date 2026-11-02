@@ -54,7 +54,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 | 2026-11-02 | Issue #55 — analyse Merlin hors du MainActor, XML et SQLite volumineux | [Résultats et limites](reports/2026-11-02-issue-55.md) |
 | 2026-11-02 | Issue #75 — compilation avec Xcode quand les Command Line Tools sont actifs | [Résultats et limites](reports/2026-11-02-issue-75.md) |
 | 2026-11-02 | Issue #49 — dashboard aligné sur le projet actif ou le portefeuille | [Résultats et limites](reports/2026-11-02-issue-49.md) |
-| 2026-11-02 | Issue #53 — colonnes par défaut allégées, préférences conservées | [Résultats et limites](reports/2026-11-02-issue-53.md) |
+| 2026-11-03 | Issue #53 — colonnes allégées et isolation des préférences corrigée | [Résultats et limites](reports/2026-11-02-issue-53.md) |
 
 ## Modèle à suivre
 

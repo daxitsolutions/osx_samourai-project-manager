@@ -896,3 +896,5 @@
 "Statut du risque" = "Statut du risque";
 
 "Doublon de la ligne %d : les valeurs sont cumulées dans l'ordre du fichier." = "Doublon de la ligne %d : les valeurs sont cumulées dans l'ordre du fichier.";
+
+"Afficher la grille mensuelle pour cette longue période" = "Afficher la grille mensuelle pour cette longue période";

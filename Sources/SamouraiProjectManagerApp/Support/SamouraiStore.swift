@@ -2812,11 +2812,16 @@ final class SamouraiStore {
         var updatedCount = 0
         var skippedCount = 0
         var firstImportedOrUpdatedRiskID: UUID?
+        // Copies de travail : une annulation, à n'importe quelle étape, laisse les risques intacts.
+        let initialProjects = projects
+        let initialUnassignedRisks = unassignedRisks
+        var workingProjects = initialProjects
+        var workingUnassignedRisks = initialUnassignedRisks
 
         for (index, draft) in drafts.enumerated() {
             try Task.checkCancellation()
 
-            let outcome = ingestRiskDraft(draft)
+            let outcome = ingestRiskDraft(draft, projects: &workingProjects, unassignedRisks: &workingUnassignedRisks)
             switch outcome {
             case .created(let id):
                 importedCount += 1
@@ -2836,8 +2841,13 @@ final class SamouraiStore {
         }
 
         reporter.setStage(.finalizing)
-        unassignedRisks = sortStandaloneRisks(unassignedRisks)
-        projects = sortProjects(projects)
+        try Task.checkCancellation()
+        // Publication en un bloc, sans écraser une modification faite pendant l'import (API, autre vue).
+        guard projects == initialProjects, unassignedRisks == initialUnassignedRisks else {
+            throw RESTAPIError.conflict("Les projets ont été modifiés pendant l'import. Aucun risque n'a été importé ; relance l'import.")
+        }
+        unassignedRisks = sortStandaloneRisks(workingUnassignedRisks)
+        projects = sortProjects(workingProjects)
         persist()
 
         return RiskImportResult(
@@ -2854,8 +2864,10 @@ final class SamouraiStore {
         var skippedCount = 0
         var firstImportedOrUpdatedRiskID: UUID?
 
+        var workingProjects = projects
+        var workingUnassignedRisks = unassignedRisks
         for draft in drafts {
-            switch ingestRiskDraft(draft) {
+            switch ingestRiskDraft(draft, projects: &workingProjects, unassignedRisks: &workingUnassignedRisks) {
             case .created(let id):
                 importedCount += 1
                 if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = id }
@@ -2867,8 +2879,8 @@ final class SamouraiStore {
             }
         }
 
-        unassignedRisks = sortStandaloneRisks(unassignedRisks)
-        projects = sortProjects(projects)
+        unassignedRisks = sortStandaloneRisks(workingUnassignedRisks)
+        projects = sortProjects(workingProjects)
         persist()
 
         return RiskImportResult(
@@ -2885,7 +2897,12 @@ final class SamouraiStore {
         case skipped
     }
 
-    private func ingestRiskDraft(_ draft: RiskImportDraft) -> RiskIngestionOutcome {
+    /// Applique un brouillon à des copies de travail ; le store n'est pas modifié.
+    private func ingestRiskDraft(
+        _ draft: RiskImportDraft,
+        projects: inout [Project],
+        unassignedRisks: inout [Risk]
+    ) -> RiskIngestionOutcome {
         let normalized = normalizedRiskFields(from: draft)
         guard normalized.displayTitle.isEmpty == false else {
             return .skipped
@@ -2893,7 +2910,7 @@ final class SamouraiStore {
 
         let matchingKey = riskMatchingKey(externalID: normalized.externalID, title: normalized.displayTitle)
 
-        if let existing = findRiskLocation(by: matchingKey) {
+        if let existing = findRiskLocation(by: matchingKey, projects: projects, unassignedRisks: unassignedRisks) {
             let merged: Risk
             switch existing {
             case .project(let projectIndex, let riskIndex):
@@ -2910,7 +2927,7 @@ final class SamouraiStore {
             return .updated(merged.id)
         }
 
-        if let projectID = resolveProjectID(from: normalized.risk.projectNames),
+        if let projectID = resolveProjectID(from: normalized.risk.projectNames, in: projects),
            let projectIndex = projects.firstIndex(where: { $0.id == projectID }) {
             projects[projectIndex].risks.append(normalized.risk)
             projects[projectIndex].updatedAt = .now
@@ -5033,7 +5050,7 @@ final class SamouraiStore {
         case unassigned(riskIndex: Int)
     }
 
-    private func findRiskLocation(by matchingKey: String) -> RiskLocation? {
+    private func findRiskLocation(by matchingKey: String, projects: [Project], unassignedRisks: [Risk]) -> RiskLocation? {
         for (projectIndex, project) in projects.enumerated() {
             if let riskIndex = project.risks.firstIndex(where: {
                 riskMatchingKey(externalID: $0.externalID, title: $0.displayTitle) == matchingKey
@@ -5062,7 +5079,7 @@ final class SamouraiStore {
         return normalizedID.isEmpty ? normalizedTitle : "\(normalizedID)|\(normalizedTitle)"
     }
 
-    private func resolveProjectID(from rawProjects: String?) -> UUID? {
+    private func resolveProjectID(from rawProjects: String?, in projects: [Project]) -> UUID? {
         guard let rawProjects else { return nil }
 
         let projectTokens = rawProjects

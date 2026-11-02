@@ -46,6 +46,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 | 2026-11-02 | Issue #38 — doublons internes d’un import de ressources | [Résultats et limites](reports/2026-11-02-issue-38.md) |
 | 2026-11-02 | Issue #39 — API REST limitée à la boucle locale | [Résultats et limites](reports/2026-11-02-issue-39.md) |
 | 2026-11-02 | Issue #41 — validation, normalisation et publication communes | [Résultats et limites](reports/2026-11-02-issue-41.md) |
+| 2026-11-02 | Issue #55 — analyse Merlin hors du MainActor | [Résultats et limites](reports/2026-11-02-issue-55.md) |
 
 ## Modèle à suivre
 

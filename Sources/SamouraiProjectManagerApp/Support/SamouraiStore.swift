@@ -2894,14 +2894,20 @@ final class SamouraiStore {
         let matchingKey = riskMatchingKey(externalID: normalized.externalID, title: normalized.displayTitle)
 
         if let existing = findRiskLocation(by: matchingKey) {
+            let merged: Risk
             switch existing {
             case .project(let projectIndex, let riskIndex):
-                projects[projectIndex].risks[riskIndex] = normalized.risk
-                projects[projectIndex].updatedAt = .now
+                let previous = projects[projectIndex].risks[riskIndex]
+                merged = mergingImportedRisk(normalized.risk, into: previous)
+                if merged != previous {
+                    projects[projectIndex].risks[riskIndex] = merged
+                    projects[projectIndex].updatedAt = .now
+                }
             case .unassigned(let riskIndex):
-                unassignedRisks[riskIndex] = normalized.risk
+                merged = mergingImportedRisk(normalized.risk, into: unassignedRisks[riskIndex])
+                unassignedRisks[riskIndex] = merged
             }
-            return .updated(normalized.risk.id)
+            return .updated(merged.id)
         }
 
         if let projectID = resolveProjectID(from: normalized.risk.projectNames),
@@ -5118,6 +5124,60 @@ final class SamouraiStore {
         )
 
         return (risk, displayTitle, externalID)
+    }
+
+    // Une cellule absente, vide ou blanche ne demande aucune suppression.
+    // L'UUID, la création, l'échéance et l'historique restent ceux du risque local.
+    private func mergingImportedRisk(_ imported: Risk, into previous: Risk) -> Risk {
+        var merged = previous
+        var messages: [String] = []
+
+        func merge<Value: Equatable>(_ keyPath: WritableKeyPath<Risk, Value?>, label: String) {
+            guard let value = imported[keyPath: keyPath], previous[keyPath: keyPath] != value else { return }
+            merged[keyPath: keyPath] = value
+            messages.append(AppLocalizer.localizedFormat(
+                "Import — %@ : %@ → %@", AppLocalizer.localized(label),
+                previous[keyPath: keyPath].map { String(describing: $0) } ?? "—", String(describing: value)
+            ))
+        }
+
+        merge(\.externalID, label: "Identifiant externe")
+        merge(\.projectNames, label: "Projets")
+        merge(\.detectedBy, label: "Détecté par")
+        merge(\.assignedTo, label: "Assigné à")
+        merge(\.riskType, label: "Type de risque")
+        merge(\.response, label: "Réponse")
+        merge(\.riskTitle, label: "Titre du risque")
+        merge(\.riskOrigin, label: "Origine du risque")
+        merge(\.impactDescription, label: "Description de l’impact")
+        merge(\.counterMeasure, label: "Contre-mesure")
+        merge(\.followUpComment, label: "Commentaire de suivi")
+        merge(\.proximity, label: "Proximité")
+        merge(\.probability, label: "Probabilité")
+        merge(\.impactScope, label: "Impact périmètre")
+        merge(\.impactBudget, label: "Impact budget")
+        merge(\.impactPlanning, label: "Impact planning")
+        merge(\.impactResources, label: "Impact ressources")
+        merge(\.impactTransition, label: "Impact transition")
+        merge(\.impactSecurityIT, label: "Impact sécurité IT")
+        merge(\.escalationLevel, label: "Niveau d’escalade")
+        merge(\.riskStatus, label: "Statut du risque")
+        merge(\.score0to10, label: "Score")
+
+        if let title = imported.riskTitle { merged.title = title }
+        if let owner = imported.assignedTo { merged.owner = owner }
+        if let mitigation = imported.counterMeasure { merged.mitigation = mitigation }
+        if imported.score0to10 != nil { merged.severity = imported.severity }
+        if let modifiedAt = imported.lastModifiedAt {
+            merged.lastModifiedAt = max(previous.lastModifiedAt ?? modifiedAt, modifiedAt)
+        }
+        if !messages.isEmpty {
+            var history = previous.historyEntries
+            history.append(RiskHistoryEntry(kind: .automatic, date: .now, text: messages.joined(separator: "\n")))
+            merged.history = history
+            merged.lastModifiedAt = max(merged.lastModifiedAt ?? .distantPast, .now)
+        }
+        return merged
     }
 
     private func riskSeverity(from score: Double?) -> RiskSeverity {

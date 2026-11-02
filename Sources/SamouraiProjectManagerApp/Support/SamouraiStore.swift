@@ -4238,69 +4238,7 @@ final class SamouraiStore {
     }
 
     private func sanitizeActivities(_ activities: [ProjectActivity], projects: [Project]) -> [ProjectActivity] {
-        let projectIDs = Set(projects.map(\.id))
-        let filteredActivities = activities
-            .filter { projectIDs.contains($0.projectID) }
-        let activitiesByID = Dictionary(uniqueKeysWithValues: filteredActivities.map { ($0.id, $0) })
-        let effectiveScenarioIDs = Dictionary(uniqueKeysWithValues: filteredActivities.map { activity in
-            let scenarioID: UUID
-            if let project = projects.first(where: { $0.id == activity.projectID }) {
-                let validScenarioIDs = Set(project.orderedPlanningScenarios.map(\.id))
-                scenarioID = validScenarioIDs.contains(activity.scenarioID)
-                    ? activity.scenarioID
-                    : project.defaultPlanningScenarioID
-            } else {
-                scenarioID = activity.scenarioID
-            }
-            return (activity.id, scenarioID)
-        })
-
-        return filteredActivities.map { activity in
-                var normalized = activity
-                normalized.scenarioID = effectiveScenarioIDs[activity.id] ?? activity.scenarioID
-                if !activity.isDateless {
-                    normalized.estimatedEndDate = max(activity.estimatedEndDate, activity.estimatedStartDate)
-                }
-                let projectActivityIDs = Set(
-                    filteredActivities
-                        .filter { $0.projectID == activity.projectID && effectiveScenarioIDs[$0.id] == normalized.scenarioID }
-                        .map(\.id)
-                )
-                normalized.predecessorActivityIDs = activity.predecessorActivityIDs.filter {
-                    $0 != activity.id && projectActivityIDs.contains($0)
-                }
-                if let parentActivityID = activity.parentActivityID {
-                    let parentIsValid = {
-                        guard parentActivityID != activity.id,
-                              let parent = activitiesByID[parentActivityID],
-                              parent.projectID == activity.projectID,
-                              effectiveScenarioIDs[parentActivityID] == normalized.scenarioID,
-                              parent.hierarchyLevel.sortRank < activity.hierarchyLevel.sortRank
-                        else { return false }
-
-                        var cursor: UUID? = parentActivityID
-                        var visited = Set<UUID>()
-                        while let cursorID = cursor, visited.insert(cursorID).inserted {
-                            if cursorID == activity.id {
-                                return false
-                            }
-                            cursor = activitiesByID[cursorID]?.parentActivityID
-                        }
-                        return true
-                    }()
-
-                    normalized.parentActivityID = parentIsValid ? parentActivityID : nil
-                } else {
-                    normalized.parentActivityID = nil
-                }
-                if let project = projects.first(where: { $0.id == activity.projectID }) {
-                    let validDeliverableIDs = Set(project.deliverables.map(\.id))
-                    normalized.linkedDeliverableIDs = activity.linkedDeliverableIDs.filter { validDeliverableIDs.contains($0) }
-                } else {
-                    normalized.linkedDeliverableIDs = []
-                }
-                return normalized
-            }
+        ActivityNormalizer.normalize(activities, projects: projects)
     }
 
     private func sanitizeEvents(_ events: [ProjectEvent], projectIDs: Set<UUID>, resourceIDs: Set<UUID>) -> [ProjectEvent] {

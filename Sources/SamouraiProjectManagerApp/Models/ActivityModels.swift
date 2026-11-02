@@ -244,3 +244,25 @@ struct ProjectPlanningVarianceReport: Hashable {
         activityVariances.filter { $0.varianceDays < 0 }.count
     }
 }
+
+extension ProjectActivity {
+    static func planningDisplayOrderPrecedes(_ lhs: ProjectActivity, _ rhs: ProjectActivity) -> Bool {
+        if lhs.displayOrder != rhs.displayOrder {
+            return lhs.displayOrder < rhs.displayOrder
+        }
+        if lhs.isDateless != rhs.isDateless {
+            return lhs.isDateless
+        }
+        if lhs.estimatedEndDate != rhs.estimatedEndDate {
+            return lhs.estimatedEndDate < rhs.estimatedEndDate
+        }
+        if lhs.estimatedStartDate != rhs.estimatedStartDate {
+            return lhs.estimatedStartDate < rhs.estimatedStartDate
+        }
+        let titleComparison = lhs.displayTitle.localizedStandardCompare(rhs.displayTitle)
+        if titleComparison != .orderedSame {
+            return titleComparison == .orderedAscending
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+}

@@ -39,6 +39,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 
 | Date | Sujet | Compte rendu |
 |---|---|---|
+| 2026-11-02 | Issue #57 — index des activités et enfants du planning | [Résultats et limites](reports/2026-11-02-issue-57.md) |
 | 2026-11-02 | Issue #58 — agrégats de performance des ressources | [Résultats et limites](reports/2026-11-02-issue-58.md) |
 | 2026-11-02 | Issue #56 — cache de recherche des ressources | [Résultats et limites](reports/2026-11-02-issue-56.md) |
 | 2026-11-02 | Issue #32 — identifiants dupliqués au chargement | [Résultats et limites](reports/2026-11-02-issue-32.md) |

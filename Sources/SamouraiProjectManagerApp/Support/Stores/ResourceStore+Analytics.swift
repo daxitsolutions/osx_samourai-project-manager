@@ -71,7 +71,10 @@ extension ResourceStore {
 
     func performanceSnapshot(for resourceID: UUID, scopedProjectID: UUID?) -> ResourcePerformanceSnapshot? {
         guard let resource = resource(with: resourceID) else { return nil }
-        return makePerformanceSnapshot(for: resource, scopedProjectID: scopedProjectID)
+        let group = performanceGroup(for: scopedProjectID)
+        let evaluations = group.evaluations[resourceID] ?? scopedEvaluations(for: resource, projectID: scopedProjectID)
+        return makePerformanceSnapshot(for: resource, evaluations: evaluations,
+            groupAverage: group.average(excluding: resourceID))
     }
 
     func comparativePerformance(for projectID: UUID?) -> [ResourcePerformanceSnapshot] {
@@ -82,8 +85,10 @@ extension ResourceStore {
             scopedResources = resources
         }
 
+        let group = PerformanceGroup(resources: scopedResources) { scopedEvaluations(for: $0, projectID: projectID) }
         return scopedResources
-            .map { makePerformanceSnapshot(for: $0, scopedProjectID: projectID) }
+            .map { makePerformanceSnapshot(for: $0, evaluations: group.evaluations[$0.id] ?? [],
+                groupAverage: group.average(excluding: $0.id)) }
             .sorted { lhs, rhs in
                 let lhsRisk = lhs.alerts.isEmpty ? 0 : 1
                 let rhsRisk = rhs.alerts.isEmpty ? 0 : 1
@@ -121,13 +126,44 @@ extension ResourceStore {
         return sorted.filter { $0.projectID == nil || $0.projectID == projectID }
     }
 
-    private func makePerformanceSnapshot(for resource: Resource, scopedProjectID: UUID?) -> ResourcePerformanceSnapshot {
-        let allScoped = scopedEvaluations(for: resource, projectID: scopedProjectID)
-        let latest = allScoped.last
-        let trend = trendForEvaluations(allScoped)
-        let groupAverage = groupAverageLatestScore(scopedProjectID: scopedProjectID, excluding: resource.id)
-        let alerts = alertsForEvaluations(allScoped, trend: trend, groupAverage: groupAverage)
+    /// One evaluation sort and latest score per resource, shared by every snapshot in the group.
+    private struct PerformanceGroup {
+        var evaluations: [UUID: [ResourcePerformanceEvaluation]] = [:]
+        var latestScores: [UUID: Double] = [:]
+        var sum = 0.0
+        var count = 0
 
+        init(resources: [Resource], scoped: (Resource) -> [ResourcePerformanceEvaluation]) {
+            for resource in resources {
+                let values = scoped(resource)
+                evaluations[resource.id] = values
+                if let score = values.last?.weightedScore {
+                    latestScores[resource.id] = score
+                    sum += score
+                    count += 1
+                }
+            }
+        }
+
+        func average(excluding resourceID: UUID) -> Double? {
+            let ownScore = latestScores[resourceID]
+            let otherCount = count - (ownScore == nil ? 0 : 1)
+            guard otherCount > 0 else { return nil }
+            return (sum - (ownScore ?? 0)) / Double(otherCount)
+        }
+    }
+
+    private func performanceGroup(for projectID: UUID?) -> PerformanceGroup {
+        let scoped = projectID.map { resources(for: $0) } ?? resources
+        return PerformanceGroup(resources: scoped) { scopedEvaluations(for: $0, projectID: projectID) }
+    }
+
+    private func makePerformanceSnapshot(
+        for resource: Resource, evaluations: [ResourcePerformanceEvaluation], groupAverage: Double?
+    ) -> ResourcePerformanceSnapshot {
+        let latest = evaluations.last
+        let trend = trendForEvaluations(evaluations)
+        let alerts = alertsForEvaluations(evaluations, trend: trend, groupAverage: groupAverage)
         return ResourcePerformanceSnapshot(
             resourceID: resource.id,
             resourceName: resource.displayName,
@@ -135,24 +171,6 @@ extension ResourceStore {
             trend: trend,
             alerts: alerts
         )
-    }
-
-    private func groupAverageLatestScore(scopedProjectID: UUID?, excluding resourceID: UUID) -> Double? {
-        let scoped: [Resource]
-        if let scopedProjectID {
-            scoped = resources(for: scopedProjectID)
-        } else {
-            scoped = resources
-        }
-
-        let values = scoped
-            .filter { $0.id != resourceID }
-            .compactMap { resource -> Double? in
-                scopedEvaluations(for: resource, projectID: scopedProjectID).last?.weightedScore
-            }
-        guard values.isEmpty == false else { return nil }
-        let sum = values.reduce(0, +)
-        return sum / Double(values.count)
     }
 
     private func trendForEvaluations(_ evaluations: [ResourcePerformanceEvaluation]) -> ResourcePerformanceTrend {
@@ -182,7 +200,10 @@ extension ResourceStore {
             )
         }
 
-        if let latest = evaluations.last?.weightedScore, let groupAverage, latest <= groupAverage - 1.0 {
+        // Scores are on a 1–5 scale. Compare the gap at 12 decimal places so
+        // equivalent sums/subtractions cannot flip the one-point boundary.
+        if let latest = evaluations.last?.weightedScore, let groupAverage,
+           ((groupAverage - latest) * 1e12).rounded() >= 1e12 {
             alerts.append(
                 ResourcePerformanceAlert(
                     kind: .belowGroupAverage,

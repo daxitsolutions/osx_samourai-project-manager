@@ -12,7 +12,7 @@ for name in names:
  (root/source.name).write_text(body)
 (root/'ResourceBundle.swift').write_text('import Foundation\nextension Bundle { static var module: Bundle { .main } }\n')
 cache=str(run/'module-cache');framework='/Library/Developer/CommandLineTools/Library/Developer/Frameworks'
-subprocess.run(['swiftc','-swift-version','6','-parse-as-library','-enable-testing','-emit-library','-emit-module','-module-name','SamouraiProjectManagerApp','-module-cache-path',cache,*map(str,root.glob('*.swift')),'-o',str(run/'libSamouraiProjectManagerApp.dylib')],check=True)
+subprocess.run(['swiftc','-swift-version','6','-parse-as-library','-enable-testing','-emit-library','-emit-module','-module-name','SamouraiProjectManagerApp','-module-cache-path',cache,*[str(p) for p in root.glob('*.swift') if p.name != 'Runner.swift'],'-o',str(run/'libSamouraiProjectManagerApp.dylib')],check=True)
 (root/'Runner.swift').write_text('import Testing\nimport Darwin\n@main struct TestRunner { static func main() async { let result: CInt = await Testing.__swiftPMEntryPoint(); exit(result) } }\n')
 tests=[str(p) for p in Path('tests/SamouraiProjectManagerTests').glob('*.swift') if p.name!='RESTAPIAccessTests.swift']
 subprocess.run(['swiftc','-swift-version','6','-parse-as-library','-module-cache-path',cache,'-F',framework,'-framework','Testing','-load-plugin-library','/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib','-I',str(run),'-L',str(run),'-lSamouraiProjectManagerApp','-Xlinker','-rpath','-Xlinker',str(run),'-Xlinker','-rpath','-Xlinker',framework,str(root/'Runner.swift'),*tests,'-o',str(run/'store-tests')],check=True)

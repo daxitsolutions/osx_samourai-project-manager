@@ -864,3 +864,9 @@
 "Restaurer une sauvegarde" = "Restore a backup";
 
 "Chargement des données…" = "Loading data…";
+
+"Continuer à modifier" = "Continue editing";
+
+"Abandonner la saisie" = "Discard edits";
+
+"Le champ « %@ » a été modifié ailleurs. Ta saisie n'a pas été enregistrée. Vérifie la valeur actuelle ou abandonne la saisie." = "The “%@” field was changed elsewhere. Your edits were not saved. Check the current value or discard your edits.";

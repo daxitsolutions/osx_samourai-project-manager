@@ -20,10 +20,11 @@ extension ResourceStore {
 
         var reviewItems: [ResourceImportReviewItem] = []
         reviewItems.reserveCapacity(drafts.count)
+        var earlierRows: [String: ImportBatchEntry] = [:]
 
-        for (index, draft) in drafts.enumerated() {
+        for (index, draft) in inFileOrder(drafts).enumerated() {
             try Task.checkCancellation()
-            reviewItems.append(makeResourceImportReviewItem(for: draft))
+            reviewItems.append(makeResourceImportReviewItem(for: draft, earlierRows: &earlierRows))
 
             reporter.setProcessed(index + 1)
             if (index + 1) % 10 == 0 || index == drafts.count - 1 {
@@ -31,7 +32,14 @@ extension ResourceStore {
             }
         }
 
-        return reviewItems.sorted { $0.sourceRowNumber < $1.sourceRowNumber }
+        return reviewItems
+    }
+
+    /// Ordre stable des lignes du fichier : il fixe la règle de cumul des doublons.
+    private func inFileOrder(_ drafts: [ResourceImportDraft]) -> [ResourceImportDraft] {
+        drafts.enumerated()
+            .sorted { ($0.element.sourceRowNumber, $0.offset) < ($1.element.sourceRowNumber, $1.offset) }
+            .map(\.element)
     }
 
     func applyResourceImportReviewAsync(
@@ -75,7 +83,16 @@ extension ResourceStore {
                     break
                 }
                 guard let resourceIndex = workingResources.firstIndex(where: { $0.id == updatedResource.id }) else {
-                    skippedCount += 1
+                    // Doublon interne dont la ligne d'origine n'est pas retenue : il crée la ressource.
+                    guard item.isExistingResource == false else {
+                        skippedCount += 1
+                        break
+                    }
+                    workingResources.append(updatedResource)
+                    importedCount += 1
+                    if firstImportedOrUpdatedResourceID == nil {
+                        firstImportedOrUpdatedResourceID = updatedResource.id
+                    }
                     break
                 }
                 workingResources[resourceIndex] = updatedResource
@@ -111,8 +128,8 @@ extension ResourceStore {
     }
 
     func prepareResourceImportReview(_ drafts: [ResourceImportDraft]) -> [ResourceImportReviewItem] {
-        let reviewItems = drafts.map { makeResourceImportReviewItem(for: $0) }
-        return reviewItems.sorted { $0.sourceRowNumber < $1.sourceRowNumber }
+        var earlierRows: [String: ImportBatchEntry] = [:]
+        return inFileOrder(drafts).map { makeResourceImportReviewItem(for: $0, earlierRows: &earlierRows) }
     }
 
     func applyResourceImportReview(
@@ -147,7 +164,16 @@ extension ResourceStore {
                 }
 
                 guard let index = resources.firstIndex(where: { $0.id == updatedResource.id }) else {
-                    skippedCount += 1
+                    // Doublon interne dont la ligne d'origine n'est pas retenue : il crée la ressource.
+                    guard item.isExistingResource == false else {
+                        skippedCount += 1
+                        continue
+                    }
+                    resources.append(updatedResource)
+                    importedCount += 1
+                    if firstImportedOrUpdatedResourceID == nil {
+                        firstImportedOrUpdatedResourceID = updatedResource.id
+                    }
                     continue
                 }
 

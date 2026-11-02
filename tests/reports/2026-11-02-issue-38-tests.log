@@ -1,0 +1,104 @@
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite StoreRecoveryTests started.
+◇ Suite ImportCancellationTests started.
+◇ Suite StoreLoadingTests started.
+◇ Suite RiskImportTests started.
+◇ Test restorePreservesRejectedBytesAndWritesBeforeUnlocking() started.
+◇ Test failedLegacyMigrationCannotStartAnEmptyEditableDatabase() started.
+◇ Suite ResourceImportDuplicateTests started.
+◇ Test failedRestoreWriteDoesNotUnlockEditing() started.
+◇ Test APIAndImportsCannotBypassRecovery() started.
+◇ Test retryOnTheSameStoreLoadsTheRepairedFile() started.
+◇ Test uncancelledImportsPublishEveryItem() started.
+◇ Test unsuccessfulRetryKeepsRecoveryActive() started.
+◇ Test cancelledResourceImportLeavesDirectoryUntouched(at:) started.
+◇ Test invalidRestoreDoesNotUnlockOrReplaceTheFile() started.
+◇ Test rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test failedLoadBlocksMutationsEvenAfterDismissingTheAlert() started.
+◇ Test reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) started.
+◇ Test cancelledRiskImportLeavesRisksUntouched(at:) started.
+◇ Test validDatabaseStillLoadsAndNormalizesOrphanReferences() started.
+◇ Test concurrentChangeDuringImportIsKeptAndNothingIsPublished() started.
+◇ Test restorationAndAPIAlsoRejectDuplicateNestedIdentifiers() started.
+◇ Test validDatabaseCanBeSavedToItsInjectedLocation() started.
+◇ Test distinctDeliverablesMayHaveTheSameTitle() started.
+◇ Test whitespaceCellsPreserveLocalValuesAndDistinctRisksStayDistinct() started.
+◇ Test failedPreservationDoesNotUnlockOrOverwriteTheFile() started.
+◇ Test duplicateStillCreatesTheResourceWhenTheFirstRowIsDeclined(asynchronous:) started.
+◇ Test repeatedUpdatesOfAnExistingResourceAreDeterministic(asynchronous:) started.
+◇ Test changedImportedFieldsAreRecordedWithoutRemovingComments(asynchronous:) started.
+◇ Test identicalRowsCreateASingleResource(asynchronous:) started.
+◇ Test laterRowsCompleteTheResourceCreatedByTheFirstRow(asynchronous:) started.
+◇ Test case passing 2 arguments inProject → false, asynchronous → false to reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) started.
+◇ Test case passing 1 argument kind → .activities to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument point → .midBatch to cancelledResourceImportLeavesDirectoryUntouched(at:) started.
+◇ Test case passing 1 argument point → .finalizing to cancelledResourceImportLeavesDirectoryUntouched(at:) started.
+◇ Test case passing 1 argument point → .midBatch to cancelledRiskImportLeavesRisksUntouched(at:) started.
+◇ Test case passing 1 argument kind → .resources to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument point → .beforeProcessing to cancelledRiskImportLeavesRisksUntouched(at:) started.
+◇ Test case passing 1 argument kind → .deliverables to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .projects to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument point → .beforeProcessing to cancelledResourceImportLeavesDirectoryUntouched(at:) started.
+◇ Test case passing 1 argument kind → .sharedRisk to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 2 arguments inProject → false, asynchronous → true to reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) started.
+◇ Test case passing 2 arguments inProject → true, asynchronous → false to reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) started.
+◇ Test case passing 2 arguments inProject → true, asynchronous → true to reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) started.
+◇ Test case passing 1 argument point → .finalizing to cancelledRiskImportLeavesRisksUntouched(at:) started.
+◇ Test case passing 1 argument asynchronous → false to repeatedUpdatesOfAnExistingResourceAreDeterministic(asynchronous:) started.
+◇ Test case passing 1 argument asynchronous → true to repeatedUpdatesOfAnExistingResourceAreDeterministic(asynchronous:) started.
+◇ Test case passing 1 argument asynchronous → false to duplicateStillCreatesTheResourceWhenTheFirstRowIsDeclined(asynchronous:) started.
+◇ Test case passing 1 argument asynchronous → true to changedImportedFieldsAreRecordedWithoutRemovingComments(asynchronous:) started.
+◇ Test case passing 1 argument asynchronous → false to changedImportedFieldsAreRecordedWithoutRemovingComments(asynchronous:) started.
+◇ Test case passing 1 argument asynchronous → true to identicalRowsCreateASingleResource(asynchronous:) started.
+◇ Test case passing 1 argument asynchronous → true to laterRowsCompleteTheResourceCreatedByTheFirstRow(asynchronous:) started.
+◇ Test case passing 1 argument asynchronous → true to duplicateStillCreatesTheResourceWhenTheFirstRowIsDeclined(asynchronous:) started.
+◇ Test case passing 1 argument asynchronous → false to identicalRowsCreateASingleResource(asynchronous:) started.
+◇ Test case passing 1 argument asynchronous → false to laterRowsCompleteTheResourceCreatedByTheFirstRow(asynchronous:) started.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The file “obstacle” couldn’t be saved in the folder “samourai-recovery-6CEB0EF0-88CD-4F6E-B1C5-0D96A8CA51ED” because a file with the same name already exists.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test failedLegacyMigrationCannotStartAnEmptyEditableDatabase() passed after 0.024 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test failedRestoreWriteDoesNotUnlockEditing() passed after 0.027 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test restorePreservesRejectedBytesAndWritesBeforeUnlocking() passed after 0.029 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test failedLoadBlocksMutationsEvenAfterDismissingTheAlert() passed after 0.030 seconds.
+✔ Test invalidRestoreDoesNotUnlockOrReplaceTheFile() passed after 0.031 seconds.
+✔ Test validDatabaseStillLoadsAndNormalizesOrphanReferences() passed after 0.037 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs livrables dupliqués.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs projets dupliqués.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs activités dupliqués.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs ressources dupliqués.
+✔ Test distinctDeliverablesMayHaveTheSameTitle() passed after 0.042 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs risques dupliqués.
+✔ Test rejectsDuplicateIdentifiersBeforePublishing(_:) with 5 test cases passed after 0.043 seconds.
+✔ Test whitespaceCellsPreserveLocalValuesAndDistinctRisksStayDistinct() passed after 0.043 seconds.
+✔ Test validDatabaseCanBeSavedToItsInjectedLocation() passed after 0.046 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test failedPreservationDoesNotUnlockOrOverwriteTheFile() passed after 0.049 seconds.
+✔ Test restorationAndAPIAlsoRejectDuplicateNestedIdentifiers() passed after 0.050 seconds.
+✔ Suite StoreLoadingTests passed after 0.051 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : The data couldn’t be read because it isn’t in the correct format.
+✔ Test unsuccessfulRetryKeepsRecoveryActive() passed after 0.052 seconds.
+✔ Test retryOnTheSameStoreLoadsTheRepairedFile() passed after 0.053 seconds.
+✔ Test APIAndImportsCannotBypassRecovery() passed after 0.056 seconds.
+✔ Suite StoreRecoveryTests passed after 0.056 seconds.
+✔ Test repeatedUpdatesOfAnExistingResourceAreDeterministic(asynchronous:) with 2 test cases passed after 0.068 seconds.
+✔ Test reimportPreservesIdentityHistoryAndMissingFields(inProject:asynchronous:) with 4 test cases passed after 0.073 seconds.
+✔ Test laterRowsCompleteTheResourceCreatedByTheFirstRow(asynchronous:) with 2 test cases passed after 0.073 seconds.
+✔ Test duplicateStillCreatesTheResourceWhenTheFirstRowIsDeclined(asynchronous:) with 2 test cases passed after 0.074 seconds.
+✔ Test identicalRowsCreateASingleResource(asynchronous:) with 2 test cases passed after 0.074 seconds.
+✔ Suite ResourceImportDuplicateTests passed after 0.075 seconds.
+✔ Test changedImportedFieldsAreRecordedWithoutRemovingComments(asynchronous:) with 2 test cases passed after 0.079 seconds.
+✔ Suite RiskImportTests passed after 0.079 seconds.
+✔ Test uncancelledImportsPublishEveryItem() passed after 0.081 seconds.
+✔ Test cancelledRiskImportLeavesRisksUntouched(at:) with 3 test cases passed after 0.082 seconds.
+✔ Test cancelledResourceImportLeavesDirectoryUntouched(at:) with 3 test cases passed after 0.084 seconds.
+✔ Test concurrentChangeDuringImportIsKeptAndNothingIsPublished() passed after 0.086 seconds.
+✔ Suite ImportCancellationTests passed after 0.087 seconds.
+✔ Test run with 25 tests in 5 suites passed after 0.087 seconds.

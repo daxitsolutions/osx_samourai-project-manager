@@ -247,6 +247,8 @@ struct ResourceImportReviewItem: Identifiable {
     let changes: [ResourceImportFieldChange]
     let proposedResource: Resource?
     let isExistingResource: Bool
+    /// Première ligne du fichier désignant la même ressource ; ses valeurs sont cumulées dans l'ordre du fichier.
+    var duplicateOfRowNumber: Int? = nil
 }
 
 struct ResourceImportDecision {

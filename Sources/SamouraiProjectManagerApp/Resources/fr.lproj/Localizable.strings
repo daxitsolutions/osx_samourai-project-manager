@@ -886,3 +886,5 @@
 "Impact sécurité IT" = "Impact sécurité IT";
 "Niveau d’escalade" = "Niveau d’escalade";
 "Statut du risque" = "Statut du risque";
+
+"Doublon de la ligne %d : les valeurs sont cumulées dans l'ordre du fichier." = "Doublon de la ligne %d : les valeurs sont cumulées dans l'ordre du fichier.";

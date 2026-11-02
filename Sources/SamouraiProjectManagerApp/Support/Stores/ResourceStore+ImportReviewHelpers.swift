@@ -6,7 +6,20 @@ extension ResourceStore {
         let changes: [ResourceImportFieldChange]
     }
 
-    func makeResourceImportReviewItem(for draft: ResourceImportDraft) -> ResourceImportReviewItem {
+    /// Ressource déjà proposée par une ligne précédente du même fichier.
+    struct ImportBatchEntry {
+        let rowNumber: Int
+        let resource: Resource
+        let isExisting: Bool
+    }
+
+    /// Règle des doublons internes : une ligne de même clé (nom + email) qu'une ligne précédente
+    /// complète la ressource proposée par celle-ci au lieu d'en créer une autre ; dans l'ordre du fichier,
+    /// les dernières valeurs renseignées l'emportent.
+    func makeResourceImportReviewItem(
+        for draft: ResourceImportDraft,
+        earlierRows: inout [String: ImportBatchEntry]
+    ) -> ResourceImportReviewItem {
         let trimmedNotes = draft.notes.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedEmail = cleanedOptionalString(draft.email)
         let normalizedPhone = cleanedOptionalString(draft.phone)
@@ -46,7 +59,8 @@ extension ResourceStore {
             email: normalizedEmail
         )
 
-        if let index = resources.firstIndex(where: {
+        let earlier = earlierRows[normalizedKey]
+        if let existingResource = earlier?.resource ?? resources.first(where: {
             resourceMatchingKey(
                 fullName: $0.fullName,
                 firstName: nil,
@@ -54,7 +68,6 @@ extension ResourceStore {
                 email: cleanedOptionalString($0.email)
             ) == normalizedKey
         }) {
-            let existingResource = resources[index]
             let updateResult = mergeExistingResource(
                 existingResource,
                 draft: draft,
@@ -64,6 +77,12 @@ extension ResourceStore {
                 normalizedPhone: normalizedPhone
             )
 
+            let isExisting = earlier?.isExisting ?? true
+            earlierRows[normalizedKey] = ImportBatchEntry(
+                rowNumber: earlier?.rowNumber ?? draft.sourceRowNumber,
+                resource: updateResult.mergedResource,
+                isExisting: isExisting
+            )
             return ResourceImportReviewItem(
                 sourceRowNumber: draft.sourceRowNumber,
                 action: updateResult.changes.isEmpty ? .noChange : .update,
@@ -71,7 +90,8 @@ extension ResourceStore {
                 displayName: existingResource.displayName,
                 changes: updateResult.changes,
                 proposedResource: updateResult.mergedResource,
-                isExistingResource: true
+                isExistingResource: isExisting,
+                duplicateOfRowNumber: earlier?.rowNumber
             )
         }
 
@@ -102,6 +122,7 @@ extension ResourceStore {
             notes: trimmedNotes
         )
 
+        earlierRows[normalizedKey] = ImportBatchEntry(rowNumber: draft.sourceRowNumber, resource: createdResource, isExisting: false)
         return ResourceImportReviewItem(
             sourceRowNumber: draft.sourceRowNumber,
             action: .create,

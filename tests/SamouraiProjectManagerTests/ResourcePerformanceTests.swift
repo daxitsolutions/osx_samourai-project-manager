@@ -50,6 +50,44 @@ struct ResourcePerformanceTests {
         #expect(degrading?.trend == .degrading)
         #expect(degrading?.alerts.map(\.kind) == [.sustainedDegradation, .belowGroupAverage])
     }
+    @Test func fractionalScoresPreserveOnePointBoundaryAndRiskOrdering() {
+        let store = ResourceStore()
+        let values = [[1, 2, 4, 5, 5], [1, 4, 5, 5, 5], [4, 5, 5, 5, 5]]
+        let people = values.enumerated().map { index, scores in
+            let criteria = zip(ResourceEvaluationCriterion.allCases, scores).map {
+                ResourceCriterionScore(criterion: $0.0, score: ResourceEvaluationScale(rawValue: $0.1)!)
+            }
+            let point = ResourcePerformanceEvaluation(evaluatedAt: Date(timeIntervalSince1970: 86400),
+                milestone: "Synthetic", evaluator: "Fixture", projectID: nil, projectPhase: nil,
+                criterionScores: criteria, comment: "Fixture")
+            return resource("Fractional \(index)", projects: [], evaluations: [point])
+        }
+        // The same mathematical group must keep its alert regardless of summation order.
+        for order in [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]] {
+            store.resources = order.map { people[$0] }
+            let snapshot = store.performanceSnapshot(for: people[0].id, scopedProjectID: nil)
+            #expect(snapshot?.alerts.map(\.kind) == [.belowGroupAverage])
+            #expect(store.comparativePerformance(for: nil).first?.resourceID == people[0].id)
+        }
+        // A real gap below one point must stay unflagged; a larger gap must alert.
+        for (scores, expectedAlert) in [([3, 5, 5, 5, 5], false), ([5, 5, 5, 5, 5], true)] {
+            let criteria = zip(ResourceEvaluationCriterion.allCases, scores).map {
+                ResourceCriterionScore(criterion: $0.0, score: ResourceEvaluationScale(rawValue: $0.1)!)
+            }
+            let point = ResourcePerformanceEvaluation(evaluatedAt: Date(timeIntervalSince1970: 86400),
+                milestone: "Synthetic", evaluator: "Fixture", projectID: nil, projectPhase: nil,
+                criterionScores: criteria, comment: "Fixture")
+            store.resources = [people[0], people[1], resource("Peer", projects: [], evaluations: [point])]
+            let actual = store.performanceSnapshot(for: people[0].id, scopedProjectID: nil)
+            #expect(actual?.alerts.contains { $0.kind == .belowGroupAverage } == expectedAlert)
+            assertEqual(actual, store.originalPerformanceSnapshot(for: people[0].id, scopedProjectID: nil))
+        }
+        // Original peer summation triggers this concrete boundary case.
+        store.resources = people
+        assertEqual(store.performanceSnapshot(for: people[0].id, scopedProjectID: nil),
+                    store.originalPerformanceSnapshot(for: people[0].id, scopedProjectID: nil))
+    }
+
     @Test func emptySingletonTiesAndMutation() {
         let store = ResourceStore(), p = UUID()
         #expect(store.comparativePerformance(for: nil).isEmpty)

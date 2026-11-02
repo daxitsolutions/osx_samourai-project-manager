@@ -200,7 +200,10 @@ extension ResourceStore {
             )
         }
 
-        if let latest = evaluations.last?.weightedScore, let groupAverage, latest <= groupAverage - 1.0 {
+        // Scores are on a 1–5 scale. Compare the gap at 12 decimal places so
+        // equivalent sums/subtractions cannot flip the one-point boundary.
+        if let latest = evaluations.last?.weightedScore, let groupAverage,
+           ((groupAverage - latest) * 1e12).rounded() >= 1e12 {
             alerts.append(
                 ResourcePerformanceAlert(
                     kind: .belowGroupAverage,

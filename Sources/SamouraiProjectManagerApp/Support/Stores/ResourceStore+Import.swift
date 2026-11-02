@@ -53,59 +53,16 @@ extension ResourceStore {
         reporter.setImported(0)
 
         let decisionsByID = Dictionary(uniqueKeysWithValues: decisions.map { ($0.reviewItemID, $0.shouldApply) })
-        var importedCount = 0
-        var updatedCount = 0
-        var skippedCount = 0
-        var firstImportedOrUpdatedResourceID: UUID?
-        // Copie de travail : une annulation, à n'importe quelle étape, laisse l'annuaire intact.
         let initialResources = resources
-        var workingResources = initialResources
+        var batch = ResourceImportBatch(resources: initialResources)
 
         for (index, item) in reviewItems.enumerated() {
             try Task.checkCancellation()
 
-            let shouldApply = decisionsByID[item.id] ?? false
-
-            switch item.action {
-            case .create:
-                guard shouldApply, let createdResource = item.proposedResource else {
-                    skippedCount += 1
-                    break
-                }
-                workingResources.append(createdResource)
-                importedCount += 1
-                if firstImportedOrUpdatedResourceID == nil {
-                    firstImportedOrUpdatedResourceID = createdResource.id
-                }
-            case .update:
-                guard shouldApply, let updatedResource = item.proposedResource else {
-                    skippedCount += 1
-                    break
-                }
-                guard let resourceIndex = workingResources.firstIndex(where: { $0.id == updatedResource.id }) else {
-                    // Doublon interne dont la ligne d'origine n'est pas retenue : il crée la ressource.
-                    guard item.isExistingResource == false else {
-                        skippedCount += 1
-                        break
-                    }
-                    workingResources.append(updatedResource)
-                    importedCount += 1
-                    if firstImportedOrUpdatedResourceID == nil {
-                        firstImportedOrUpdatedResourceID = updatedResource.id
-                    }
-                    break
-                }
-                workingResources[resourceIndex] = updatedResource
-                updatedCount += 1
-                if firstImportedOrUpdatedResourceID == nil {
-                    firstImportedOrUpdatedResourceID = updatedResource.id
-                }
-            case .noChange, .skipped:
-                skippedCount += 1
-            }
+            batch.apply(item, shouldApply: decisionsByID[item.id] ?? false)
 
             reporter.setProcessed(index + 1)
-            reporter.setImported(importedCount + updatedCount)
+            reporter.setImported(batch.importedCount + batch.updatedCount)
             if (index + 1) % 10 == 0 || index == reviewItems.count - 1 {
                 await Task.yield()
             }
@@ -117,14 +74,9 @@ extension ResourceStore {
         guard resources == initialResources else {
             throw RESTAPIError.conflict("L'annuaire a été modifié pendant l'import. Aucune ressource n'a été importée ; relance l'import.")
         }
-        resources = sortResources(workingResources)
+        resources = sortResources(batch.resources)
 
-        return ResourceImportResult(
-            importedCount: importedCount,
-            updatedCount: updatedCount,
-            skippedCount: skippedCount,
-            firstImportedOrUpdatedResourceID: firstImportedOrUpdatedResourceID
-        )
+        return batch.result
     }
 
     func prepareResourceImportReview(_ drafts: [ResourceImportDraft]) -> [ResourceImportReviewItem] {
@@ -137,64 +89,53 @@ extension ResourceStore {
         decisions: [ResourceImportDecision]
     ) -> ResourceImportResult {
         let decisionsByID = Dictionary(uniqueKeysWithValues: decisions.map { ($0.reviewItemID, $0.shouldApply) })
-        var importedCount = 0
-        var updatedCount = 0
-        var skippedCount = 0
-        var firstImportedOrUpdatedResourceID: UUID?
-
+        var batch = ResourceImportBatch(resources: resources)
         for item in reviewItems {
-            let shouldApply = decisionsByID[item.id] ?? false
-
-            switch item.action {
-            case .create:
-                guard shouldApply, let createdResource = item.proposedResource else {
-                    skippedCount += 1
-                    continue
-                }
-
-                resources.append(createdResource)
-                importedCount += 1
-                if firstImportedOrUpdatedResourceID == nil {
-                    firstImportedOrUpdatedResourceID = createdResource.id
-                }
-            case .update:
-                guard shouldApply, let updatedResource = item.proposedResource else {
-                    skippedCount += 1
-                    continue
-                }
-
-                guard let index = resources.firstIndex(where: { $0.id == updatedResource.id }) else {
-                    // Doublon interne dont la ligne d'origine n'est pas retenue : il crée la ressource.
-                    guard item.isExistingResource == false else {
-                        skippedCount += 1
-                        continue
-                    }
-                    resources.append(updatedResource)
-                    importedCount += 1
-                    if firstImportedOrUpdatedResourceID == nil {
-                        firstImportedOrUpdatedResourceID = updatedResource.id
-                    }
-                    continue
-                }
-
-                resources[index] = updatedResource
-                updatedCount += 1
-                if firstImportedOrUpdatedResourceID == nil {
-                    firstImportedOrUpdatedResourceID = updatedResource.id
-                }
-            case .noChange, .skipped:
-                skippedCount += 1
-            }
+            batch.apply(item, shouldApply: decisionsByID[item.id] ?? false)
         }
+        resources = sortResources(batch.resources)
+        return batch.result
+    }
+}
 
-        resources = sortResources(resources)
+/// Transformation métier commune ; les adaptateurs décident quand publier le lot.
+private struct ResourceImportBatch {
+    var resources: [Resource]
+    var importedCount = 0
+    var updatedCount = 0
+    var skippedCount = 0
+    var firstID: UUID?
 
-        return ResourceImportResult(
-            importedCount: importedCount,
-            updatedCount: updatedCount,
-            skippedCount: skippedCount,
-            firstImportedOrUpdatedResourceID: firstImportedOrUpdatedResourceID
-        )
+    mutating func apply(_ item: ResourceImportReviewItem, shouldApply: Bool) {
+        guard shouldApply, let proposed = item.proposedResource else {
+            skippedCount += 1
+            return
+        }
+        switch item.action {
+        case .create:
+            resources.append(proposed)
+            importedCount += 1
+        case .update:
+            if let index = resources.firstIndex(where: { $0.id == proposed.id }) {
+                resources[index] = proposed
+                updatedCount += 1
+            } else if !item.isExistingResource {
+                // La ligne d'origine d'un doublon interne peut avoir été décochée.
+                resources.append(proposed)
+                importedCount += 1
+            } else {
+                skippedCount += 1
+                return
+            }
+        case .noChange, .skipped:
+            skippedCount += 1
+            return
+        }
+        if firstID == nil { firstID = proposed.id }
     }
 
+    var result: ResourceImportResult {
+        ResourceImportResult(importedCount: importedCount, updatedCount: updatedCount,
+            skippedCount: skippedCount, firstImportedOrUpdatedResourceID: firstID)
+    }
 }

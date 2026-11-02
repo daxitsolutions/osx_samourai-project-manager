@@ -194,27 +194,33 @@ enum AppTableID: String, CaseIterable, Codable, Hashable, Identifiable {
         }
     }
 
+    /// Colonnes affichées par défaut (#53) : titre, statut, responsable et échéance selon le domaine.
+    /// Les autres restent disponibles dans la personnalisation ; une configuration enregistrée prime toujours.
     var defaultVisibleColumnIDs: [String] {
         switch self {
+        case .actions:
+            ["title", "status", "assignee", "dueDate"]
+        case .events:
+            ["subject", "author", "publishedAt"]
+        case .meetings:
+            ["title", "meetingAt", "mode"]
+        case .decisions:
+            ["reference", "title", "status"]
+        case .risks:
+            ["title", "severity", "status", "owner"]
         case .resources:
-            [
-                "name",
-                "primaryResourceRole",
-                "parentDescription",
-                "projects",
-                "allocationPercent",
-                "status",
-                "engagement",
-                "email",
-                "phone"
-            ]
-        case .actions, .events, .meetings, .decisions, .risks, .planning, .testing:
-            defaultColumnOrder
+            ["name", "primaryResourceRole", "status", "allocationPercent"]
+        case .planning:
+            ["title", "startDate", "endDate", "completed", "edit"]
+        case .testing:
+            ["phase", "status", "owner", "progress"]
         }
     }
 
+    /// Colonnes principales en tête, puis les secondaires dans l'ordre du descripteur.
     var defaultColumnOrder: [String] {
-        columnDescriptors.map(\.id)
+        let primary = defaultVisibleColumnIDs
+        return primary + columnDescriptors.map(\.id).filter { primary.contains($0) == false }
     }
 
     var defaultConfiguration: TableColumnConfiguration {
@@ -277,8 +283,7 @@ private enum AppTableColumnConfigurationStorage {
 }
 
 extension AppState {
-    static func loadPersistedTableColumnConfigurations() -> [AppTableID: TableColumnConfiguration] {
-        let defaults = UserDefaults.standard
+    static func loadPersistedTableColumnConfigurations(defaults: UserDefaults = .standard) -> [AppTableID: TableColumnConfiguration] {
         if let data = defaults.data(forKey: AppTableColumnConfigurationStorage.key),
            let decoded = try? JSONDecoder().decode([String: TableColumnConfiguration].self, from: data) {
             return normalizeTableColumnConfigurations(decoded)
@@ -314,7 +319,7 @@ extension AppState {
             (tableID.rawValue, tableID.normalizedConfiguration(configuration))
         })
         if let data = try? JSONEncoder().encode(payload) {
-            UserDefaults.standard.set(data, forKey: AppTableColumnConfigurationStorage.key)
+            preferences.set(data, forKey: AppTableColumnConfigurationStorage.key)
         }
     }
 

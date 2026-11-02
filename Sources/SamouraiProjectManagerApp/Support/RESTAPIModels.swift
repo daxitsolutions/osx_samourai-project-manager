@@ -6,6 +6,7 @@ enum RESTAPIError: LocalizedError {
     case notFound(String)
     case conflict(String)
     case unsupportedMethod(String)
+    case serviceUnavailable(String)
 
     var errorDescription: String? {
         switch self {
@@ -13,7 +14,8 @@ enum RESTAPIError: LocalizedError {
              .invalidJSON(let message),
              .notFound(let message),
              .conflict(let message),
-             .unsupportedMethod(let message):
+             .unsupportedMethod(let message),
+             .serviceUnavailable(let message):
             message
         }
     }
@@ -28,6 +30,8 @@ enum RESTAPIError: LocalizedError {
             409
         case .unsupportedMethod:
             405
+        case .serviceUnavailable:
+            503
         }
     }
 
@@ -43,6 +47,8 @@ enum RESTAPIError: LocalizedError {
             "conflict"
         case .unsupportedMethod:
             "unsupported_method"
+        case .serviceUnavailable:
+            "store_unavailable"
         }
     }
 }

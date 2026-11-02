@@ -1365,6 +1365,7 @@ private struct ActionEditorSheet: View {
                 assignedResourceID: selectedAssignedResourceID,
                 expectedDeliverableIDs: Array(selectedExpectedDeliverableIDs)
             )
+            guard let createdActionID else { return }
             appState.openAction(createdActionID)
         }
 

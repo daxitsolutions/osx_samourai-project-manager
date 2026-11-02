@@ -807,6 +807,7 @@ private struct MeetingEditorSheet: View {
                 transcript: cleanedTranscript,
                 aiSummary: cleanedAISummary
             )
+            guard let createdMeetingID else { return }
             appState.openMeeting(createdMeetingID)
         }
 

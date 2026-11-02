@@ -389,6 +389,7 @@ struct DecisionEditorSheet: View {
                 eventIDs: orderedEventIDs,
                 impactedResourceIDs: orderedResourceIDs
             )
+            guard let decisionID else { return }
             appState.openDecision(decisionID)
         }
 

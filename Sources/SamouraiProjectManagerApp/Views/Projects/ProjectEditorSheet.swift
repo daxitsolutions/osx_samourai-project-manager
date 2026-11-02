@@ -169,6 +169,7 @@ struct ProjectEditorSheet: View {
                 startDate: startDate,
                 targetDate: targetDate
             )
+            guard let projectID else { return }
             appState.selectedProjectID = projectID
             appState.setPrimaryProject(projectID)
         }

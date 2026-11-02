@@ -344,7 +344,7 @@ actor SamouraiPersistence {
     func load() throws -> SamouraiPersistenceLoadResult {
         let url = fileURL
         if fileManager.fileExists(atPath: url.path()) == false {
-            migrateLegacyFileIfNeeded(to: url)
+            try migrateLegacyFileIfNeeded(to: url)
         }
 
         guard fileManager.fileExists(atPath: url.path()) else {
@@ -378,19 +378,14 @@ actor SamouraiPersistence {
         try writeAutoBackup(data)
     }
 
-    private func migrateLegacyFileIfNeeded(to destinationURL: URL) {
+    private func migrateLegacyFileIfNeeded(to destinationURL: URL) throws {
         guard let legacyURL = migrationSourceURL,
               fileManager.fileExists(atPath: legacyURL.path()) else { return }
-        do {
-            try fileManager.createDirectory(
-                at: destinationURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try fileManager.copyItem(at: legacyURL, to: destinationURL)
-        } catch {
-            // Migration best-effort : en cas d'échec on laisse le legacy intact
-            // et l'application démarrera sur une base vide puis recréera un fichier neuf.
-        }
+        try fileManager.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try fileManager.copyItem(at: legacyURL, to: destinationURL)
     }
 
     private func writeAutoBackup(_ data: Data) throws {
@@ -486,8 +481,9 @@ final class SamouraiStore {
     private(set) var meetings: [ProjectMeeting] = []
     private(set) var decisions: [ProjectDecision] = []
     private(set) var governanceReports: [GovernanceReportRecord] = []
-    private(set) var hasLoaded = false
-    private var isPersistenceEnabled = false
+    private(set) var loadState: SamouraiLoadState = .notLoaded
+    private(set) var loadFailureMessage: String?
+    var dataFileURL: URL { persistence.fileURL }
     var lastErrorMessage: String?
 
     init(persistence: SamouraiPersistence = SamouraiPersistence()) {
@@ -508,7 +504,7 @@ final class SamouraiStore {
     /// Écriture synchrone de l'état courant avant la terminaison de l'application.
     /// Garantit qu'aucune mutation en attente dans les `Task` d'arrière-plan n'est perdue.
     func flushSynchronously() {
-        guard hasLoaded, isPersistenceEnabled else { return }
+        guard canEdit else { return }
         do {
             try SamouraiPersistence.saveSynchronously(makeDatabase(), to: persistence.fileURL)
         } catch {
@@ -576,8 +572,10 @@ final class SamouraiStore {
     }
 
     func loadIfNeeded() async {
-        guard hasLoaded == false else { return }
-        hasLoaded = true
+        guard loadState == .notLoaded || loadState == .failed else { return }
+        loadState = .loading
+        loadFailureMessage = nil
+        lastErrorMessage = nil
 
         do {
             let loadResult = try await persistence.load()
@@ -623,12 +621,13 @@ final class SamouraiStore {
             governanceReports = sortGovernanceReports(
                 sanitizeGovernanceReports(database.governanceReports, projectIDs: Set(projects.map(\.id)))
             )
-            isPersistenceEnabled = true
+            loadState = .ready
         } catch {
-            isPersistenceEnabled = false
+            loadState = .failed
             let message = "Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : \(error.localizedDescription)"
             print("Samourai Project Manager - \(message)")
             lastErrorMessage = "Chargement impossible : \(error.localizedDescription)"
+            loadFailureMessage = lastErrorMessage
         }
     }
 
@@ -694,6 +693,7 @@ final class SamouraiStore {
     }
 
     func exportBackupData() throws -> Data {
+        try requireEditableState()
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
         let envelope = SamouraiBackupEnvelope(
             appVersion: appVersion,
@@ -703,6 +703,9 @@ final class SamouraiStore {
     }
 
     func restoreBackupData(_ data: Data) throws -> SamouraiRestoreResult {
+        guard loadState != .loading else {
+            throw RESTAPIError.serviceUnavailable(mutationBlockedMessage)
+        }
         let envelope: SamouraiBackupEnvelope
         do {
             envelope = try backupDecoder.decode(SamouraiBackupEnvelope.self, from: data)
@@ -719,6 +722,13 @@ final class SamouraiStore {
         }
 
         let normalized = try validatedDatabase(from: envelope.database)
+
+        // Ne débloquer l'édition qu'après une écriture réussie. En récupération,
+        // conserver d'abord le fichier rejeté, même s'il n'est pas décodable.
+        if loadState != .ready {
+            try SamouraiPersistence.preserveFileBeforeRecovery(at: persistence.fileURL)
+        }
+        try SamouraiPersistence.saveSynchronously(normalized, to: persistence.fileURL)
 
         projects = sortProjects(normalized.projects)
         resources = sortResources(sanitizeResourceAssignments(normalized.resources, projectIDs: Set(normalized.projects.map(\.id))))
@@ -757,8 +767,9 @@ final class SamouraiStore {
                 projectIDs: Set(normalized.projects.map(\.id))
             )
         )
-        isPersistenceEnabled = true
-        persist()
+        loadState = .ready
+        loadFailureMessage = nil
+        lastErrorMessage = nil
 
         let riskCount = normalized.projects.reduce(0) { $0 + $1.risks.count } + normalized.unassignedRisks.count
         return SamouraiRestoreResult(
@@ -777,6 +788,7 @@ final class SamouraiStore {
 
     @discardableResult
     func importMerlinProject(_ payload: MerlinProjectImportPayload, reporter: ImportProgressReporter = .noop) throws -> MerlinProjectImportResult {
+        try requireEditableState()
         reporter.setStage(.importing)
         let total = max(1, payload.resources.count + payload.activities.count)
         reporter.setTotal(total)
@@ -877,7 +889,6 @@ final class SamouraiStore {
         projects = sortProjects(projects)
         resources = sortResources(resources)
         activities = sortActivities(activities)
-        isPersistenceEnabled = true
         reporter.setStage(.finalizing)
         persist()
 
@@ -931,6 +942,7 @@ final class SamouraiStore {
         criterionScores: [ResourceCriterionScore],
         evaluatedAt: Date = .now
     ) {
+        guard allowMutation() else { return }
         let scopedProjectID = sanitizedProjectID(projectID)
         let scopedProjectPhase = scopedProjectID.flatMap { project(with: $0)?.phase }
         let didUpdate = resourceStore.addResourceEvaluation(
@@ -1040,7 +1052,8 @@ final class SamouraiStore {
         executiveSummaryPMNote: String,
         planningActionsPMNote: String,
         conclusionPMMessage: String
-    ) -> UUID {
+    ) -> UUID? {
+        guard allowMutation() else { return nil }
         let newRecord = GovernanceReportRecord(
             generatedReport: generatedReport,
             scopedProjectIDs: scopedProjectIDs,
@@ -1060,6 +1073,7 @@ final class SamouraiStore {
         planningActionsPMNote: String,
         conclusionPMMessage: String
     ) {
+        guard allowMutation() else { return }
         guard let index = governanceReports.firstIndex(where: { $0.id == reportID }) else { return }
         governanceReports[index].executiveSummaryPMNote = executiveSummaryPMNote.trimmingCharacters(in: .whitespacesAndNewlines)
         governanceReports[index].planningActionsPMNote = planningActionsPMNote.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1070,6 +1084,7 @@ final class SamouraiStore {
     }
 
     func deleteGovernanceReportRecord(reportID: UUID) {
+        guard allowMutation() else { return }
         governanceReports.removeAll { $0.id == reportID }
         governanceReports = sortGovernanceReports(governanceReports)
         persist()
@@ -1104,7 +1119,8 @@ final class SamouraiStore {
         publishedAt: Date,
         projectID: UUID?,
         resourceIDs: [UUID]
-    ) -> UUID {
+    ) -> UUID? {
+        guard allowMutation() else { return nil }
         let event = ProjectEvent(
             subject: subject.trimmingCharacters(in: .whitespacesAndNewlines),
             communication: communication.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1133,6 +1149,7 @@ final class SamouraiStore {
         projectID: UUID?,
         resourceIDs: [UUID]
     ) {
+        guard allowMutation() else { return }
         guard let index = events.firstIndex(where: { $0.id == eventID }) else { return }
 
         events[index].subject = subject.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1149,6 +1166,7 @@ final class SamouraiStore {
     }
 
     func deleteEvent(eventID: UUID) {
+        guard allowMutation() else { return }
         events.removeAll { $0.id == eventID }
         decisions = decisions.map { decision in
             var updatedDecision = decision
@@ -1199,7 +1217,8 @@ final class SamouraiStore {
         projectID: UUID?,
         assignedResourceID: UUID?? = nil,
         expectedDeliverableIDs: [UUID] = []
-    ) -> UUID {
+    ) -> UUID? {
+        guard allowMutation() else { return nil }
         let sanitizedProjectID = sanitizedProjectID(projectID)
         let sanitizedAssignedResourceID = sanitizedAssignedResourceID(
             projectID: sanitizedProjectID,
@@ -1246,6 +1265,7 @@ final class SamouraiStore {
         expectedDeliverableIDs: [UUID]? = nil,
         status: ActionStatus? = nil
     ) {
+        guard allowMutation() else { return }
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return }
         let previous = actions[index]
         let sanitizedProjectID = sanitizedProjectID(projectID)
@@ -1288,6 +1308,7 @@ final class SamouraiStore {
     }
 
     func updateActionStatus(actionID: UUID, status: ActionStatus) {
+        guard allowMutation() else { return }
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return }
         let previousStatus = actions[index].status
         actions[index].status = status
@@ -1305,11 +1326,13 @@ final class SamouraiStore {
     }
 
     func deleteAction(actionID: UUID) {
+        guard allowMutation() else { return }
         actions.removeAll { $0.id == actionID }
         persist()
     }
 
     func markActionDone(actionID: UUID, isDone: Bool) {
+        guard allowMutation() else { return }
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return }
         let previousStatus = actions[index].status
         actions[index].isDone = isDone
@@ -1331,6 +1354,7 @@ final class SamouraiStore {
     }
 
     func assignActionToActivity(actionID: UUID, activityID: UUID?) {
+        guard allowMutation() else { return }
         guard let actionIndex = actions.firstIndex(where: { $0.id == actionID }) else { return }
 
         let previousActivityID = actions[actionIndex].activityID
@@ -1358,6 +1382,7 @@ final class SamouraiStore {
 
     @discardableResult
     func addActionComment(actionID: UUID, text: String) -> Bool {
+        guard allowMutation() else { return false }
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard cleaned.isEmpty == false else { return false }
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return false }
@@ -1491,6 +1516,7 @@ final class SamouraiStore {
         isMilestone: Bool = false,
         linkedDeliverableIDs: [UUID] = []
     ) -> UUID? {
+        guard allowMutation() else { return nil }
         guard projects.contains(where: { $0.id == projectID }) else { return nil }
         guard let resolvedScenarioID = sanitizedPlanningScenarioID(projectID: projectID, scenarioID: scenarioID)
             ?? defaultPlanningScenarioID(for: projectID)
@@ -1557,6 +1583,7 @@ final class SamouraiStore {
         parentActivityID: UUID?,
         linkedDeliverableIDs: [UUID]
     ) {
+        guard allowMutation() else { return }
         guard let index = activities.firstIndex(where: { $0.id == activityID }) else { return }
 
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1617,6 +1644,7 @@ final class SamouraiStore {
         linkedDeliverableIDs: [UUID]? = nil,
         isDateless: Bool? = nil
     ) {
+        guard allowMutation() else { return }
         guard let index = activities.firstIndex(where: { $0.id == activityID }) else { return }
 
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1669,6 +1697,7 @@ final class SamouraiStore {
     }
 
     func moveActivity(activityID: UUID, to targetActivityID: UUID) {
+        guard allowMutation() else { return }
         guard activityID != targetActivityID,
               let sourceActivity = activity(with: activityID),
               let targetActivity = activity(with: targetActivityID),
@@ -1766,6 +1795,7 @@ final class SamouraiStore {
     }
 
     func createPlanningBaseline(projectID: UUID, label: String, validatedBy: String, scenarioID: UUID? = nil) -> String? {
+        guard allowMutation() else { return mutationBlockedMessage }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return nil }
         let resolvedScenarioID = sanitizedPlanningScenarioID(projectID: projectID, scenarioID: scenarioID)
             ?? projects[projectIndex].defaultPlanningScenarioID
@@ -1829,6 +1859,7 @@ final class SamouraiStore {
     }
 
     func deleteActivity(activityID: UUID) {
+        guard allowMutation() else { return }
         activities.removeAll { $0.id == activityID }
         activities = activities.map { activity in
             var updated = activity
@@ -1853,6 +1884,7 @@ final class SamouraiStore {
 
     @discardableResult
     func duplicateActivity(activityID: UUID) -> UUID? {
+        guard allowMutation() else { return nil }
         guard let source = activities.first(where: { $0.id == activityID }) else { return nil }
         let duplicate = ProjectActivity(
             projectID: source.projectID,
@@ -1876,6 +1908,7 @@ final class SamouraiStore {
 
     @discardableResult
     func addPlanningScenario(projectID: UUID, name: String) -> UUID? {
+        guard allowMutation() else { return nil }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return nil }
 
         let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1893,6 +1926,7 @@ final class SamouraiStore {
 
     @discardableResult
     func duplicatePlanningScenario(projectID: UUID, sourceScenarioID: UUID, name: String) -> UUID? {
+        guard allowMutation() else { return nil }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return nil }
         guard let sourceScenario = projects[projectIndex].orderedPlanningScenarios.first(where: { $0.id == sourceScenarioID }) else {
             return nil
@@ -1949,6 +1983,7 @@ final class SamouraiStore {
     }
 
     func renamePlanningScenario(projectID: UUID, scenarioID: UUID, name: String) {
+        guard allowMutation() else { return }
         let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedName.isEmpty,
               let projectIndex = projects.firstIndex(where: { $0.id == projectID }),
@@ -1960,6 +1995,7 @@ final class SamouraiStore {
     }
 
     func deletePlanningScenario(projectID: UUID, scenarioID: UUID) {
+        guard allowMutation() else { return }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return }
         guard projects[projectIndex].orderedPlanningScenarios.count > 1 else { return }
         projects[projectIndex].planningScenarios.removeAll { $0.id == scenarioID }
@@ -2000,7 +2036,8 @@ final class SamouraiStore {
         notes: String,
         transcript: String,
         aiSummary: String
-    ) -> UUID {
+    ) -> UUID? {
+        guard allowMutation() else { return nil }
         let meeting = ProjectMeeting(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             projectID: sanitizedProjectID(projectID),
@@ -2034,6 +2071,7 @@ final class SamouraiStore {
         transcript: String,
         aiSummary: String
     ) {
+        guard allowMutation() else { return }
         guard let index = meetings.firstIndex(where: { $0.id == meetingID }) else { return }
         meetings[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         meetings[index].projectID = sanitizedProjectID(projectID)
@@ -2052,6 +2090,7 @@ final class SamouraiStore {
     }
 
     func deleteMeeting(meetingID: UUID) {
+        guard allowMutation() else { return }
         meetings.removeAll { $0.id == meetingID }
         decisions = decisions.map { decision in
             var updatedDecision = decision
@@ -2089,7 +2128,8 @@ final class SamouraiStore {
         meetingIDs: [UUID],
         eventIDs: [UUID],
         impactedResourceIDs: [UUID]
-    ) -> UUID {
+    ) -> UUID? {
+        guard allowMutation() else { return nil }
         let now = Date.now
         let decisionID = UUID()
         let sequence = nextDecisionSequenceNumber()
@@ -2138,6 +2178,7 @@ final class SamouraiStore {
         impactedResourceIDs: [UUID],
         changeSummary: String
     ) {
+        guard allowMutation() else { return }
         guard let index = decisions.firstIndex(where: { $0.id == decisionID }) else { return }
 
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2172,11 +2213,13 @@ final class SamouraiStore {
     }
 
     func deleteDecision(decisionID: UUID) {
+        guard allowMutation() else { return }
         decisions.removeAll { $0.id == decisionID }
         persist()
     }
 
     func addDecisionComment(decisionID: UUID, author: String, body: String) {
+        guard allowMutation() else { return }
         guard let index = decisions.firstIndex(where: { $0.id == decisionID }) else { return }
         let cleanedAuthor = author.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2213,7 +2256,8 @@ final class SamouraiStore {
         deliveryMode: DeliveryMode,
         startDate: Date,
         targetDate: Date
-    ) -> UUID {
+    ) -> UUID? {
+        guard allowMutation() else { return nil }
         let project = Project(
             name: name,
             summary: summary,
@@ -2237,6 +2281,7 @@ final class SamouraiStore {
         name: String,
         health: ProjectHealth
     ) {
+        guard allowMutation() else { return }
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
 
         let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2259,6 +2304,7 @@ final class SamouraiStore {
         startDate: Date,
         targetDate: Date
     ) {
+        guard allowMutation() else { return }
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
         let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard cleanedName.isEmpty == false else { return }
@@ -2277,6 +2323,7 @@ final class SamouraiStore {
     }
 
     func deleteAllData() {
+        guard allowMutation() else { return }
         projects = []
         resources = []
         unassignedRisks = []
@@ -2286,11 +2333,11 @@ final class SamouraiStore {
         meetings = []
         decisions = []
         governanceReports = []
-        isPersistenceEnabled = true
         persist()
     }
 
     func deleteProject(projectID: UUID) {
+        guard allowMutation() else { return }
         let removedProject = projects.first { $0.id == projectID }
         guard removedProject != nil else { return }
 
@@ -2351,6 +2398,7 @@ final class SamouraiStore {
     }
 
     func replaceProjectTestingPhase(projectID: UUID, phase: ProjectTestingPhase) {
+        guard allowMutation() else { return }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return }
 
         var phases = ProjectTestingPhase.normalizedPhases(projects[projectIndex].testingPhases)
@@ -2373,6 +2421,7 @@ final class SamouraiStore {
 
     @discardableResult
     func createGoNoGoDecision(projectID: UUID) -> UUID? {
+        guard allowMutation() else { return nil }
         guard let project = project(with: projectID) else { return nil }
         guard shouldSuggestGoNoGoDecision(projectID: projectID) else { return nil }
 
@@ -2404,6 +2453,7 @@ final class SamouraiStore {
         dueDate: Date?,
         status: RiskStatus = .toDo
     ) {
+        guard allowMutation() else { return }
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
 
         let risk = Risk(
@@ -2426,6 +2476,7 @@ final class SamouraiStore {
     }
 
     func updateRiskStatus(riskID: UUID, status: RiskStatus) {
+        guard allowMutation() else { return }
         for projectIndex in projects.indices {
             guard let riskIndex = projects[projectIndex].risks.firstIndex(where: { $0.id == riskID }) else { continue }
             let previousStatus = projects[projectIndex].risks[riskIndex].displayStatus
@@ -2466,6 +2517,7 @@ final class SamouraiStore {
         dueDate: Date?,
         status: RiskStatus? = nil
     ) {
+        guard allowMutation() else { return }
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedMitigation = mitigation.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedOwner = owner.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2550,6 +2602,7 @@ final class SamouraiStore {
         severity: RiskSeverity,
         status: String
     ) {
+        guard allowMutation() else { return }
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedOwner = owner.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedStatus = status.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2620,6 +2673,7 @@ final class SamouraiStore {
 
     @discardableResult
     func addRiskComment(riskID: UUID, text: String) -> Bool {
+        guard allowMutation() else { return false }
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard cleaned.isEmpty == false else { return false }
 
@@ -2715,6 +2769,7 @@ final class SamouraiStore {
     }
 
     func deleteRisk(riskID: UUID) {
+        guard allowMutation() else { return }
         var didDelete = false
 
         for projectIndex in projects.indices {
@@ -2737,13 +2792,17 @@ final class SamouraiStore {
     }
 
     func importRisks(_ drafts: [RiskImportDraft]) -> RiskImportResult {
-        applyRiskDraftsSync(drafts)
+        guard allowMutation() else {
+            return RiskImportResult(importedCount: 0, updatedCount: 0, skippedCount: drafts.count, firstImportedOrUpdatedRiskID: nil)
+        }
+        return applyRiskDraftsSync(drafts)
     }
 
     func importRisksAsync(
         _ drafts: [RiskImportDraft],
         reporter: ImportProgressReporter
     ) async throws -> RiskImportResult {
+        try requireEditableState()
         reporter.setStage(.importing)
         reporter.setTotal(drafts.count)
         reporter.setProcessed(0)
@@ -2868,6 +2927,7 @@ final class SamouraiStore {
         acceptanceCriteria: [String] = [],
         integratedSourceProjectID: UUID? = nil
     ) {
+        guard allowMutation() else { return }
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
 
         let deliverable = Deliverable(
@@ -2889,6 +2949,7 @@ final class SamouraiStore {
     }
 
     func addInScopeItem(projectID: UUID, item: String) {
+        guard allowMutation() else { return }
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
         let cleaned = item.trimmingCharacters(in: .whitespacesAndNewlines)
         guard cleaned.isEmpty == false else { return }
@@ -2912,6 +2973,7 @@ final class SamouraiStore {
     }
 
     func addOutOfScopeItem(projectID: UUID, item: String) {
+        guard allowMutation() else { return }
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return }
         let cleaned = item.trimmingCharacters(in: .whitespacesAndNewlines)
         guard cleaned.isEmpty == false else { return }
@@ -2940,6 +3002,7 @@ final class SamouraiStore {
         outOfScopeItems: [String],
         linkedAnnexProjectIDs: [UUID]
     ) {
+        guard allowMutation() else { return }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return }
         let validLinkedProjectIDs = linkedAnnexProjectIDs
             .filter { linkedID in
@@ -2966,6 +3029,7 @@ final class SamouraiStore {
         milestoneLabel: String,
         validatedBy: String
     ) -> String? {
+        guard allowMutation() else { return mutationBlockedMessage }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return nil }
 
         let cleanedMilestoneLabel = milestoneLabel.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3010,6 +3074,7 @@ final class SamouraiStore {
         impactRisks: String,
         requestedBy: String
     ) -> String? {
+        guard allowMutation() else { return mutationBlockedMessage }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else { return nil }
 
         let cleanedDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3050,6 +3115,7 @@ final class SamouraiStore {
         actor: String,
         note: String
     ) -> String? {
+        guard allowMutation() else { return mutationBlockedMessage }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }),
               let requestIndex = projects[projectIndex].scopeChangeRequests.firstIndex(where: { $0.id == requestID })
         else {
@@ -3091,6 +3157,7 @@ final class SamouraiStore {
     }
 
     func addAcceptanceCriterion(projectID: UUID, deliverableID: UUID, criterionText: String) {
+        guard allowMutation() else { return }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }),
               let deliverableIndex = projects[projectIndex].deliverables.firstIndex(where: { $0.id == deliverableID })
         else {
@@ -3109,6 +3176,7 @@ final class SamouraiStore {
     }
 
     func toggleAcceptanceCriterion(projectID: UUID, deliverableID: UUID, criterionID: UUID) {
+        guard allowMutation() else { return }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }),
               let deliverableIndex = projects[projectIndex].deliverables.firstIndex(where: { $0.id == deliverableID }),
               let criterionIndex = projects[projectIndex].deliverables[deliverableIndex].acceptanceCriteria.firstIndex(where: { $0.id == criterionID })
@@ -3155,6 +3223,7 @@ final class SamouraiStore {
         title: String,
         owner: String
     ) {
+        guard allowMutation() else { return }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }),
               let deliverableIndex = projects[projectIndex].deliverables.firstIndex(where: { $0.id == deliverableID })
         else {
@@ -3172,6 +3241,7 @@ final class SamouraiStore {
     }
 
     func toggleDeliverable(projectID: UUID, deliverableID: UUID) {
+        guard allowMutation() else { return }
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }),
               let deliverableIndex = projects[projectIndex].deliverables.firstIndex(where: { $0.id == deliverableID })
         else {
@@ -3203,7 +3273,8 @@ final class SamouraiStore {
         assignedProjectIDs: [UUID],
         memo: ResourceMemo,
         notes: String
-    ) -> UUID {
+    ) -> UUID? {
+        guard allowMutation() else { return nil }
         let resourceID = resourceStore.addResource(
             nom: nom,
             parentDescription: parentDescription,
@@ -3251,6 +3322,7 @@ final class SamouraiStore {
         memo: ResourceMemo,
         notes: String
     ) {
+        guard allowMutation() else { return }
         let didUpdate = resourceStore.updateResource(
             resourceID: resourceID,
             nom: nom,
@@ -3289,6 +3361,7 @@ final class SamouraiStore {
         status: ResourceStatus,
         engagement: ResourceEngagement
     ) {
+        guard allowMutation() else { return }
         let didUpdate = resourceStore.updateResourceQuick(
             resourceID: resourceID,
             nom: nom,
@@ -3306,6 +3379,7 @@ final class SamouraiStore {
     }
 
     func assignResource(resourceID: UUID, to projectID: UUID) {
+        guard allowMutation() else { return }
         let didUpdate = resourceStore.assignResource(
             resourceID: resourceID,
             to: projectID,
@@ -3317,6 +3391,7 @@ final class SamouraiStore {
     }
 
     func toggleFavoriteResource(resourceID: UUID, in projectID: UUID) {
+        guard allowMutation() else { return }
         let didUpdate = resourceStore.toggleFavoriteResource(
             resourceID: resourceID,
             in: projectID,
@@ -3328,6 +3403,7 @@ final class SamouraiStore {
     }
 
     func unassignResource(resourceID: UUID, from projectID: UUID) {
+        guard allowMutation() else { return }
         let didUpdate = resourceStore.unassignResource(resourceID: resourceID, from: projectID)
         if didUpdate {
             persist()
@@ -3335,11 +3411,13 @@ final class SamouraiStore {
     }
 
     func assignTemplate(resourceID: UUID, templateID: UUID) {
+        guard allowMutation() else { return }
         let didUpdate = resourceStore.assignTemplate(resourceID: resourceID, templateID: templateID)
         if didUpdate { persist() }
     }
 
     func unassignTemplate(resourceID: UUID) {
+        guard allowMutation() else { return }
         let didUpdate = resourceStore.unassignTemplate(resourceID: resourceID)
         if didUpdate { persist() }
     }
@@ -3349,6 +3427,7 @@ final class SamouraiStore {
     }
 
     func deleteResource(resourceID: UUID) {
+        guard allowMutation() else { return }
         let didDelete = resourceStore.deleteResource(resourceID: resourceID)
         guard didDelete else { return }
         actions = actions.map { action in
@@ -3367,6 +3446,9 @@ final class SamouraiStore {
     }
 
     func importResources(_ drafts: [ResourceImportDraft]) -> ResourceImportResult {
+        guard allowMutation() else {
+            return ResourceImportResult(importedCount: 0, updatedCount: 0, skippedCount: drafts.count, firstImportedOrUpdatedResourceID: nil)
+        }
         let result = resourceStore.importResources(drafts)
         persist()
         return result
@@ -3384,6 +3466,7 @@ final class SamouraiStore {
         decisions: [ResourceImportDecision],
         reporter: ImportProgressReporter
     ) async throws -> ResourceImportResult {
+        try requireEditableState()
         let result = try await resourceStore.applyResourceImportReviewAsync(
             reviewItems,
             decisions: decisions,
@@ -3398,6 +3481,9 @@ final class SamouraiStore {
     }
 
     func applyResourceImportReview(_ reviewItems: [ResourceImportReviewItem], decisions: [ResourceImportDecision]) -> ResourceImportResult {
+        guard allowMutation() else {
+            return ResourceImportResult(importedCount: 0, updatedCount: 0, skippedCount: reviewItems.count, firstImportedOrUpdatedResourceID: nil)
+        }
         let result = resourceStore.applyResourceImportReview(reviewItems, decisions: decisions)
         persist()
         return result
@@ -3408,6 +3494,7 @@ final class SamouraiStore {
     }
 
     func apiReplaceDatabase(_ database: SamouraiDatabase) throws {
+        try requireEditableState()
         let normalized = try validatedDatabase(from: database)
         let projectIDs = Set(normalized.projects.map(\.id))
         projects = sortProjects(normalized.projects)
@@ -3434,12 +3521,12 @@ final class SamouraiStore {
             )
         )
         governanceReports = sortGovernanceReports(sanitizeGovernanceReports(normalized.governanceReports, projectIDs: projectIDs))
-        isPersistenceEnabled = true
         persist()
     }
 
     @discardableResult
     func apiUpsertProject(_ project: Project, replacing id: UUID? = nil) throws -> Project {
+        try requireEditableState()
         var updated = project
         if let id {
             guard let index = projects.firstIndex(where: { $0.id == id }) else {
@@ -3460,6 +3547,7 @@ final class SamouraiStore {
     }
 
     func apiDeleteProject(id: UUID) throws {
+        try requireEditableState()
         guard projects.contains(where: { $0.id == id }) else {
             throw RESTAPIError.notFound("Projet introuvable.")
         }
@@ -3468,6 +3556,7 @@ final class SamouraiStore {
 
     @discardableResult
     func apiUpsertResource(_ resource: Resource, replacing id: UUID? = nil) throws -> Resource {
+        try requireEditableState()
         var updated = resource
         let validProjectIDs = Set(projects.map(\.id))
         updated.assignedProjectIDs = updated.assignedProjectIDs.filter { validProjectIDs.contains($0) }
@@ -3491,6 +3580,7 @@ final class SamouraiStore {
     }
 
     func apiDeleteResource(id: UUID) throws {
+        try requireEditableState()
         guard resources.contains(where: { $0.id == id }) else {
             throw RESTAPIError.notFound("Ressource introuvable.")
         }
@@ -3499,6 +3589,7 @@ final class SamouraiStore {
 
     @discardableResult
     func apiUpsertEvent(_ event: ProjectEvent, replacing id: UUID? = nil) throws -> ProjectEvent {
+        try requireEditableState()
         var updated = event
         updated.subject = updated.subject.trimmingCharacters(in: .whitespacesAndNewlines)
         updated.communication = updated.communication.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3525,6 +3616,7 @@ final class SamouraiStore {
     }
 
     func apiDeleteEvent(id: UUID) throws {
+        try requireEditableState()
         guard events.contains(where: { $0.id == id }) else {
             throw RESTAPIError.notFound("Événement introuvable.")
         }
@@ -3533,6 +3625,7 @@ final class SamouraiStore {
 
     @discardableResult
     func apiUpsertAction(_ action: ProjectAction, replacing id: UUID? = nil) throws -> ProjectAction {
+        try requireEditableState()
         var updated = action
         updated.projectID = sanitizedProjectID(updated.projectID)
         updated.assignedResourceID = sanitizedAssignedResourceID(
@@ -3571,6 +3664,7 @@ final class SamouraiStore {
     }
 
     func apiDeleteAction(id: UUID) throws {
+        try requireEditableState()
         guard actions.contains(where: { $0.id == id }) else {
             throw RESTAPIError.notFound("Action introuvable.")
         }
@@ -3579,6 +3673,7 @@ final class SamouraiStore {
 
     @discardableResult
     func apiUpsertMeeting(_ meeting: ProjectMeeting, replacing id: UUID? = nil) throws -> ProjectMeeting {
+        try requireEditableState()
         var updated = meeting
         updated.projectID = sanitizedProjectID(updated.projectID)
         updated.durationMinutes = max(updated.durationMinutes, 1)
@@ -3601,6 +3696,7 @@ final class SamouraiStore {
     }
 
     func apiDeleteMeeting(id: UUID) throws {
+        try requireEditableState()
         guard meetings.contains(where: { $0.id == id }) else {
             throw RESTAPIError.notFound("Réunion introuvable.")
         }
@@ -3609,6 +3705,7 @@ final class SamouraiStore {
 
     @discardableResult
     func apiUpsertDecision(_ decision: ProjectDecision, replacing id: UUID? = nil) throws -> ProjectDecision {
+        try requireEditableState()
         var updated = decision
         updated.projectID = sanitizedProjectID(updated.projectID)
         updated.meetingIDs = sanitizedMeetingIDs(updated.meetingIDs)
@@ -3633,6 +3730,7 @@ final class SamouraiStore {
     }
 
     func apiDeleteDecision(id: UUID) throws {
+        try requireEditableState()
         guard decisions.contains(where: { $0.id == id }) else {
             throw RESTAPIError.notFound("Décision introuvable.")
         }
@@ -3641,6 +3739,7 @@ final class SamouraiStore {
 
     @discardableResult
     func apiUpsertActivity(_ activity: ProjectActivity, replacing id: UUID? = nil) throws -> ProjectActivity {
+        try requireEditableState()
         guard projects.contains(where: { $0.id == activity.projectID }) else {
             throw RESTAPIError.badRequest("Activité rattachée à un projet inexistant.")
         }
@@ -3695,6 +3794,7 @@ final class SamouraiStore {
     }
 
     func apiDeleteActivity(id: UUID) throws {
+        try requireEditableState()
         guard activities.contains(where: { $0.id == id }) else {
             throw RESTAPIError.notFound("Activité introuvable.")
         }
@@ -3711,6 +3811,7 @@ final class SamouraiStore {
 
     @discardableResult
     func apiUpsertRisk(_ record: APIRiskRecord, replacing id: UUID? = nil) throws -> APIRiskRecord {
+        try requireEditableState()
         var updatedRecord = record
         if let projectID = updatedRecord.projectID,
            projects.contains(where: { $0.id == projectID }) == false {
@@ -3744,6 +3845,7 @@ final class SamouraiStore {
     }
 
     func apiDeleteRisk(id: UUID) throws {
+        try requireEditableState()
         for projectIndex in projects.indices {
             if let riskIndex = projects[projectIndex].risks.firstIndex(where: { $0.id == id }) {
                 projects[projectIndex].risks.remove(at: riskIndex)
@@ -3768,6 +3870,7 @@ final class SamouraiStore {
 
     @discardableResult
     func apiUpsertDeliverable(_ record: APIDeliverableRecord, replacing id: UUID? = nil) throws -> APIDeliverableRecord {
+        try requireEditableState()
         guard let projectIndex = projects.firstIndex(where: { $0.id == record.projectID }) else {
             throw RESTAPIError.badRequest("Livrable rattaché à un projet inexistant.")
         }
@@ -3787,6 +3890,7 @@ final class SamouraiStore {
     }
 
     func apiDeleteDeliverable(id: UUID) throws {
+        try requireEditableState()
         for projectIndex in projects.indices {
             if let deliverableIndex = projects[projectIndex].deliverables.firstIndex(where: { $0.id == id }) {
                 projects[projectIndex].deliverables.remove(at: deliverableIndex)
@@ -3821,6 +3925,7 @@ final class SamouraiStore {
 
     @discardableResult
     func apiAppendScopeItem(_ item: APIScopeItem, inScope: Bool) throws -> APIScopeItem {
+        try requireEditableState()
         guard let projectIndex = projects.firstIndex(where: { $0.id == item.projectID }) else {
             throw RESTAPIError.badRequest("Élément de périmètre rattaché à un projet inexistant.")
         }
@@ -3846,6 +3951,7 @@ final class SamouraiStore {
 
     @discardableResult
     func apiReplaceScopeItem(projectID: UUID, index: Int, value: String, inScope: Bool) throws -> APIScopeItem {
+        try requireEditableState()
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
             throw RESTAPIError.badRequest("Élément de périmètre rattaché à un projet inexistant.")
         }
@@ -3872,6 +3978,7 @@ final class SamouraiStore {
     }
 
     func apiDeleteScopeItem(projectID: UUID, index: Int, inScope: Bool) throws {
+        try requireEditableState()
         guard let projectIndex = projects.firstIndex(where: { $0.id == projectID }) else {
             throw RESTAPIError.badRequest("Élément de périmètre rattaché à un projet inexistant.")
         }
@@ -3894,7 +4001,7 @@ final class SamouraiStore {
     }
 
     private func persist() {
-        guard isPersistenceEnabled else { return }
+        guard canEdit else { return }
         let snapshot = makeDatabase()
         Task(priority: .utility) { [persistence] in
             do {

@@ -591,6 +591,7 @@ private struct EventEditorSheet: View {
                 projectID: projectID,
                 resourceIDs: sortedResourceIDs
             )
+            guard let createdEventID else { return }
             appState.openEvent(createdEventID)
         }
 

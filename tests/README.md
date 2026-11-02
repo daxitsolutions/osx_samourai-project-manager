@@ -40,6 +40,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 | Date | Sujet | Compte rendu |
 |---|---|---|
 | 2026-11-02 | Issue #32 — identifiants dupliqués au chargement | [Résultats et limites](reports/2026-11-02-issue-32.md) |
+| 2026-11-02 | Issue #34 — récupération après échec de chargement | [Résultats et limites](reports/2026-11-02-issue-34.md) |
 
 ## Modèle à suivre
 

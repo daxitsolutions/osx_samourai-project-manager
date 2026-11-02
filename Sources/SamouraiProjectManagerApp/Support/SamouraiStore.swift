@@ -2739,10 +2739,7 @@ final class SamouraiStore {
         reporter.setProcessed(0)
         reporter.setImported(0)
 
-        var importedCount = 0
-        var updatedCount = 0
-        var skippedCount = 0
-        var firstImportedOrUpdatedRiskID: UUID?
+        var result = RiskImportAccumulator()
         // Copies de travail : une annulation, à n'importe quelle étape, laisse les risques intacts.
         let initialProjects = projects
         let initialUnassignedRisks = unassignedRisks
@@ -2752,20 +2749,10 @@ final class SamouraiStore {
         for (index, draft) in drafts.enumerated() {
             try Task.checkCancellation()
 
-            let outcome = ingestRiskDraft(draft, projects: &workingProjects, unassignedRisks: &workingUnassignedRisks)
-            switch outcome {
-            case .created(let id):
-                importedCount += 1
-                if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = id }
-            case .updated(let id):
-                updatedCount += 1
-                if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = id }
-            case .skipped:
-                skippedCount += 1
-            }
+            result.record(ingestRiskDraft(draft, projects: &workingProjects, unassignedRisks: &workingUnassignedRisks))
 
             reporter.setProcessed(index + 1)
-            reporter.setImported(importedCount + updatedCount)
+            reporter.setImported(result.importedCount + result.updatedCount)
             if (index + 1) % 10 == 0 || index == drafts.count - 1 {
                 await Task.yield()
             }
@@ -2781,45 +2768,48 @@ final class SamouraiStore {
         projects = sortProjects(workingProjects)
         persist()
 
-        return RiskImportResult(
-            importedCount: importedCount,
-            updatedCount: updatedCount,
-            skippedCount: skippedCount,
-            firstImportedOrUpdatedRiskID: firstImportedOrUpdatedRiskID
-        )
+        return result.result
     }
 
     private func applyRiskDraftsSync(_ drafts: [RiskImportDraft]) -> RiskImportResult {
-        var importedCount = 0
-        var updatedCount = 0
-        var skippedCount = 0
-        var firstImportedOrUpdatedRiskID: UUID?
+        var result = RiskImportAccumulator()
 
         var workingProjects = projects
         var workingUnassignedRisks = unassignedRisks
         for draft in drafts {
-            switch ingestRiskDraft(draft, projects: &workingProjects, unassignedRisks: &workingUnassignedRisks) {
-            case .created(let id):
-                importedCount += 1
-                if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = id }
-            case .updated(let id):
-                updatedCount += 1
-                if firstImportedOrUpdatedRiskID == nil { firstImportedOrUpdatedRiskID = id }
-            case .skipped:
-                skippedCount += 1
-            }
+            result.record(ingestRiskDraft(draft, projects: &workingProjects, unassignedRisks: &workingUnassignedRisks))
         }
 
         unassignedRisks = sortStandaloneRisks(workingUnassignedRisks)
         projects = sortProjects(workingProjects)
         persist()
 
-        return RiskImportResult(
-            importedCount: importedCount,
-            updatedCount: updatedCount,
-            skippedCount: skippedCount,
-            firstImportedOrUpdatedRiskID: firstImportedOrUpdatedRiskID
-        )
+        return result.result
+    }
+
+    private struct RiskImportAccumulator {
+        var importedCount = 0
+        var updatedCount = 0
+        var skippedCount = 0
+        var firstID: UUID?
+
+        mutating func record(_ outcome: RiskIngestionOutcome) {
+            switch outcome {
+            case .created(let id):
+                importedCount += 1
+                if firstID == nil { firstID = id }
+            case .updated(let id):
+                updatedCount += 1
+                if firstID == nil { firstID = id }
+            case .skipped:
+                skippedCount += 1
+            }
+        }
+
+        var result: RiskImportResult {
+            RiskImportResult(importedCount: importedCount, updatedCount: updatedCount,
+                skippedCount: skippedCount, firstImportedOrUpdatedRiskID: firstID)
+        }
     }
 
     private enum RiskIngestionOutcome {

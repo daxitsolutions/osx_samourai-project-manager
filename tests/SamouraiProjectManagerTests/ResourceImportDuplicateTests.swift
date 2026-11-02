@@ -70,6 +70,29 @@ struct ResourceImportDuplicateTests {
         }
     }
 
+    @Test
+    func syncAndAsyncApplyTheSameReviewAndDecisionsIdentically() async throws {
+        try await withStore { syncStore in
+            try await withStore { asyncStore in
+                let review = syncStore.prepareResourceImportReview([
+                    draft(row: 2, phone: "01"), draft(row: 3, phone: "02"),
+                    draft(row: 4, phone: "03"), draft(row: 5, phone: nil)
+                ])
+                let sync = try await apply(review, store: syncStore, asynchronous: false, declining: [2])
+                let async = try await apply(review, store: asyncStore, asynchronous: true, declining: [2])
+                #expect(syncStore.resources == asyncStore.resources)
+                #expect(sync.importedCount == 1)
+                #expect(sync.updatedCount == 1)
+                #expect(sync.skippedCount == 2)
+                #expect(sync.importedCount == async.importedCount)
+                #expect(sync.updatedCount == async.updatedCount)
+                #expect(sync.skippedCount == async.skippedCount)
+                #expect(sync.firstImportedOrUpdatedResourceID == async.firstImportedOrUpdatedResourceID)
+                #expect(syncStore.resources.first?.phone == "03")
+            }
+        }
+    }
+
     // MARK: - Banc
 
     private func prepare(_ drafts: [ResourceImportDraft], store: SamouraiStore, asynchronous: Bool) async throws -> [ResourceImportReviewItem] {

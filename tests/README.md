@@ -47,6 +47,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 | 2026-11-02 | Issue #39 — API REST limitée à la boucle locale | [Résultats et limites](reports/2026-11-02-issue-39.md) |
 | 2026-11-02 | Issue #42 — moteur métier commun des imports | [Résultats et limites](reports/2026-11-02-issue-42.md) |
 | 2026-11-02 | Issue #41 — validation, normalisation et publication communes | [Résultats et limites](reports/2026-11-02-issue-41.md) |
+| 2026-11-02 | Issue #75 — compilation avec Xcode quand les Command Line Tools sont actifs | [Résultats et limites](reports/2026-11-02-issue-75.md) |
 
 ## Modèle à suivre
 

@@ -20,12 +20,14 @@ final class RESTAPIService {
     private(set) var activePort: Int?
     private(set) var statusMessage = "Serveur arrêté."
     private(set) var lastErrorMessage: String?
+    /// Délai maximal de réception d'une requête complète ; réduit par les tests.
+    var requestTimeout = RESTAPIAccessPolicy.requestTimeout
 
     var isRunning: Bool { state == .running }
 
     var baseURL: String? {
         guard let activePort else { return nil }
-        return "http://localhost:\(activePort)/api"
+        return "http://127.0.0.1:\(activePort)/api"
     }
 
     func start(port: Int, store: SamouraiStore) throws {
@@ -43,15 +45,16 @@ final class RESTAPIService {
             throw RESTAPIError.badRequest("Port invalide.")
         }
 
-        let parameters = NWParameters.tcp
-        let listener = try NWListener(using: parameters, on: nwPort)
+        let listener = try RESTAPIAccessPolicy.makeListener(port: nwPort)
         let queue = queue
+        let timeout = requestTimeout
         listener.newConnectionHandler = { [weak store, weak self] connection in
-            guard let store, let self else {
+            // Défense en profondeur : le listener est lié à 127.0.0.1, toute autre provenance est coupée.
+            guard let store, let self, RESTAPIAccessPolicy.isLoopback(connection.endpoint) else {
                 connection.cancel()
                 return
             }
-            RESTAPIConnection(connection: connection, store: store, service: self, queue: queue).start()
+            RESTAPIConnection(connection: connection, store: store, service: self, queue: queue, timeout: timeout).start()
         }
         listener.stateUpdateHandler = { [weak self] listenerState in
             Task { @MainActor in
@@ -119,7 +122,7 @@ final class RESTAPIService {
         case .ready:
             state = .running
             activePort = port
-            statusMessage = "Serveur actif sur http://localhost:\(port)"
+            statusMessage = "Serveur actif sur http://127.0.0.1:\(port) (accès local uniquement)"
             lastErrorMessage = nil
         case .failed(let error):
             state = .failed
@@ -145,43 +148,79 @@ private final class RESTAPIConnection: @unchecked Sendable {
     private weak var store: SamouraiStore?
     private weak var service: RESTAPIService?
     private let queue: DispatchQueue
+    private let timeout: Duration
     private var buffer = Data()
+    /// `receiving` → `processing` → `finished`, modifié uniquement sur `queue`.
+    private var phase = Phase.receiving
 
-    init(connection: NWConnection, store: SamouraiStore, service: RESTAPIService, queue: DispatchQueue) {
+    private enum Phase { case receiving, processing, finished }
+
+    init(connection: NWConnection, store: SamouraiStore, service: RESTAPIService, queue: DispatchQueue, timeout: Duration) {
         self.connection = connection
         self.store = store
         self.service = service
         self.queue = queue
+        self.timeout = timeout
     }
 
     func start() {
         connection.start(queue: queue)
+        let (seconds, attoseconds) = timeout.components
+        let delay = Double(seconds) + Double(attoseconds) / 1e18
+        // Une connexion lente ou muette n'occupe pas le serveur indéfiniment.
+        queue.asyncAfter(deadline: .now() + delay) { [self] in
+            guard phase == .receiving else { return }
+            reject(RESTAPIAccessPolicy.timedOut)
+        }
         receive()
     }
 
     private func receive() {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 1_048_576) { [self] data, _, isComplete, error in
+            guard phase == .receiving else { return }
             if let data, data.isEmpty == false {
                 buffer.append(data)
             }
 
             if let error {
-                send(RESTAPIResponse.error(statusCode: 400, code: "connection_error", message: error.localizedDescription))
+                reject(.init(statusCode: 400, code: "connection_error", message: error.localizedDescription))
                 return
             }
 
-            if requestIsComplete(buffer) || isComplete {
+            guard buffer.count <= RESTAPIAccessPolicy.maxRequestBytes else {
+                reject(RESTAPIAccessPolicy.tooLarge)
+                return
+            }
+
+            guard let request = HTTPRequest(data: buffer) else {
+                if buffer.count > RESTAPIAccessPolicy.maxHeaderBytes {
+                    reject(.init(statusCode: 431, code: "headers_too_large", message: "En-têtes HTTP trop volumineux."))
+                } else if isComplete {
+                    reject(.init(statusCode: 400, code: "bad_request", message: "Requête HTTP invalide."))
+                } else {
+                    receive()
+                }
+                return
+            }
+
+            if let rejection = RESTAPIAccessPolicy.rejection(headers: request.headers) {
+                reject(rejection)
+                return
+            }
+
+            if request.body.count >= request.contentLength || isComplete {
+                phase = .processing
                 Task { @MainActor in
                     guard let store = self.store else {
-                        self.send(RESTAPIResponse.error(statusCode: 503, code: "store_unavailable", message: "Store indisponible."))
+                        self.finish(RESTAPIResponse.error(statusCode: 503, code: "store_unavailable", message: "Store indisponible."))
                         return
                     }
                     let response = RESTAPIRequestRouter.response(
-                        for: self.buffer,
+                        for: request,
                         store: store,
                         service: self.service
                     )
-                    self.send(response)
+                    self.finish(response)
                 }
             } else {
                 receive()
@@ -189,15 +228,20 @@ private final class RESTAPIConnection: @unchecked Sendable {
         }
     }
 
-    private func send(_ response: RESTAPIResponse) {
-        connection.send(content: response.rawData, completion: .contentProcessed { [connection] _ in
-            connection.cancel()
-        })
+    /// Appelé sur `queue`.
+    private func reject(_ rejection: RESTAPIAccessPolicy.Rejection) {
+        phase = .processing
+        finish(.error(statusCode: rejection.statusCode, code: rejection.code, message: rejection.message))
     }
 
-    private func requestIsComplete(_ data: Data) -> Bool {
-        guard let request = HTTPRequest(data: data) else { return false }
-        return request.body.count >= request.contentLength
+    private func finish(_ response: RESTAPIResponse) {
+        queue.async { [self] in
+            guard phase != .finished else { return }
+            phase = .finished
+            connection.send(content: response.rawData, completion: .contentProcessed { [connection] _ in
+                connection.cancel()
+            })
+        }
     }
 }
 
@@ -254,18 +298,26 @@ private struct HTTPRequest {
 private struct RESTAPIResponse {
     let statusCode: Int
     let body: Data
+    /// Origine locale déjà validée, renvoyée telle quelle ; jamais de joker `*`.
+    var allowedOrigin: String?
 
     var rawData: Data {
         var payload = Data()
         let statusLine = "HTTP/1.1 \(statusCode) \(Self.reasonPhrase(for: statusCode))\r\n"
-        let headers = [
+        var headerLines = [
             "Content-Type: application/json; charset=utf-8",
             "Content-Length: \(body.count)",
             "Connection: close",
-            "Access-Control-Allow-Origin: *",
-            "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers: Content-Type"
-        ].joined(separator: "\r\n")
+            "Vary: Origin"
+        ]
+        if let allowedOrigin {
+            headerLines += [
+                "Access-Control-Allow-Origin: \(allowedOrigin)",
+                "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers: Content-Type"
+            ]
+        }
+        let headers = headerLines.joined(separator: "\r\n")
         payload.append(Data(statusLine.utf8))
         payload.append(Data(headers.utf8))
         payload.append(Data("\r\n\r\n".utf8))
@@ -295,9 +347,13 @@ private struct RESTAPIResponse {
         case 201: "Created"
         case 204: "No Content"
         case 400: "Bad Request"
+        case 403: "Forbidden"
         case 404: "Not Found"
         case 405: "Method Not Allowed"
+        case 408: "Request Timeout"
         case 409: "Conflict"
+        case 413: "Content Too Large"
+        case 431: "Request Header Fields Too Large"
         case 500: "Internal Server Error"
         case 503: "Service Unavailable"
         default: "OK"
@@ -309,11 +365,14 @@ private struct RESTAPIResponse {
 private enum RESTAPIRequestRouter {
     private static let decoder = SamouraiPersistence.makeDecoder()
 
-    static func response(for data: Data, store: SamouraiStore, service: RESTAPIService?) -> RESTAPIResponse {
-        guard let request = HTTPRequest(data: data) else {
-            return RESTAPIResponse.error(statusCode: 400, code: "bad_request", message: "Requête HTTP invalide.")
-        }
+    /// La requête a déjà passé `RESTAPIAccessPolicy` : son éventuelle origine est locale.
+    static func response(for request: HTTPRequest, store: SamouraiStore, service: RESTAPIService?) -> RESTAPIResponse {
+        var response = routedResponse(for: request, store: store, service: service)
+        response.allowedOrigin = request.headers["origin"]
+        return response
+    }
 
+    private static func routedResponse(for request: HTTPRequest, store: SamouraiStore, service: RESTAPIService?) -> RESTAPIResponse {
         if request.method == "OPTIONS" {
             return .empty(statusCode: 204)
         }

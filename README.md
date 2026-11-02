@@ -135,6 +135,24 @@ swift build
 swift run SamouraiProjectManager
 ```
 
+## Tests
+
+Les sources, commandes et comptes rendus sont regroupés dans [tests/](tests/README.md). Les [directives du dépôt](AGENTS.md) imposent de documenter les exécutions, leurs preuves et leurs limites pour chaque correction.
+
+```bash
+swift test
+```
+
+Les tests de chargement vérifient le rejet des identifiants dupliqués, la conservation du fichier original et la normalisation des références orphelines. Ils utilisent des dossiers temporaires indépendants des données utilisateur.
+
+Chaque pull request et chaque mise à jour de `main` déclenchent trois checks GitHub Actions :
+
+- **Tests de non-régression** : `swift test --parallel`, dont les tests de chargement.
+- **Import Merlin** : compilation et exécution du smoke test XML existant.
+- **Compilation Release** : compilation complète du produit en mode release.
+
+Ces checks s'exécutent sur macOS 15 avec Xcode 26.2. Leur échec reste visible dans l'onglet **Checks** de la pull request.
+
 ## Générer une application `.app`
 
 ```bash

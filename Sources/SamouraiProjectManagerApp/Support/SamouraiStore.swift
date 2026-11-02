@@ -279,6 +279,13 @@ actor SamouraiPersistence {
 
     private let fileManager = FileManager.default
     private let backupRetentionCount = 120
+    nonisolated let fileURL: URL
+    private let migrationSourceURL: URL?
+
+    init(fileURL: URL = SamouraiPersistence.primaryFileURL, migrationSourceURL: URL? = SamouraiPersistence.legacyFileURL) {
+        self.fileURL = fileURL
+        self.migrationSourceURL = migrationSourceURL
+    }
 
     nonisolated static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
@@ -316,8 +323,7 @@ actor SamouraiPersistence {
 
     /// Sauvegarde synchrone utilisée à la fermeture de l'application pour garantir
     /// l'écriture complète des données avant la terminaison du processus.
-    nonisolated static func saveSynchronously(_ database: SamouraiDatabase) throws {
-        let url = primaryFileURL
+    nonisolated static func saveSynchronously(_ database: SamouraiDatabase, to url: URL = primaryFileURL) throws {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -328,8 +334,6 @@ actor SamouraiPersistence {
 
     private let encoder: JSONEncoder = SamouraiPersistence.makeEncoder()
     private let decoder: JSONDecoder = SamouraiPersistence.makeDecoder()
-
-    private var fileURL: URL { Self.primaryFileURL }
 
     private var backupDirectoryURL: URL {
         fileURL
@@ -375,8 +379,8 @@ actor SamouraiPersistence {
     }
 
     private func migrateLegacyFileIfNeeded(to destinationURL: URL) {
-        let legacyURL = Self.legacyFileURL
-        guard fileManager.fileExists(atPath: legacyURL.path()) else { return }
+        guard let legacyURL = migrationSourceURL,
+              fileManager.fileExists(atPath: legacyURL.path()) else { return }
         do {
             try fileManager.createDirectory(
                 at: destinationURL.deletingLastPathComponent(),
@@ -455,7 +459,7 @@ actor SamouraiPersistence {
 @MainActor
 @Observable
 final class SamouraiStore {
-    private let persistence = SamouraiPersistence()
+    private let persistence: SamouraiPersistence
     private let backupEncoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -486,7 +490,8 @@ final class SamouraiStore {
     private var isPersistenceEnabled = false
     var lastErrorMessage: String?
 
-    init() {
+    init(persistence: SamouraiPersistence = SamouraiPersistence()) {
+        self.persistence = persistence
         // Le store vit toute la durée de l'application ; l'observateur est libéré
         // implicitement à la fin du processus, pas besoin de le conserver pour `removeObserver`.
         NotificationCenter.default.addObserver(
@@ -505,7 +510,7 @@ final class SamouraiStore {
     func flushSynchronously() {
         guard hasLoaded, isPersistenceEnabled else { return }
         do {
-            try SamouraiPersistence.saveSynchronously(makeDatabase())
+            try SamouraiPersistence.saveSynchronously(makeDatabase(), to: persistence.fileURL)
         } catch {
             lastErrorMessage = "Sauvegarde finale impossible : \(error.localizedDescription)"
         }
@@ -576,13 +581,14 @@ final class SamouraiStore {
 
         do {
             let loadResult = try await persistence.load()
-            isPersistenceEnabled = true
+            let database = loadResult.database
+            // Un doublon est une erreur récupérable, avant toute publication ou indexation.
+            try database.validateUniqueIdentifiers()
 
             if loadResult.structureWarnings.isEmpty == false {
                 printDataStructureWarning(loadResult.structureWarnings)
             }
 
-            let database = loadResult.database
             projects = sortProjects(database.projects)
             resources = sortResources(sanitizeResourceAssignments(database.resources, projectIDs: Set(projects.map(\.id))))
             unassignedRisks = sortStandaloneRisks(database.unassignedRisks)
@@ -617,6 +623,7 @@ final class SamouraiStore {
             governanceReports = sortGovernanceReports(
                 sanitizeGovernanceReports(database.governanceReports, projectIDs: Set(projects.map(\.id)))
             )
+            isPersistenceEnabled = true
         } catch {
             isPersistenceEnabled = false
             let message = "Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : \(error.localizedDescription)"
@@ -4187,38 +4194,9 @@ final class SamouraiStore {
     }
 
     private func validatedDatabase(from database: SamouraiDatabase) throws -> SamouraiDatabase {
+        try database.validateUniqueIdentifiers()
+
         let projectIDs = database.projects.map(\.id)
-        guard Set(projectIDs).count == projectIDs.count else {
-            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs projets dupliqués."))
-        }
-
-        let resourceIDs = database.resources.map(\.id)
-        guard Set(resourceIDs).count == resourceIDs.count else {
-            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs ressources dupliqués."))
-        }
-
-        let projectRiskIDs = database.projects.flatMap(\.risks).map(\.id)
-        let orphanRiskIDs = database.unassignedRisks.map(\.id)
-        let allRiskIDs = projectRiskIDs + orphanRiskIDs
-        guard Set(allRiskIDs).count == allRiskIDs.count else {
-            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs risques dupliqués."))
-        }
-
-        let eventIDs = database.events.map(\.id)
-        guard Set(eventIDs).count == eventIDs.count else {
-            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs événements dupliqués."))
-        }
-
-        let actionIDs = database.actions.map(\.id)
-        guard Set(actionIDs).count == actionIDs.count else {
-            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs actions dupliqués."))
-        }
-
-        let activityIDs = database.activities.map(\.id)
-        guard Set(activityIDs).count == activityIDs.count else {
-            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs activités dupliqués."))
-        }
-
         let validProjectIDs = Set(projectIDs)
         let invalidActivityProjects = database.activities.contains { validProjectIDs.contains($0.projectID) == false }
         guard invalidActivityProjects == false else {
@@ -4233,16 +4211,6 @@ final class SamouraiStore {
         }
         guard invalidActionActivityLink == false else {
             throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("Lien action-activité invalide."))
-        }
-
-        let meetingIDs = database.meetings.map(\.id)
-        guard Set(meetingIDs).count == meetingIDs.count else {
-            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs réunions dupliqués."))
-        }
-
-        let decisionIDs = database.decisions.map(\.id)
-        guard Set(decisionIDs).count == decisionIDs.count else {
-            throw SamouraiBackupError.invalidPayload(AppLocalizer.localized("IDs décisions dupliqués."))
         }
 
         return database

@@ -24,7 +24,7 @@
 swift run SamouraiProjectManager  # Via SPM directement
 ```
 
-> Aucun test target ni linter configuré pour l'instant.
+> Tests : `swift test --parallel`. Sources et comptes rendus : `tests/`. Suivre les consignes de validation et de documentation dans [AGENTS.md](AGENTS.md) et [tests/README.md](tests/README.md). Aucun linter configuré pour l'instant.
 
 ---
 

@@ -1,0 +1,26 @@
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite StoreLoadingTests started.
+◇ Test restorationAndAPIAlsoRejectDuplicateNestedIdentifiers() started.
+◇ Test validDatabaseStillLoadsAndNormalizesOrphanReferences() started.
+◇ Test rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test validDatabaseCanBeSavedToItsInjectedLocation() started.
+◇ Test case passing 1 argument kind → .activities to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .projects to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .resources to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .deliverables to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test case passing 1 argument kind → .sharedRisk to rejectsDuplicateIdentifiersBeforePublishing(_:) started.
+◇ Test distinctDeliverablesMayHaveTheSameTitle() started.
+✔ Test validDatabaseStillLoadsAndNormalizesOrphanReferences() passed after 0.034 seconds.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs activités dupliqués.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs projets dupliqués.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs ressources dupliqués.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs livrables dupliqués.
+Samourai Project Manager - Changement de structure de données détecté : le fichier existant n'est pas conforme au modèle actuel. Les données existantes sont conservées et aucune sauvegarde automatique ne sera effectuée. Détail : Sauvegarde corrompue : IDs risques dupliqués.
+✔ Test rejectsDuplicateIdentifiersBeforePublishing(_:) with 5 test cases passed after 0.036 seconds.
+✔ Test validDatabaseCanBeSavedToItsInjectedLocation() passed after 0.042 seconds.
+✔ Test distinctDeliverablesMayHaveTheSameTitle() passed after 0.043 seconds.
+✔ Test restorationAndAPIAlsoRejectDuplicateNestedIdentifiers() passed after 0.043 seconds.
+✔ Suite StoreLoadingTests passed after 0.043 seconds.
+✔ Test run with 5 tests in 1 suite passed after 0.043 seconds.

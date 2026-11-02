@@ -846,3 +846,7 @@
 "Date d'action cible modifiée : %@ → %@" = "Target action date changed: %@ → %@";
 "Change Request passée à %@." = "Change Request moved to %@.";
 "Arborescence" = "Tree";
+
+"IDs livrables dupliqués." = "Duplicate deliverable IDs.";
+
+"IDs rapports dupliqués." = "Duplicate report IDs.";

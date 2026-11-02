@@ -166,17 +166,21 @@ struct MerlinBackgroundImportTests {
 
 
 /// A MainActor callback must reply while the parsing worker waits. Moving the
-/// parser onto MainActor prevents that reply; timeout is a deadlock guard, not
-/// an assertion about the scheduling time of unrelated parallel tests.
+/// parser onto MainActor is detected before waiting, so unrelated MainActor
+/// work cannot turn a scheduling delay into a false failure.
 private final class ResponsivenessProbe: Sendable {
     let responded = Mutex<Bool>(false)
     var reporter: ImportProgressReporter {
         ImportProgressReporter(setStage: { [self] stage in
             guard stage == .parsing else { return }
+            // A synchronous callback on MainActor cannot wait for itself. Detect
+            // that regression directly, then let a background worker await the
+            // reply without imposing a speed limit on unrelated parallel tests.
+            guard pthread_main_np() == 0 else { return }
             let signal = DispatchSemaphore(value: 0)
             Task { @MainActor in signal.signal() }
-            let replied = signal.wait(timeout: .now() + 5) == .success
-            responded.withLock { $0 = replied }
+            signal.wait()
+            responded.withLock { $0 = true }
         }, setTotal: { _ in }, setProcessed: { _ in }, setImported: { _ in })
     }
 }

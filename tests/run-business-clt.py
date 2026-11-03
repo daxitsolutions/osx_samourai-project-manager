@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess,sys,os
 checkout=Path(__file__).resolve().parent.parent;run=Path(sys.argv[1]).resolve();os.chdir(checkout)
 root=run/'Sources';root.mkdir(parents=True,exist_ok=True)
-names='ActionModels ActivityIndex ActivityModels AppLocalization DecisionModels DeliverableModels EventModels GovernanceModels ImportProgressTracker MeetingModels MerlinProjectImportService ProjectModels RESTAPIModels ResourceImportService ResourceModels ResourceStore+Analytics ResourceStore+CRUD ResourceStore+Import ResourceStore+ImportReviewHelpers ResourceStore RiskImportService RiskModels SamouraiColorTheme SamouraiDatabase+Validation SamouraiModels SamouraiPersistence+Recovery SamouraiStore+Recovery SamouraiStore ScopeModels SharedTypes TestingModels'.split()
+names='ActionModels ActivityIndex ActivityModels AppLocalization DecisionModels DeliverableModels EventModels GovernanceModels ImportProgressTracker MeetingModels MerlinProjectImportService ProjectModels RESTAPIModels ResourceImportService ResourceModels ResourceStore+Analytics ResourceStore+CRUD ResourceStore+Import ResourceStore+ImportReviewHelpers ResourceStore RiskImportService RiskModels SamouraiColorTheme SamouraiDatabase+Validation SamouraiModels SamouraiPersistence SamouraiPersistence+Recovery SamouraiStore+Recovery SamouraiStore ScopeModels SharedTypes TestingModels'.split()
 if (checkout/'Sources/SamouraiProjectManagerApp/Support/SamouraiBackup+Decoding.swift').exists():names.append('SamouraiBackup+Decoding')
 for name in names:
  source=next(Path('Sources').rglob(name+'.swift'));body=source.read_text()

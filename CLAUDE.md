@@ -61,6 +61,7 @@ coordinator_responsibilities=instantiate_substores,persistence_json,backup_resto
 view_access_pattern=views_use_store_facade_only
 
 [store_architecture_current]
+persistence=Support/SamouraiPersistence.swift
 coordinator=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/SamouraiProjectManagerApp/Support/SamouraiStore.swift
 resource_substore_main=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/SamouraiProjectManagerApp/Support/Stores/ResourceStore.swift
 resource_substore_crud=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/SamouraiProjectManagerApp/Support/Stores/ResourceStore+CRUD.swift
@@ -78,6 +79,8 @@ app_dir=Views/App
 app_files=AppShellView.swift,BackupWorkspaceView.swift,ConfigurationWorkspaceView.swift
 
 [views_architecture_current]
+resource_import_review=Views/Resources/ResourceImportReviewSheet.swift
+resource_profiling_cards=Views/Resources/ResourceProfilingCards.swift
 resource_workspace=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/SamouraiProjectManagerApp/Views/Resources/ResourceWorkspaceView.swift
 resource_editor_sheet=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/SamouraiProjectManagerApp/Views/Resources/ResourceEditorSheet.swift
 project_detail=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/SamouraiProjectManagerApp/Views/Projects/ProjectDetailView.swift
@@ -87,7 +90,7 @@ project_dropdowns=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sourc
 app_shell=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/SamouraiProjectManagerApp/Views/AppShellView.swift
 backup_workspace=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/SamouraiProjectManagerApp/Views/App/BackupWorkspaceView.swift
 configuration_workspace=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/SamouraiProjectManagerApp/Views/App/ConfigurationWorkspaceView.swift
-pending_view_splits=ResourceImportReviewSheet,ResourceProfilingCards
+pending_view_splits=none_for_resources_autonomous_views
 
 [dependency_rules]
 Views_to_Store=SamouraiStore_facade_only
@@ -113,7 +116,7 @@ resource_crud=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/S
 step_1=extract_ResourceEditorSheet_done
 step_2=extract_ProjectActivityEditorSheet_and_ProjectTimelineView_done
 step_3=create_ResourceStore_and_delegate_from_SamouraiStore_done
-step_4=extract_remaining_resource_view_components_pending
+step_4=extract_remaining_resource_view_components_done
 step_5=introduce_ProjectStore_pending
 step_6=introduce_ActivityStore_pending
 step_7=introduce_RiskStore_pending

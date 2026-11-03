@@ -10,6 +10,7 @@ struct ConfigurationWorkspaceView: View {
     let primaryProjectName: String?
 
     @State private var isShowingDeleteConfirmation = false
+    @State private var demoFeedbackMessage: String?
     @State private var selectedTableID: AppTableID = .actions
     @State private var restAPIPortText = String(AppState.defaultRESTAPIPort)
 
@@ -221,6 +222,24 @@ struct ConfigurationWorkspaceView: View {
                 }
 
                 SamouraiSectionCard(
+                    title: "Données de démonstration",
+                    subtitle: "Le premier lancement reste vide. Charge les exemples uniquement dans une base vide."
+                ) {
+                    Button {
+                        do {
+                            try store.loadDemoData()
+                            demoFeedbackMessage = localized("Données de démonstration chargées.")
+                        } catch {
+                            demoFeedbackMessage = error.localizedDescription
+                        }
+                    } label: {
+                        Label(localized("Charger des données de démonstration"), systemImage: "tray.and.arrow.down")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!store.canLoadDemoData)
+                }
+
+                SamouraiSectionCard(
                     title: "Données",
                     subtitle: "Suppression irréversible de l'ensemble des données de l'instance."
                 ) {
@@ -235,6 +254,14 @@ struct ConfigurationWorkspaceView: View {
             .padding(SamouraiLayout.pagePadding)
         }
         .scrollIndicators(.visible)
+        .alert(localized("Données de démonstration"), isPresented: Binding(
+            get: { demoFeedbackMessage != nil },
+            set: { if !$0 { demoFeedbackMessage = nil } }
+        )) {
+            Button(localized("OK"), role: .cancel) { demoFeedbackMessage = nil }
+        } message: {
+            Text(demoFeedbackMessage ?? "")
+        }
         .confirmationDialog(
             localized("Supprimer toutes les données ?"),
             isPresented: $isShowingDeleteConfirmation,

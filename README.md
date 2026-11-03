@@ -105,7 +105,7 @@ L'application s'appuie sur :
 ### Prérequis
 
 - macOS 15 ou plus récent
-- Xcode ou une toolchain Swift 6.2 installée
+- Xcode (Swift 6.2 ou plus) installé et sa licence acceptée (`sudo xcodebuild -license`). Les Command Line Tools seuls ne suffisent pas : ils ne fournissent pas les macros SwiftUI. `run.sh` et `package.sh` utilisent Xcode automatiquement même si `xcode-select` pointe vers les Command Line Tools.
 
 ### Lancement recommandé
 
@@ -195,13 +195,24 @@ Notes utiles :
 
 ## Données de démonstration
 
-Lors du premier lancement sur une base vide, l'application initialise automatiquement :
+Le premier lancement démarre sur une base vide. Pour explorer les exemples, ouvre **Configuration → Données de démonstration → Charger des données de démonstration**. Cette action ajoute 2 projets avec leurs risques et livrables, et 3 ressources liées aux projets.
 
-- 2 projets de démonstration
-- plusieurs risques et livrables associés
-- 3 ressources exemple
+Le bouton est disponible uniquement après chargement réussi d'une base entièrement vide. Une base existante, même avec seulement des ressources ou des événements, n'est jamais remplacée ; un second clic est refusé par le store. Les exemples suivent la sauvegarde normale et restent présents au redémarrage. La factory `SamouraiSeedFactory` est utilisée par cette action et par les tests.
 
-Cela permet de prendre l'outil en main immédiatement.
+## API REST locale
+
+Dans **Configuration → API REST**, active le serveur et choisis un port entre 1024 et 65535 (8080 par défaut). L'API est désactivée par défaut ; le choix est mémorisé. Elle écoute uniquement sur `127.0.0.1`, sans authentification : les autres applications du même Mac peuvent y accéder. Aucun accès réseau distant n'est exposé. Les origines de pages web non locales sont refusées ; les origines locales et les clients sans `Origin` sont autorisés.
+
+L'entrée `http://127.0.0.1:8080/api` décrit les collections ; `/api/status` donne le statut. Les entrées/sorties sont en JSON (`Content-Type: application/json`). Adapte le port aux préférences :
+
+```bash
+curl http://127.0.0.1:8080/api/status
+curl http://127.0.0.1:8080/api/projects
+```
+
+Les collections `/api/projects`, `/api/resources` (alias `/api/resource-directory`), `/api/activities`, `/api/events`, `/api/actions` (alias `/api/pmactions`), `/api/meetings`, `/api/decisions`, `/api/risks` et `/api/deliverables` acceptent `GET` pour la liste et `POST` pour créer un objet. Sur `/<uuid>`, `GET` lit, `PUT` remplace et `DELETE` supprime l'objet. Les corps utilisent les champs des modèles Swift Codable ; `/api` liste les chemins disponibles. Pour les périmètres, `GET`/`POST` utilisent `/api/scope-in` ou `/api/scope-out` ; `PUT`/`DELETE` utilisent `/{projectID}/{index}` (index entier).
+
+`GET /api/database` exporte la base complète ; `PUT /api/database` la remplace après validation et normalisation. Cette dernière opération remplace les données courantes : effectuer une sauvegarde préalable via Sauvegardes. Les mutations sont bloquées pendant un chargement ou une récupération en échec. L'API utilise le même store et la même persistance que l'interface ; elle ne constitue pas un serveur multi-utilisateur.
 
 ## Formats gérés
 

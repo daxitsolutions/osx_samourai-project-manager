@@ -726,6 +726,14 @@
 "Chef de Projet" = "Project Manager";
 "Choisissez un projet" = "Choose a project";
 "Cockpit portefeuille" = "Portfolio cockpit";
+"Portefeuille" = "Portfolio";
+"Pilotage du portefeuille" = "Portfolio steering";
+"Pilotage du projet" = "Project steering";
+"Signaux, tensions et échéances du projet actif." = "Signals, tensions and deadlines of the active project.";
+"Signaux, tensions et échéances de tous les projets." = "Signals, tensions and deadlines across all projects.";
+"Santé du projet" = "Project health";
+"Cible : %@" = "Target: %@";
+"Projet suivi" = "Tracked project";
 "Creee le" = "Created on";
 "Création de la décision" = "Decision created";
 "Crée un livrable principal puis ses sous-livrables par phase." = "Create a main deliverable then its sub-deliverables by phase.";
@@ -888,3 +896,13 @@
 "Statut du risque" = "Risk status";
 
 "Doublon de la ligne %d : les valeurs sont cumulées dans l'ordre du fichier." = "Duplicate of row %d: values are combined in file order.";
+
+"Données de démonstration" = "Demo data";
+
+"Le premier lancement reste vide. Charge les exemples uniquement dans une base vide." = "The first launch starts empty. Load examples only into an empty database.";
+
+"Charger des données de démonstration" = "Load demo data";
+
+"Données de démonstration chargées." = "Demo data loaded.";
+
+"Les données de démonstration nécessitent une base vide." = "Demo data requires an empty database.";

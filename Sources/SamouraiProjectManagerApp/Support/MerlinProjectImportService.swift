@@ -137,22 +137,35 @@ enum MerlinProjectImportError: LocalizedError {
 }
 
 enum MerlinProjectImportService {
+    /// Lecture et analyse hors du MainActor (#55). Appel structuré : l'annulation
+    /// de la tâche appelante est vue par les `Task.checkCancellation()` du parsing.
+    @concurrent
+    static func importProjectInBackground(from fileURL: URL, reporter: ImportProgressReporter = .noop) async throws -> MerlinProjectImportPayload {
+        try importProject(from: fileURL, reporter: reporter)
+    }
+
     static func importProject(from fileURL: URL, reporter: ImportProgressReporter = .noop) throws -> MerlinProjectImportPayload {
         let normalizedExtension = fileURL.pathExtension.lowercased()
-        if normalizedExtension == "mproject" || fileURL.hasDirectoryPath {
+        if normalizedExtension != "mprojectx", normalizedExtension == "mproject" || fileURL.hasDirectoryPath {
             return try importNativeProject(from: fileURL, reporter: reporter)
         }
 
-        guard normalizedExtension == "xml" else {
+        guard normalizedExtension == "xml" || normalizedExtension == "mprojectx" else {
             throw MerlinProjectImportError.unsupportedFileType
         }
 
         reporter.setStage(.reading)
-        let data = try Data(contentsOf: fileURL)
+        // Merlin XML exports are packages containing content.xml, unlike native state.sql packages.
+        let xmlURL = normalizedExtension == "mprojectx" ? fileURL.appending(path: "content.xml") : fileURL
+        if normalizedExtension == "mprojectx", !FileManager.default.fileExists(atPath: xmlURL.path) {
+            throw MerlinProjectImportError.invalidXML("le paquet Merlin XML ne contient pas content.xml.")
+        }
+        let data = try Data(contentsOf: xmlURL)
         guard data.isEmpty == false else {
             throw MerlinProjectImportError.invalidXML("le fichier est vide.")
         }
 
+        try Task.checkCancellation()
         reporter.setStage(.parsing)
         let document: XMLDocument
         do {
@@ -165,6 +178,7 @@ enum MerlinProjectImportService {
             throw MerlinProjectImportError.invalidXML("la racine attendue est Project.")
         }
 
+        try Task.checkCancellation()
         reporter.setStage(.analyzing)
         let payload = try parse(root: root)
         reporter.setTotal(payload.resources.count + payload.activities.count + payload.dependencies.count + payload.calendars.count + payload.customAttributes.count)
@@ -174,8 +188,10 @@ enum MerlinProjectImportService {
 
     static var allowedContentTypes: [UTType] {
         var types: [UTType] = [.xml, .folder, .package]
-        if let mprojectType = UTType(filenameExtension: "mproject") {
-            types.append(mprojectType)
+        for fileExtension in ["mproject", "mprojectx"] {
+            if let type = UTType(filenameExtension: fileExtension) {
+                types.append(type)
+            }
         }
         return types
     }
@@ -189,6 +205,7 @@ enum MerlinProjectImportService {
             throw MerlinProjectImportError.invalidXML("le paquet Merlin ne contient pas state.sql.")
         }
 
+        try Task.checkCancellation()
         reporter.setStage(.parsing)
         let database = try MerlinSQLiteDatabase(url: stateURL)
         defer { database.close() }
@@ -230,6 +247,7 @@ enum MerlinProjectImportService {
 
         var activities: [MerlinActivityRecord] = []
         for (index, element) in rootChildren.filter({ $0.localElementName == "Activity" }).enumerated() {
+            try Task.checkCancellation()
             parseActivity(element, parentID: nil, depth: 0, displayOrder: index, into: &activities)
         }
 
@@ -345,6 +363,7 @@ enum MerlinProjectImportService {
             order by ZORDERINPARENTACTIVITY, Z_PK
             """
         )
+        try Task.checkCancellation()
         let activityRows = scheduleRows.filter { $0.int("Z_ENT") == 45 }
         let assignmentRows = scheduleRows.filter { $0.int("Z_ENT") == 47 }
         let activityPKs = Set(activityRows.compactMap { $0.int("Z_PK") })

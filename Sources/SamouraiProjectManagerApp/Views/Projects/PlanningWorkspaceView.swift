@@ -406,10 +406,11 @@ struct PlanningWorkspaceView: View {
     }
 
     private func scenarioTreeView(activities: [ProjectActivity]) -> some View {
-        ScrollView {
+        let index = ActivityTreeIndex(activities, milestonesAsRoots: true)
+        return ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(rootActivities(in: activities)) { activity in
-                    treeActivityCard(activity: activity, allActivities: activities, depth: 0)
+                ForEach(index.roots) { activity in
+                    treeActivityCard(activity: activity, index: index, depth: 0)
                 }
             }
             .padding(16)
@@ -709,10 +710,8 @@ struct PlanningWorkspaceView: View {
         )
     }
 
-    private func treeActivityCard(activity: ProjectActivity, allActivities: [ProjectActivity], depth: Int) -> AnyView {
-        let childActivities = allActivities
-            .filter { $0.parentActivityID == activity.id && $0.isMilestone == false }
-            .sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
+    private func treeActivityCard(activity: ProjectActivity, index: ActivityTreeIndex, depth: Int) -> AnyView {
+        let childActivities = index.children(of: activity.id)
 
         let isExpanded = expandedActivityIDs.contains(activity.id)
         let levelColor = activity.hierarchyLevel.tintColor
@@ -791,7 +790,7 @@ struct PlanningWorkspaceView: View {
                 if isExpanded {
                     VStack(spacing: 10) {
                         ForEach(childActivities) { child in
-                            treeActivityCard(activity: child, allActivities: allActivities, depth: depth + 1)
+                            treeActivityCard(activity: child, index: index, depth: depth + 1)
                         }
                     }
                     .padding(.leading, 14)
@@ -813,12 +812,6 @@ struct PlanningWorkspaceView: View {
                 store.moveActivity(activityID: sourceID, to: targetID)
             }
         )
-    }
-
-    private func rootActivities(in activities: [ProjectActivity]) -> [ProjectActivity] {
-        activities
-            .filter { $0.parentActivityID == nil || $0.isMilestone }
-            .sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
     }
 
     private func ensureProjectSelection() {
@@ -979,39 +972,28 @@ private struct ProjectPlanningTimelineView: View {
         activities.filter { $0.isMilestone }.sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
     }
 
-    private func children(of id: UUID) -> [ProjectActivity] {
-        activities
-            .filter { $0.parentActivityID == id && !$0.isMilestone }
-            .sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
-    }
-
-    private func hasChildren(_ id: UUID) -> Bool {
-        activities.contains { $0.parentActivityID == id && !$0.isMilestone }
-    }
-
     // Flatten tree into ordered visible rows respecting expansion state
     private struct GanttNode: Identifiable {
         let activity: ProjectActivity
         let depth: Int
-        let isParent: Bool
+        let childCount: Int
+        var isParent: Bool { childCount > 0 }
         var id: UUID { activity.id }
     }
 
     private var visibleNodes: [GanttNode] {
         var result: [GanttNode] = []
-        let roots = activities
-            .filter { $0.parentActivityID == nil && !$0.isMilestone }
-            .sorted(by: ProjectActivity.planningDisplayOrderPrecedes)
-        appendNodes(from: roots, depth: 0, into: &result)
+        let index = ActivityTreeIndex(activities)
+        appendNodes(from: index.roots, index: index, depth: 0, into: &result)
         return result
     }
 
-    private func appendNodes(from list: [ProjectActivity], depth: Int, into result: inout [GanttNode]) {
+    private func appendNodes(from list: [ProjectActivity], index: ActivityTreeIndex, depth: Int, into result: inout [GanttNode]) {
         for activity in list {
-            let isParent = hasChildren(activity.id)
-            result.append(GanttNode(activity: activity, depth: depth, isParent: isParent))
-            if isParent && expandedIDs.contains(activity.id) {
-                appendNodes(from: children(of: activity.id), depth: depth + 1, into: &result)
+            let children = index.children(of: activity.id)
+            result.append(GanttNode(activity: activity, depth: depth, childCount: children.count))
+            if !children.isEmpty && expandedIDs.contains(activity.id) {
+                appendNodes(from: children, index: index, depth: depth + 1, into: &result)
             }
         }
     }
@@ -1083,7 +1065,6 @@ private struct ProjectPlanningTimelineView: View {
         let depth = node.depth
         let isParent = node.isParent
         let isExpanded = expandedIDs.contains(activity.id)
-        let childList = children(of: activity.id)
 
         let startRatio = activity.isDateless ? 0.0 : max(0, min(1, activity.estimatedStartDate.timeIntervalSince(minDate) / totalInterval))
         let endRatio = activity.isDateless ? 0.0 : max(0, min(1, activity.estimatedEndDate.timeIntervalSince(minDate) / totalInterval))
@@ -1147,8 +1128,8 @@ private struct ProjectPlanningTimelineView: View {
 
             if isParent {
                 Button(isExpanded
-                    ? localized("- masquer les activités enfants (\(childList.count))")
-                    : localized("+ voir les activités enfants (\(childList.count))")
+                    ? localized("- masquer les activités enfants (\(node.childCount))")
+                    : localized("+ voir les activités enfants (\(node.childCount))")
                 ) {
                     if isExpanded {
                         expandedIDs.remove(activity.id)
@@ -1709,28 +1690,6 @@ private enum PlanningEditorContext: Identifiable {
     func linkedDeliverableIDs(in store: SamouraiStore) -> [UUID] {
         guard let activity = activity(in: store) else { return [] }
         return activity.linkedDeliverableIDs
-    }
-}
-
-private extension ProjectActivity {
-    static func planningDisplayOrderPrecedes(_ lhs: ProjectActivity, _ rhs: ProjectActivity) -> Bool {
-        if lhs.displayOrder != rhs.displayOrder {
-            return lhs.displayOrder < rhs.displayOrder
-        }
-        if lhs.isDateless != rhs.isDateless {
-            return lhs.isDateless
-        }
-        if lhs.estimatedEndDate != rhs.estimatedEndDate {
-            return lhs.estimatedEndDate < rhs.estimatedEndDate
-        }
-        if lhs.estimatedStartDate != rhs.estimatedStartDate {
-            return lhs.estimatedStartDate < rhs.estimatedStartDate
-        }
-        let titleComparison = lhs.displayTitle.localizedStandardCompare(rhs.displayTitle)
-        if titleComparison != .orderedSame {
-            return titleComparison == .orderedAscending
-        }
-        return lhs.id.uuidString < rhs.id.uuidString
     }
 }
 

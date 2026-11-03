@@ -10,12 +10,13 @@ struct DashboardView: View {
     private let upcomingActionsHorizonInDays = 14
 
     var body: some View {
-        ScrollView {
+        let scope = self.scope
+        return ScrollView {
             VStack(alignment: .leading, spacing: SamouraiLayout.sectionSpacing) {
                 SamouraiPageHeader(
-                    eyebrow: "Pilotage",
-                    title: "Cockpit portefeuille",
-                    subtitle: "Les signaux clés, les arbitrages urgents et les prochains engagements sont regroupés ici pour aider l’utilisateur à décider vite."
+                    eyebrow: scope.eyebrow,
+                    title: scope.title,
+                    subtitle: scope.subtitle
                 ) {
                     HStack(spacing: 10) {
                         Button(localized("Reporting hebdomadaire")) {
@@ -31,17 +32,30 @@ struct DashboardView: View {
                 }
 
                 LazyVGrid(columns: metricsColumns, alignment: .leading, spacing: 16) {
-                    SamouraiMetricTile(
-                        title: "Projets actifs",
-                        value: "\(projects.count)",
-                        subtitle: "\(underTensionProjects) sous surveillance",
-                        systemImage: "square.grid.2x2",
-                        accent: SamouraiColorTheme.color(.brandBlue)
-                    )
+                    if let project = scope.focusedProject {
+                        SamouraiMetricTile(
+                            title: "Santé du projet",
+                            value: localized(project.health.label),
+                            subtitle: appState.localizedFormat(
+                                "Cible : %@",
+                                project.targetDate.formatted(date: .abbreviated, time: .omitted)
+                            ),
+                            systemImage: "heart.text.square",
+                            accent: SamouraiColorTheme.color(project.health.colorToken)
+                        )
+                    } else {
+                        SamouraiMetricTile(
+                            title: "Projets actifs",
+                            value: "\(projects.count)",
+                            subtitle: "\(underTensionProjects) sous surveillance",
+                            systemImage: "square.grid.2x2",
+                            accent: SamouraiColorTheme.color(.brandBlue)
+                        )
+                    }
 
                     SamouraiMetricTile(
                         title: "Risques critiques",
-                        value: "\(criticalRisksCount)",
+                        value: "\(scope.criticalRiskCount)",
                         subtitle: "À arbitrer sans délai",
                         systemImage: "exclamationmark.triangle",
                         accent: SamouraiColorTheme.color(.dangerRed)
@@ -65,7 +79,7 @@ struct DashboardView: View {
                 }
 
                 SamouraiSectionCard(
-                    title: "Projets sous contrôle",
+                    title: scope.projectsSectionTitle,
                     subtitle: "Vue synthétique des initiatives en cours dans le périmètre actif."
                 ) {
                     if projects.isEmpty {
@@ -138,11 +152,12 @@ struct DashboardView: View {
         .samouraiCanvasBackground()
     }
 
+    private var scope: DashboardScope {
+        DashboardScope(store: store, projectID: appState.resolvedPrimaryProjectID(in: store))
+    }
+
     private var projects: [Project] {
-        if let primaryProjectID = appState.resolvedPrimaryProjectID(in: store) {
-            return store.projects.filter { $0.id == primaryProjectID }
-        }
-        return store.projects
+        scope.projects
     }
 
     private var highlightedRisks: [RiskEntry] {
@@ -221,18 +236,11 @@ struct DashboardView: View {
     }
 
     private var scopedRisks: [RiskEntry] {
-        if let primaryProjectID = appState.resolvedPrimaryProjectID(in: store) {
-            return store.risks.filter { $0.projectID == primaryProjectID }
-        }
-        return store.risks
+        scope.risks
     }
 
     private var underTensionProjects: Int {
         projects.filter { $0.health != .green }.count
-    }
-
-    private var criticalRisksCount: Int {
-        projects.flatMap(\.risks).filter { $0.severity == .critical }.count
     }
 
     private var completedDeliverablesCount: Int {

@@ -111,4 +111,14 @@ do {
     expect(error.errorDescription == "Le fichier importé doit être un fichier XML.", "unsupported extension error should be explicit")
 }
 
+let xmlPackage = FileManager.default.temporaryDirectory
+    .appending(path: "samourai-merlin-smoke-\(UUID()).mprojectx", directoryHint: .isDirectory)
+try FileManager.default.createDirectory(at: xmlPackage, withIntermediateDirectories: true)
+defer { try? FileManager.default.removeItem(at: xmlPackage) }
+try FileManager.default.copyItem(at: xmlWithoutProjectID, to: xmlPackage.appending(path: "content.xml"))
+let packagePayload = try MerlinProjectImportService.importProject(from: URL(fileURLWithPath: xmlPackage.path, isDirectory: false))
+expect(packagePayload.project.id == firstPayload.project.id, "XML package should use the same parser and stable identity")
+expect(packagePayload.activities.map(\.id) == firstPayload.activities.map(\.id), "XML package activities should import")
+expect(packagePayload.assignmentCount == 1 && packagePayload.dependencies.count == 1, "XML package relations should import")
+
 print("Merlin import smoke tests passed.")

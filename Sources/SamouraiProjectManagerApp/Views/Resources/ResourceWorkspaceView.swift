@@ -1155,7 +1155,7 @@ struct ResourceWorkspaceView: View {
     private func handleImportSelection(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let fileURL = urls.first else {
             if case .failure(let error) = result {
-                showFeedback("Import des ressources", error.localizedDescription)
+                if !Task.isCancelled { showFeedback("Import des ressources", error.localizedDescription) }
             }
             return
         }
@@ -1173,7 +1173,7 @@ struct ResourceWorkspaceView: View {
                 if didAccessSecurityScope {
                     fileURL.stopAccessingSecurityScopedResource()
                 }
-                isImporting = false
+                if appState.activeImportTracker?.id == tracker.id { isImporting = false }
                 appState.clearImportProgress(tracker)
             }
 
@@ -1196,7 +1196,7 @@ struct ResourceWorkspaceView: View {
             } catch is CancellationError {
                 // annulation silencieuse
             } catch {
-                showFeedback("Import des ressources", error.localizedDescription)
+                if !Task.isCancelled { showFeedback("Import des ressources", error.localizedDescription) }
             }
         }
         tracker.task = task
@@ -1220,7 +1220,7 @@ struct ResourceWorkspaceView: View {
         let currentStore = store
         let task = Task { @MainActor in
             defer {
-                isImporting = false
+                if appState.activeImportTracker?.id == tracker.id { isImporting = false }
                 appState.clearImportProgress(tracker)
             }
 
@@ -1250,7 +1250,7 @@ struct ResourceWorkspaceView: View {
             } catch is CancellationError {
                 // annulation silencieuse
             } catch {
-                showFeedback("Import des ressources", error.localizedDescription)
+                if !Task.isCancelled { showFeedback("Import des ressources", error.localizedDescription) }
             }
         }
         tracker.task = task
@@ -1268,7 +1268,7 @@ struct ResourceWorkspaceView: View {
         let currentStore = store
         let task = Task { @MainActor in
             defer {
-                isImporting = false
+                if appState.activeImportTracker?.id == tracker.id { isImporting = false }
                 appState.clearImportProgress(tracker)
             }
 
@@ -1291,9 +1291,9 @@ struct ResourceWorkspaceView: View {
                 showFeedback("Import des ressources", "Import terminé : \(result.summary)")
                 importReviewItems = []
             } catch is CancellationError {
-                showFeedback("Import des ressources", "Import annulé.")
+                // Cancellation closes the progress UI without reopening an alert after navigation.
             } catch {
-                showFeedback("Import des ressources", error.localizedDescription)
+                if !Task.isCancelled { showFeedback("Import des ressources", error.localizedDescription) }
             }
         }
         tracker.task = task

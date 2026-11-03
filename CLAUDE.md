@@ -79,6 +79,7 @@ app_dir=Views/App
 app_files=AppShellView.swift,BackupWorkspaceView.swift,ConfigurationWorkspaceView.swift
 
 [views_architecture_current]
+resource_workspace_presentation=Views/Resources/ResourceWorkspacePresentation.swift
 resource_import_review=Views/Resources/ResourceImportReviewSheet.swift
 resource_profiling_cards=Views/Resources/ResourceProfilingCards.swift
 resource_workspace=/Users/Dax/Documents/GitHub/osx_samourai-project-manager/Sources/SamouraiProjectManagerApp/Views/Resources/ResourceWorkspaceView.swift

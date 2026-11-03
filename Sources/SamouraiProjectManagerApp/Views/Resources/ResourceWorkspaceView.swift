@@ -15,32 +15,16 @@ struct ResourceWorkspaceView: View {
 
     @AppStorage("resources.displayMode") private var displayModeRawValue = ResourceDisplayMode.grid.rawValue
 
-    @State private var editorContext: ResourceEditorContext?
-    @State private var resourcePendingDeletion: Resource?
-    @State private var resourcesPendingBulkDeletion: [Resource] = []
-    @State private var resourcePendingProjectRemoval: Resource?
-    @State private var isShowingFileImporter = false
-    @State private var isShowingDirectoryPicker = false
-    @State private var importFeedbackMessage: String?
     @State private var isImporting = false
-    @State private var isShowingFileExporter = false
     @State private var exportDocument: ResourceExportDocument?
     @State private var exportFilename = "ressources"
-    @State private var exportFeedbackMessage: String?
+    @State private var presentation = ResourceWorkspacePresentationState()
     @State private var searchText = ""
     @State private var searchCache = ResourceSearchCache()
     @State private var selectedResourceIDs: Set<UUID> = []
     @State private var importReviewItems: [ResourceImportReviewDecision] = []
-    @State private var isShowingImportReview = false
-    @State private var pendingImportDrafts: [ResourceImportDraft]?
-    @State private var isShowingImportConfirmation = false
     @State private var activeImportTask: Task<Void, Never>?
     @State private var inlineDrafts: [UUID: ResourceInlineDraft] = [:]
-    @State private var inlineEditFeedbackMessage: String?
-    @State private var evaluationContext: ResourceEvaluationContext?
-    @State private var evaluationFeedbackMessage: String?
-    @State private var memoPreviewResourceID: UUID?
-    @State private var templateManagementResourceID: UUID?
     @State private var projectFavoriteFilter: ResourceProjectFavoriteFilter = .all
     @State private var sortOrder: [KeyPathComparator<Resource>] = [
         .init(\.fullName, order: .reverse)
@@ -88,7 +72,7 @@ struct ResourceWorkspaceView: View {
                             .disabled(isImporting)
                         } else if canRemoveSelectedResourceFromScopedProject {
                             Button {
-                                resourcePendingProjectRemoval = selectedResource
+                                presentation.show(.removeFromProject(selectedResource))
                             } label: {
                                 Label(localized("Retirer du projet"), systemImage: "minus.circle")
                             }
@@ -97,14 +81,14 @@ struct ResourceWorkspaceView: View {
 
                         if scopeMode == .contextualProject {
                             Button {
-                                memoPreviewResourceID = selectedResource.id
+                                presentation.show(.memo(selectedResource.id))
                             } label: {
                                 Label(localized("Mémo"), systemImage: "doc.text.magnifyingglass")
                             }
                             .disabled(isImporting)
 
                             Button {
-                                evaluationContext = .init(resourceID: selectedResource.id)
+                                presentation.show(.evaluation(selectedResource.id))
                             } label: {
                                 Label(localized("Évaluer"), systemImage: "waveform.path.ecg.rectangle")
                             }
@@ -113,7 +97,7 @@ struct ResourceWorkspaceView: View {
 
                         if scopeMode == .globalDirectory {
                             Button {
-                                templateManagementResourceID = selectedResource.id
+                                presentation.show(.templates(selectedResource.id))
                             } label: {
                                 Label(localized("Ressources liées"), systemImage: "doc.on.doc")
                             }
@@ -123,7 +107,7 @@ struct ResourceWorkspaceView: View {
 
                     if !resourceDeletionTargets.isEmpty {
                         Button {
-                            if let id = resourceEditTargetID { editorContext = .edit(id) }
+                            if let id = resourceEditTargetID { presentation.show(.edit(id)) }
                         } label: {
                             Label(localized("Modifier"), systemImage: "pencil")
                         }
@@ -131,11 +115,7 @@ struct ResourceWorkspaceView: View {
 
                         Button(role: .destructive) {
                             let targets = resourceDeletionTargets
-                            if targets.count <= 1 {
-                                resourcePendingDeletion = targets.first
-                            } else {
-                                resourcesPendingBulkDeletion = targets
-                            }
+                            presentation.show(.delete(targets))
                         } label: {
                             Label(localized("Supprimer"), systemImage: "trash")
                         }
@@ -164,21 +144,21 @@ struct ResourceWorkspaceView: View {
 
                     if scopeMode == .globalDirectory {
                         Button {
-                            isShowingFileImporter = true
+                            presentation.show(.importFile)
                         } label: {
                             Label(localized("Importer"), systemImage: "square.and.arrow.down")
                         }
                         .disabled(isImporting)
 
                         Button {
-                            editorContext = .create
+                            presentation.show(.create)
                         } label: {
                             Label(localized("Nouvelle"), systemImage: "plus")
                         }
                         .disabled(isImporting)
                     } else if scopedProjectID != nil {
                         Button {
-                            isShowingDirectoryPicker = true
+                            presentation.show(.directory)
                         } label: {
                             Label(localized("Ajouter depuis l'annuaire"), systemImage: "person.crop.circle.badge.plus")
                         }
@@ -202,7 +182,7 @@ struct ResourceWorkspaceView: View {
                         ResourceComparativePerformanceCard(
                             snapshots: comparativePerformanceSnapshots,
                             onEvaluate: { resourceID in
-                                evaluationContext = .init(resourceID: resourceID)
+                                presentation.show(.evaluation(resourceID))
                             }
                         )
                         .padding(.horizontal, 16)
@@ -275,201 +255,38 @@ struct ResourceWorkspaceView: View {
         } detail: {
             EmptyView()
         }
-        .sheet(isPresented: Binding(
-            get: { editorContext != nil || evaluationContext != nil },
-            set: { isPresented in
-                if isPresented == false {
-                    editorContext = nil
-                    evaluationContext = nil
-                }
-            }
-        )) {
-            if let context = editorContext {
-                ResourceEditorSheet(resource: context.resource(in: store))
-            } else if let context = evaluationContext {
-                if let resource = store.resource(with: context.resourceID) {
-                    ResourceEvaluationSheet(
-                        resource: resource,
-                        scopedProject: scopedProjectID.flatMap { store.project(with: $0) },
-                        onSave: { payload in
-                            store.addResourceEvaluation(
-                                resourceID: resource.id,
-                                projectID: scopedProjectID,
-                                milestone: payload.milestone,
-                                evaluator: payload.evaluator,
-                                comment: payload.comment,
-                                criterionScores: payload.criterionScores,
-                                evaluatedAt: payload.evaluatedAt
-                            )
-                            evaluationFeedbackMessage = "Évaluation enregistrée pour \(resource.displayName)."
-                        }
-                    )
-                } else {
-                    Text(localized("Ressource introuvable."))
-                        .padding(24)
-                }
-            }
+        .sheet(item: sheetPresentation) { item in
+            resourceSheet(item.destination)
         }
         .fileImporter(
-            isPresented: $isShowingFileImporter,
+            isPresented: presentationBinding(for: .importFile),
             allowedContentTypes: SamouraiImportContentTypes.allowedTypes,
-            allowsMultipleSelection: false
-        ) { result in
-            handleImportSelection(result)
-        }
-        .sheet(isPresented: $isShowingDirectoryPicker) {
-            if let projectID = scopedProjectID {
-                ResourceDirectoryPickerSheet(
-                    projectID: projectID,
-                    projectName: scopedProjectName ?? ""
-                )
-            }
-        }
-        .sheet(isPresented: Binding(
-            get: { templateManagementResourceID != nil },
-            set: { if $0 == false { templateManagementResourceID = nil } }
-        )) {
-            if let tid = templateManagementResourceID, let template = store.resource(with: tid) {
-                ResourceTemplateManagementSheet(
-                    template: template,
-                    onLink: { resourceID in store.assignTemplate(resourceID: resourceID, templateID: tid) },
-                    onUnlink: { resourceID in store.unassignTemplate(resourceID: resourceID) }
-                )
-            }
-        }
-        .sheet(isPresented: Binding(
-            get: { memoPreviewResourceID != nil },
-            set: { if $0 == false { memoPreviewResourceID = nil } }
-        )) {
-            if let resourceID = memoPreviewResourceID, let resource = store.resource(with: resourceID) {
-                ResourceMemoPreviewSheet(resource: resource)
-            } else {
-                Text(localized("Ressource introuvable."))
-                    .padding(24)
-            }
-        }
-        .sheet(isPresented: $isShowingImportReview) {
-            ResourceImportReviewSheet(
-                decisions: $importReviewItems,
-                onCancel: {
-                    importReviewItems = []
-                    isShowingImportReview = false
-                },
-                onApply: {
-                    applyImportReview()
-                }
-            )
-        }
+            allowsMultipleSelection: false,
+            onCompletion: handleImportSelection
+        )
         .fileExporter(
-            isPresented: $isShowingFileExporter,
+            isPresented: presentationBinding(for: .exportFile),
             document: exportDocument,
             contentType: SamouraiExportContentTypes.xlsx,
             defaultFilename: exportFilename
         ) { result in
             switch result {
             case .success:
-                exportFeedbackMessage = "Export terminé avec succès."
+                showFeedback("Export des ressources", "Export terminé avec succès.")
             case .failure(let error):
-                exportFeedbackMessage = error.localizedDescription
+                showFeedback("Export des ressources", error.localizedDescription)
             }
         }
-        .alert(localized("Supprimer la ressource"), isPresented: Binding(
-            get: { resourcePendingDeletion != nil },
-            set: { if $0 == false { resourcePendingDeletion = nil } }
-        )) {
-            Button(localized("Supprimer"), role: .destructive) {
-                if let resource = resourcePendingDeletion {
-                    if appState.selectedResourceID == resource.id {
-                        appState.selectedResourceID = nil
-                    }
-                    selectedResourceIDs.remove(resource.id)
-                    store.deleteResource(resourceID: resource.id)
-                }
-                resourcePendingDeletion = nil
-            }
-            Button(localized("Annuler"), role: .cancel) {
-                resourcePendingDeletion = nil
-            }
-        } message: {
-            Text(localized("Cette action retirera la ressource du référentiel local."))
+        .alert(alertTitle, isPresented: presentationBinding(for: .alert), presenting: presentation.current) { item in
+            resourceAlertActions(item)
+        } message: { item in
+            Text(alertMessage(item.destination))
         }
-        .alert(localized("Supprimer les ressources"), isPresented: Binding(
-            get: { resourcesPendingBulkDeletion.isEmpty == false },
-            set: { if $0 == false { resourcesPendingBulkDeletion = [] } }
-        )) {
-            Button(localized("Supprimer"), role: .destructive) {
-                deleteResources(resourcesPendingBulkDeletion)
-                resourcesPendingBulkDeletion = []
-            }
-            Button(localized("Annuler"), role: .cancel) {
-                resourcesPendingBulkDeletion = []
-            }
-        } message: {
-            Text(appState.localizedFormat(
-                "Voulez-vous vraiment supprimer %d ressources du référentiel local ?",
-                resourcesPendingBulkDeletion.count
-            ))
-        }
-        .alert(localized("Retirer la ressource du projet"), isPresented: Binding(
-            get: { resourcePendingProjectRemoval != nil },
-            set: { if $0 == false { resourcePendingProjectRemoval = nil } }
-        )) {
-            Button(localized("Oui"), role: .destructive) {
-                if let resource = resourcePendingProjectRemoval {
-                    removeResourceFromScopedProject(resource.id)
-                }
-                resourcePendingProjectRemoval = nil
-            }
-            Button(localized("Non"), role: .cancel) {
-                resourcePendingProjectRemoval = nil
-            }
-        } message: {
-            if let resource = resourcePendingProjectRemoval {
-                Text(projectRemovalConfirmationMessage(for: resource))
-            }
-        }
-        .alert(localized("Import des ressources"), isPresented: Binding(
-            get: { importFeedbackMessage != nil },
-            set: { if $0 == false { importFeedbackMessage = nil } }
-        )) {
-            Button(localized("OK"), role: .cancel) {}
-        } message: {
-            Text(importFeedbackMessage ?? "")
-        }
-        .alert(localized("Confirmer l'import"), isPresented: $isShowingImportConfirmation) {
-            Button(localized("Importer")) {
-                proceedWithPendingImport()
-            }
-            Button(localized("Annuler"), role: .cancel) {
-                cancelActiveImport()
-            }
-        } message: {
-            let count = pendingImportDrafts?.count ?? 0
-            Text(String(format: AppLocalizer.localized("%d ligne(s) détectée(s). Le traitement s'effectuera par lots de 10 lignes. Confirmer l'import ?"), count))
-        }
-        .alert(localized("Export des ressources"), isPresented: Binding(
-            get: { exportFeedbackMessage != nil },
-            set: { if $0 == false { exportFeedbackMessage = nil } }
-        )) {
-            Button(localized("OK"), role: .cancel) {}
-        } message: {
-            Text(exportFeedbackMessage ?? "")
-        }
-        .alert(localized("Mise à jour rapide"), isPresented: Binding(
-            get: { inlineEditFeedbackMessage != nil },
-            set: { if $0 == false { inlineEditFeedbackMessage = nil } }
-        )) {
-            Button(localized("OK"), role: .cancel) {}
-        } message: {
-            Text(inlineEditFeedbackMessage ?? "")
-        }
-        .alert(localized("Évaluation des ressources"), isPresented: Binding(
-            get: { evaluationFeedbackMessage != nil },
-            set: { if $0 == false { evaluationFeedbackMessage = nil } }
-        )) {
-            Button(localized("OK"), role: .cancel) {}
-        } message: {
-            Text(evaluationFeedbackMessage ?? "")
+        .onAppear { presentation.activate() }
+        .onDisappear {
+            presentation.deactivate()
+            cancelActiveImport()
+            importReviewItems = []
         }
         .onChange(of: store.resources.map(\.id)) { _, currentResourceIDs in
             let existingIDs = Set(currentResourceIDs)
@@ -479,6 +296,148 @@ struct ResourceWorkspaceView: View {
             if let selectedResourceID = appState.selectedResourceID, existingIDs.contains(selectedResourceID) == false {
                 appState.selectedResourceID = nil
             }
+        }
+    }
+
+    private var sheetPresentation: Binding<ResourceWorkspacePresentation?> {
+        let shown = presentation.presented(for: .sheet)
+        return Binding(
+            get: { presentation.presented(for: .sheet) },
+            set: { value in
+                guard value == nil, let shown, presentation.current?.id == shown.id else { return }
+                if case .review = shown.destination { importReviewItems = [] }
+                presentation.dismiss(id: shown.id)
+            }
+        )
+    }
+
+    private func presentationBinding(for kind: ResourceWorkspacePresentation.Kind) -> Binding<Bool> {
+        let shown = presentation.presented(for: kind)
+        return Binding(
+            get: { presentation.presented(for: kind) != nil },
+            set: { isPresented in
+                if !isPresented, let shown, shown.kind == kind { presentation.dismiss(id: shown.id) }
+            }
+        )
+    }
+
+    private func showFeedback(_ title: String, _ message: String) {
+        presentation.show(.feedback(title: title, message: message))
+    }
+
+    @ViewBuilder
+    private func resourceSheet(_ destination: ResourceWorkspacePresentation.Destination) -> some View {
+        switch destination {
+        case .create:
+            ResourceEditorSheet(resource: nil)
+        case .edit(let id):
+            ResourceEditorSheet(resource: store.resource(with: id))
+        case .evaluation(let id):
+            if let resource = store.resource(with: id) {
+                ResourceEvaluationSheet(
+                    resource: resource,
+                    scopedProject: scopedProjectID.flatMap { store.project(with: $0) },
+                    onSave: { payload in
+                        store.addResourceEvaluation(
+                            resourceID: resource.id,
+                            projectID: scopedProjectID,
+                            milestone: payload.milestone,
+                            evaluator: payload.evaluator,
+                            comment: payload.comment,
+                            criterionScores: payload.criterionScores,
+                            evaluatedAt: payload.evaluatedAt
+                        )
+                        showFeedback("Évaluation des ressources", "Évaluation enregistrée pour \(resource.displayName).")
+                    }
+                )
+            } else {
+                Text(localized("Ressource introuvable.")).padding(24)
+            }
+        case .directory:
+            if let projectID = scopedProjectID {
+                ResourceDirectoryPickerSheet(projectID: projectID, projectName: scopedProjectName ?? "")
+            }
+        case .memo(let id):
+            if let resource = store.resource(with: id) {
+                ResourceMemoPreviewSheet(resource: resource)
+            } else {
+                Text(localized("Ressource introuvable.")).padding(24)
+            }
+        case .templates(let id):
+            if let template = store.resource(with: id) {
+                ResourceTemplateManagementSheet(
+                    template: template,
+                    onLink: { store.assignTemplate(resourceID: $0, templateID: id) },
+                    onUnlink: { store.unassignTemplate(resourceID: $0) }
+                )
+            }
+        case .review:
+            ResourceImportReviewSheet(
+                decisions: $importReviewItems,
+                onCancel: {
+                    importReviewItems = []
+                    presentation.dismissAll()
+                },
+                onApply: applyImportReview
+            )
+        default:
+            EmptyView()
+        }
+    }
+
+    private var alertTitle: String {
+        guard let destination = presentation.current?.destination else { return "" }
+        switch destination {
+        case .delete(let resources):
+            return localized(resources.count <= 1 ? "Supprimer la ressource" : "Supprimer les ressources")
+        case .removeFromProject:
+            return localized("Retirer la ressource du projet")
+        case .confirmImport:
+            return localized("Confirmer l'import")
+        case .feedback(let title, _):
+            return localized(title)
+        default:
+            return ""
+        }
+    }
+
+    private func alertMessage(_ destination: ResourceWorkspacePresentation.Destination) -> String {
+        switch destination {
+        case .delete(let resources):
+            return resources.count <= 1
+                ? localized("Cette action retirera la ressource du référentiel local.")
+                : appState.localizedFormat("Voulez-vous vraiment supprimer %d ressources du référentiel local ?", resources.count)
+        case .removeFromProject(let resource):
+            return projectRemovalConfirmationMessage(for: resource)
+        case .confirmImport(let drafts):
+            return String(format: AppLocalizer.localized("%d ligne(s) détectée(s). Le traitement s'effectuera par lots de 10 lignes. Confirmer l'import ?"), drafts.count)
+        case .feedback(_, let message):
+            return message
+        default:
+            return ""
+        }
+    }
+
+    @ViewBuilder
+    private func resourceAlertActions(_ item: ResourceWorkspacePresentation) -> some View {
+        switch item.destination {
+        case .delete(let resources):
+            Button(localized("Supprimer"), role: .destructive) {
+                deleteResources(resources)
+                presentation.dismiss(id: item.id)
+            }
+            Button(localized("Annuler"), role: .cancel) { presentation.dismiss(id: item.id) }
+        case .removeFromProject(let resource):
+            Button(localized("Oui"), role: .destructive) {
+                removeResourceFromScopedProject(resource.id)
+                presentation.dismiss(id: item.id)
+            }
+            Button(localized("Non"), role: .cancel) { presentation.dismiss(id: item.id) }
+        case .confirmImport(let drafts):
+            Button(localized("Importer")) { proceedWithPendingImport(drafts) }
+            Button(localized("Annuler"), role: .cancel) { cancelActiveImport() }
+        default:
+            Button(localized("OK"), role: .cancel) { presentation.dismiss(id: item.id) }
         }
     }
 
@@ -667,8 +626,8 @@ struct ResourceWorkspaceView: View {
                             onToggleFavorite: canToggleFavorite(resource)
                                 ? ({ toggleFavoriteForScopedProject(resource.id) })
                                 : nil,
-                            onShowMemo: { memoPreviewResourceID = resource.id },
-                            onEdit: { editorContext = .edit(resource.id) }
+                            onShowMemo: { presentation.show(.memo(resource.id)) },
+                            onEdit: { presentation.show(.edit(resource.id)) }
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -676,15 +635,15 @@ struct ResourceWorkspaceView: View {
                         }
                         .contextMenu {
                             Button(localized("Modifier")) {
-                                editorContext = .edit(resource.id)
+                                presentation.show(.edit(resource.id))
                             }
 
                             Button(localized("Consulter le mémo")) {
-                                memoPreviewResourceID = resource.id
+                                presentation.show(.memo(resource.id))
                             }
 
                             Button(localized("Supprimer"), role: .destructive) {
-                                resourcePendingDeletion = resource
+                                presentation.show(.delete([resource]))
                             }
                         }
                     }
@@ -959,7 +918,7 @@ struct ResourceWorkspaceView: View {
                 .contextMenu(forSelectionType: Resource.ID.self) { _ in
                 } primaryAction: { ids in
                     if let id = ids.first {
-                        editorContext = .edit(id)
+                        presentation.show(.edit(id))
                     }
                 }
             }
@@ -1032,13 +991,13 @@ struct ResourceWorkspaceView: View {
 
         let trimmedNom = draft.nom.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedNom.isEmpty == false else {
-            inlineEditFeedbackMessage = "Le nom ne peut pas être vide."
+            showFeedback("Mise à jour rapide", "Le nom ne peut pas être vide.")
             return false
         }
 
         let allocationRaw = draft.allocationPercentText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let allocation = Int(allocationRaw), (0...100).contains(allocation) else {
-            inlineEditFeedbackMessage = "Allocation invalide. Saisis une valeur entière entre 0 et 100."
+            showFeedback("Mise à jour rapide", "Allocation invalide. Saisis une valeur entière entre 0 et 100.")
             return false
         }
 
@@ -1187,16 +1146,16 @@ struct ResourceWorkspaceView: View {
             )
             exportDocument = ResourceExportDocument(data: exportedData)
             exportFilename = defaultFilename
-            isShowingFileExporter = true
+            presentation.show(.exportFile)
         } catch {
-            exportFeedbackMessage = error.localizedDescription
+            showFeedback("Export des ressources", error.localizedDescription)
         }
     }
 
     private func handleImportSelection(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let fileURL = urls.first else {
             if case .failure(let error) = result {
-                importFeedbackMessage = error.localizedDescription
+                if !Task.isCancelled { showFeedback("Import des ressources", error.localizedDescription) }
             }
             return
         }
@@ -1214,7 +1173,7 @@ struct ResourceWorkspaceView: View {
                 if didAccessSecurityScope {
                     fileURL.stopAccessingSecurityScopedResource()
                 }
-                isImporting = false
+                if appState.activeImportTracker?.id == tracker.id { isImporting = false }
                 appState.clearImportProgress(tracker)
             }
 
@@ -1229,16 +1188,15 @@ struct ResourceWorkspaceView: View {
                 try Task.checkCancellation()
 
                 if drafts.isEmpty {
-                    importFeedbackMessage = "Aucune ligne exploitable à importer."
+                    showFeedback("Import des ressources", "Aucune ligne exploitable à importer.")
                     return
                 }
 
-                pendingImportDrafts = drafts
-                isShowingImportConfirmation = true
+                presentation.show(.confirmImport(drafts))
             } catch is CancellationError {
                 // annulation silencieuse
             } catch {
-                importFeedbackMessage = error.localizedDescription
+                if !Task.isCancelled { showFeedback("Import des ressources", error.localizedDescription) }
             }
         }
         tracker.task = task
@@ -1248,13 +1206,12 @@ struct ResourceWorkspaceView: View {
     private func cancelActiveImport() {
         activeImportTask?.cancel()
         activeImportTask = nil
-        pendingImportDrafts = nil
+        presentation.dismissAll()
         isImporting = false
     }
 
-    private func proceedWithPendingImport() {
-        guard let drafts = pendingImportDrafts else { return }
-        pendingImportDrafts = nil
+    private func proceedWithPendingImport(_ drafts: [ResourceImportDraft]) {
+        presentation.dismissAll()
 
         let tracker = ImportProgressTracker(title: "Import des ressources")
         appState.showImportProgress(tracker)
@@ -1263,7 +1220,7 @@ struct ResourceWorkspaceView: View {
         let currentStore = store
         let task = Task { @MainActor in
             defer {
-                isImporting = false
+                if appState.activeImportTracker?.id == tracker.id { isImporting = false }
                 appState.clearImportProgress(tracker)
             }
 
@@ -1277,8 +1234,9 @@ struct ResourceWorkspaceView: View {
                     reporter: reporter
                 )
 
+                try Task.checkCancellation()
                 if reviewItems.isEmpty {
-                    importFeedbackMessage = "Aucune ligne exploitable à importer."
+                    showFeedback("Import des ressources", "Aucune ligne exploitable à importer.")
                     return
                 }
 
@@ -1288,11 +1246,11 @@ struct ResourceWorkspaceView: View {
                         shouldApply: $0.action == .create
                     )
                 }
-                isShowingImportReview = true
+                presentation.show(.review)
             } catch is CancellationError {
                 // annulation silencieuse
             } catch {
-                importFeedbackMessage = error.localizedDescription
+                if !Task.isCancelled { showFeedback("Import des ressources", error.localizedDescription) }
             }
         }
         tracker.task = task
@@ -1301,15 +1259,16 @@ struct ResourceWorkspaceView: View {
 
     private func applyImportReview() {
         let decisions = importReviewItems
+        importReviewItems = []
         let tracker = ImportProgressTracker(title: "Intégration des ressources")
         appState.showImportProgress(tracker)
         isImporting = true
-        isShowingImportReview = false
+        presentation.dismissAll()
 
         let currentStore = store
-        tracker.task = Task { @MainActor in
+        let task = Task { @MainActor in
             defer {
-                isImporting = false
+                if appState.activeImportTracker?.id == tracker.id { isImporting = false }
                 appState.clearImportProgress(tracker)
             }
 
@@ -1323,19 +1282,22 @@ struct ResourceWorkspaceView: View {
                     reporter: reporter
                 )
 
+                try Task.checkCancellation()
                 if let resourceID = result.firstImportedOrUpdatedResourceID {
                     appState.selectedResourceID = resourceID
                     appState.selectedSection = .resources
                 }
 
-                importFeedbackMessage = "Import terminé : \(result.summary)"
+                showFeedback("Import des ressources", "Import terminé : \(result.summary)")
                 importReviewItems = []
             } catch is CancellationError {
-                importFeedbackMessage = "Import annulé."
+                // Cancellation closes the progress UI without reopening an alert after navigation.
             } catch {
-                importFeedbackMessage = error.localizedDescription
+                if !Task.isCancelled { showFeedback("Import des ressources", error.localizedDescription) }
             }
         }
+        tracker.task = task
+        activeImportTask = task
     }
 
     private func localized(_ key: String) -> String {
@@ -1489,35 +1451,6 @@ private enum ResourceTableColumn: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
-}
-
-private enum ResourceEditorContext: Identifiable {
-    case create
-    case edit(UUID)
-
-    var id: String {
-        switch self {
-        case .create:
-            "create"
-        case .edit(let id):
-            "edit-\(id.uuidString)"
-        }
-    }
-
-    @MainActor
-    func resource(in store: SamouraiStore) -> Resource? {
-        switch self {
-        case .create:
-            nil
-        case .edit(let id):
-            store.resource(with: id)
-        }
-    }
-}
-
-private struct ResourceEvaluationContext: Identifiable {
-    let resourceID: UUID
-    var id: UUID { resourceID }
 }
 
 private enum ResourceProjectFavoriteFilter: String, CaseIterable, Identifiable {

@@ -40,6 +40,9 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 | Date | Sujet | Compte rendu |
 |---|---|---|
 | 2026-11-03 | Issue #59 — grille journalière limitée au viewport | [Résultats et limites](reports/2026-11-03-issue-59.md) |
+| 2026-11-03 | Issue #28 — paquet XML Merlin mprojectx | [Résultats et limites](reports/2026-11-03-issue-28.md) |
+| 2026-11-03 | Issue #45 — exemples explicites et documentation REST | [Résultats et limites](reports/2026-11-03-issue-45.md) |
+| 2026-11-03 | Issue #40 — suppression du calcul latent sans appel | [Résultats et limites](reports/2026-11-03-issue-40.md) |
 | 2026-11-02 | Issue #57 — index des activités et enfants du planning | [Résultats et limites](reports/2026-11-02-issue-57.md) |
 | 2026-11-02 | Issue #58 — agrégats de performance des ressources | [Résultats et limites](reports/2026-11-02-issue-58.md) |
 | 2026-11-02 | Issue #56 — cache de recherche des ressources | [Résultats et limites](reports/2026-11-02-issue-56.md) |

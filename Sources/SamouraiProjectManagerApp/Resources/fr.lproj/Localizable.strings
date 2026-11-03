@@ -898,3 +898,12 @@
 "Doublon de la ligne %d : les valeurs sont cumulées dans l'ordre du fichier." = "Doublon de la ligne %d : les valeurs sont cumulées dans l'ordre du fichier.";
 
 "Afficher la grille mensuelle pour cette longue période" = "Afficher la grille mensuelle pour cette longue période";
+"Données de démonstration" = "Données de démonstration";
+
+"Le premier lancement reste vide. Charge les exemples uniquement dans une base vide." = "Le premier lancement reste vide. Charge les exemples uniquement dans une base vide.";
+
+"Charger des données de démonstration" = "Charger des données de démonstration";
+
+"Données de démonstration chargées." = "Données de démonstration chargées.";
+
+"Les données de démonstration nécessitent une base vide." = "Les données de démonstration nécessitent une base vide.";

@@ -53,14 +53,3 @@ struct ScopeCoverageReport: Hashable {
         return Int((Double(coveredCount) / Double(totalCount) * 100).rounded())
     }
 }
-
-struct ScopeBaselineExecutionProgress: Hashable {
-    let baselineLabel: String
-    let acceptedCount: Int
-    let totalCount: Int
-
-    var progressPercent: Int {
-        guard totalCount > 0 else { return 100 }
-        return Int((Double(acceptedCount) / Double(totalCount) * 100).rounded())
-    }
-}

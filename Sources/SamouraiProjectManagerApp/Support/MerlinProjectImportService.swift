@@ -146,16 +146,21 @@ enum MerlinProjectImportService {
 
     static func importProject(from fileURL: URL, reporter: ImportProgressReporter = .noop) throws -> MerlinProjectImportPayload {
         let normalizedExtension = fileURL.pathExtension.lowercased()
-        if normalizedExtension == "mproject" || fileURL.hasDirectoryPath {
+        if normalizedExtension != "mprojectx", normalizedExtension == "mproject" || fileURL.hasDirectoryPath {
             return try importNativeProject(from: fileURL, reporter: reporter)
         }
 
-        guard normalizedExtension == "xml" else {
+        guard normalizedExtension == "xml" || normalizedExtension == "mprojectx" else {
             throw MerlinProjectImportError.unsupportedFileType
         }
 
         reporter.setStage(.reading)
-        let data = try Data(contentsOf: fileURL)
+        // Merlin XML exports are packages containing content.xml, unlike native state.sql packages.
+        let xmlURL = normalizedExtension == "mprojectx" ? fileURL.appending(path: "content.xml") : fileURL
+        if normalizedExtension == "mprojectx", !FileManager.default.fileExists(atPath: xmlURL.path) {
+            throw MerlinProjectImportError.invalidXML("le paquet Merlin XML ne contient pas content.xml.")
+        }
+        let data = try Data(contentsOf: xmlURL)
         guard data.isEmpty == false else {
             throw MerlinProjectImportError.invalidXML("le fichier est vide.")
         }
@@ -183,8 +188,10 @@ enum MerlinProjectImportService {
 
     static var allowedContentTypes: [UTType] {
         var types: [UTType] = [.xml, .folder, .package]
-        if let mprojectType = UTType(filenameExtension: "mproject") {
-            types.append(mprojectType)
+        for fileExtension in ["mproject", "mprojectx"] {
+            if let type = UTType(filenameExtension: fileExtension) {
+                types.append(type)
+            }
         }
         return types
     }

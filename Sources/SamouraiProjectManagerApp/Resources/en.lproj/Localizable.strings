@@ -898,3 +898,12 @@
 "Doublon de la ligne %d : les valeurs sont cumulées dans l'ordre du fichier." = "Duplicate of row %d: values are combined in file order.";
 
 "Afficher la grille mensuelle pour cette longue période" = "Show the monthly grid for this long period";
+"Données de démonstration" = "Demo data";
+
+"Le premier lancement reste vide. Charge les exemples uniquement dans une base vide." = "The first launch starts empty. Load examples only into an empty database.";
+
+"Charger des données de démonstration" = "Load demo data";
+
+"Données de démonstration chargées." = "Demo data loaded.";
+
+"Les données de démonstration nécessitent une base vide." = "Demo data requires an empty database.";

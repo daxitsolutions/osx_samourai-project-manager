@@ -39,6 +39,7 @@ Le workflow [Checks](../.github/workflows/checks.yml) lance trois jobs distincts
 
 | Date | Sujet | Compte rendu |
 |---|---|---|
+| 2026-11-03 | Issue #48 — sélecteur de projet comme repère principal | [Résultats et limites](reports/2026-11-03-issue-48.md) |
 | 2026-11-03 | Issue #28 — paquet XML Merlin mprojectx | [Résultats et limites](reports/2026-11-03-issue-28.md) |
 | 2026-11-03 | Issue #45 — exemples explicites et documentation REST | [Résultats et limites](reports/2026-11-03-issue-45.md) |
 | 2026-11-03 | Issue #40 — suppression du calcul latent sans appel | [Résultats et limites](reports/2026-11-03-issue-40.md) |

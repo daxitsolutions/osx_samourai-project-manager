@@ -89,7 +89,7 @@ struct AppShellView: View {
                 VStack(spacing: 2) {
                     Text(currentSection.localizedTitle(language: appState.interfaceLanguage))
                         .font(.headline)
-                    Text(localizedToolbarSubtitle)
+                    Text(currentSection.localizedSummary(language: appState.interfaceLanguage))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -164,12 +164,7 @@ struct AppShellView: View {
             }
 
             Section(AppSectionGroup.project.localizedTitle(language: appState.interfaceLanguage)) {
-                if let primaryProjectName {
-                    Text(primaryProjectName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.none)
-                } else {
+                if primaryProjectName == nil {
                     Text(localized("Choisir un projet en haut de page"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -281,13 +276,6 @@ struct AppShellView: View {
         case .planning:
             PlanningWorkspaceView()
         }
-    }
-
-    private var localizedToolbarSubtitle: String {
-        if currentSection.showsProjectPicker, let primaryProjectName {
-            return primaryProjectName
-        }
-        return currentSection.localizedSummary(language: appState.interfaceLanguage)
     }
 
     private var projectSections: [AppSection] {

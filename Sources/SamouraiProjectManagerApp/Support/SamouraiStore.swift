@@ -3220,32 +3220,9 @@ final class SamouraiStore {
         }
     }
 
-    func updateResourceQuick(
-        resourceID: UUID,
-        nom: String,
-        parentDescription: String,
-        primaryResourceRole: String,
-        email: String,
-        phone: String,
-        allocationPercent: Int,
-        status: ResourceStatus,
-        engagement: ResourceEngagement
-    ) {
-        guard allowMutation() else { return }
-        let didUpdate = resourceStore.updateResourceQuick(
-            resourceID: resourceID,
-            nom: nom,
-            parentDescription: parentDescription,
-            primaryResourceRole: primaryResourceRole,
-            email: email,
-            phone: phone,
-            allocationPercent: allocationPercent,
-            status: status,
-            engagement: engagement
-        )
-        if didUpdate {
-            persist()
-        }
+    func applyResourceInlineEdit(_ draft: ResourceInlineDraft) throws {
+        try requireEditableState()
+        if try resourceStore.applyInlineEdit(draft) { persist() }
     }
 
     func assignResource(resourceID: UUID, to projectID: UUID) {

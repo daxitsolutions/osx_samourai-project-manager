@@ -24,6 +24,19 @@ struct NormalizedResourceFieldsStore {
 }
 
 extension ResourceStore {
+    @discardableResult
+    func applyInlineEdit(_ draft: ResourceInlineDraft) throws -> Bool {
+        guard let index = resources.firstIndex(where: { $0.id == draft.resourceID }) else {
+            throw ResourceInlineEditError.missingResource
+        }
+        var updated = try draft.applying(to: resources[index])
+        guard updated != resources[index] else { return false }
+        updated.updatedAt = .now
+        resources[index] = updated
+        resources = sortResources(resources)
+        return true
+    }
+
     func addResource(
         nom: String,
         parentDescription: String?,
@@ -164,48 +177,6 @@ extension ResourceStore {
         resources[index].memo = memo
         resources[index].notes = notes
         resources[index].updatedAt = .now
-        resources = sortResources(resources)
-        return true
-    }
-
-    @discardableResult
-    func updateResourceQuick(
-        resourceID: UUID,
-        nom: String,
-        parentDescription: String,
-        primaryResourceRole: String,
-        email: String,
-        phone: String,
-        allocationPercent: Int,
-        status: ResourceStatus,
-        engagement: ResourceEngagement
-    ) -> Bool {
-        guard let index = resources.firstIndex(where: { $0.id == resourceID }) else { return false }
-
-        let cleanedNom = cleanedOptionalString(nom) ?? resources[index].fullName
-        let cleanedParentDescription = cleanedOptionalString(parentDescription)
-        let cleanedPrimaryRole = cleanedOptionalString(primaryResourceRole)
-
-        resources[index].fullName = cleanedNom
-        resources[index].nom = cleanedNom
-
-        if let cleanedParentDescription {
-            resources[index].parentDescription = cleanedParentDescription
-            resources[index].department = cleanedParentDescription
-        }
-
-        if let cleanedPrimaryRole {
-            resources[index].primaryResourceRole = cleanedPrimaryRole
-            resources[index].jobTitle = cleanedPrimaryRole
-        }
-
-        resources[index].email = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        resources[index].phone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
-        resources[index].allocationPercent = min(max(allocationPercent, 0), 100)
-        resources[index].status = status
-        resources[index].engagement = engagement
-        resources[index].updatedAt = .now
-
         resources = sortResources(resources)
         return true
     }

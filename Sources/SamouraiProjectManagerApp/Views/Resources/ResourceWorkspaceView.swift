@@ -37,6 +37,7 @@ struct ResourceWorkspaceView: View {
     @State private var activeImportTask: Task<Void, Never>?
     @State private var inlineDrafts: [UUID: ResourceInlineDraft] = [:]
     @State private var inlineEditFeedbackMessage: String?
+    @State private var failedInlineResourceID: UUID?
     @State private var evaluationContext: ResourceEvaluationContext?
     @State private var evaluationFeedbackMessage: String?
     @State private var memoPreviewResourceID: UUID?
@@ -459,7 +460,12 @@ struct ResourceWorkspaceView: View {
             get: { inlineEditFeedbackMessage != nil },
             set: { if $0 == false { inlineEditFeedbackMessage = nil } }
         )) {
-            Button(localized("OK"), role: .cancel) {}
+            Button(localized("Continuer à modifier"), role: .cancel) {}
+            Button(localized("Abandonner la saisie"), role: .destructive) {
+                if let id = failedInlineResourceID { inlineDrafts.removeValue(forKey: id) }
+                failedInlineResourceID = nil
+                focusedInlineCell = nil
+            }
         } message: {
             Text(inlineEditFeedbackMessage ?? "")
         }
@@ -471,6 +477,7 @@ struct ResourceWorkspaceView: View {
         } message: {
             Text(evaluationFeedbackMessage ?? "")
         }
+        .onDisappear { inlineDrafts.removeAll() }
         .onChange(of: store.resources.map(\.id)) { _, currentResourceIDs in
             let existingIDs = Set(currentResourceIDs)
             selectedResourceIDs = selectedResourceIDs.intersection(existingIDs)
@@ -978,7 +985,10 @@ struct ResourceWorkspaceView: View {
 
     private func inlineTextBinding(for resource: Resource, field: WritableKeyPath<ResourceInlineDraft, String>) -> Binding<String> {
         Binding(
-            get: { draftForInlineEdition(resource)[keyPath: field] },
+            get: {
+                let current = store.resource(with: resource.id) ?? resource
+                return draftForInlineEdition(current).value(for: field, current: current)
+            },
             set: { newValue in
                 var draft = draftForInlineEdition(resource)
                 draft[keyPath: field] = newValue
@@ -989,7 +999,10 @@ struct ResourceWorkspaceView: View {
 
     private func inlineStatusBinding(for resource: Resource) -> Binding<ResourceStatus> {
         Binding(
-            get: { draftForInlineEdition(resource).status },
+            get: {
+                let current = store.resource(with: resource.id) ?? resource
+                return draftForInlineEdition(current).value(for: \.status, current: current)
+            },
             set: { newValue in
                 var draft = draftForInlineEdition(resource)
                 draft.status = newValue
@@ -1001,7 +1014,10 @@ struct ResourceWorkspaceView: View {
 
     private func inlineEngagementBinding(for resource: Resource) -> Binding<ResourceEngagement> {
         Binding(
-            get: { draftForInlineEdition(resource).engagement },
+            get: {
+                let current = store.resource(with: resource.id) ?? resource
+                return draftForInlineEdition(current).value(for: \.engagement, current: current)
+            },
             set: { newValue in
                 var draft = draftForInlineEdition(resource)
                 draft.engagement = newValue
@@ -1016,9 +1032,7 @@ struct ResourceWorkspaceView: View {
             return cached
         }
 
-        let freshDraft = ResourceInlineDraft(resource: resource)
-        inlineDrafts[resource.id] = freshDraft
-        return freshDraft
+        return ResourceInlineDraft(resource: store.resource(with: resource.id) ?? resource)
     }
 
     private func handleInlineSubmit(resourceID: UUID, column: ResourceInlineColumn) {
@@ -1027,38 +1041,17 @@ struct ResourceWorkspaceView: View {
     }
 
     private func saveInlineEdition(resourceID: UUID) -> Bool {
-        guard let resource = store.resource(with: resourceID) else { return false }
-        let draft = inlineDrafts[resourceID] ?? ResourceInlineDraft(resource: resource)
-
-        let trimmedNom = draft.nom.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmedNom.isEmpty == false else {
-            inlineEditFeedbackMessage = "Le nom ne peut pas être vide."
+        guard let draft = inlineDrafts[resourceID] else { return true }
+        do {
+            try store.applyResourceInlineEdit(draft)
+            inlineDrafts.removeValue(forKey: resourceID)
+            failedInlineResourceID = nil
+            return true
+        } catch {
+            failedInlineResourceID = resourceID
+            inlineEditFeedbackMessage = error.localizedDescription
             return false
         }
-
-        let allocationRaw = draft.allocationPercentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let allocation = Int(allocationRaw), (0...100).contains(allocation) else {
-            inlineEditFeedbackMessage = "Allocation invalide. Saisis une valeur entière entre 0 et 100."
-            return false
-        }
-
-        store.updateResourceQuick(
-            resourceID: resourceID,
-            nom: trimmedNom,
-            parentDescription: draft.parentDescription,
-            primaryResourceRole: draft.primaryResourceRole,
-            email: draft.email,
-            phone: draft.phone,
-            allocationPercent: allocation,
-            status: draft.status,
-            engagement: draft.engagement
-        )
-
-        if let refreshed = store.resource(with: resourceID) {
-            inlineDrafts[resourceID] = ResourceInlineDraft(resource: refreshed)
-        }
-
-        return true
     }
 
     private func nextInlineCell(after key: ResourceInlineCellKey) -> ResourceInlineCellKey? {
@@ -1567,28 +1560,6 @@ private struct ResourceExportDocument: FileDocument {
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: data)
-    }
-}
-
-private struct ResourceInlineDraft {
-    var nom: String
-    var primaryResourceRole: String
-    var parentDescription: String
-    var email: String
-    var phone: String
-    var allocationPercentText: String
-    var status: ResourceStatus
-    var engagement: ResourceEngagement
-
-    init(resource: Resource) {
-        nom = resource.displayName
-        primaryResourceRole = resource.primaryResourceRole ?? resource.displayPrimaryRole
-        parentDescription = resource.parentDescription ?? resource.displayDepartment
-        email = resource.email
-        phone = resource.phone
-        allocationPercentText = "\(resource.allocationPercent)"
-        status = resource.status
-        engagement = resource.engagement
     }
 }
 

@@ -628,12 +628,7 @@ final class SamouraiStore {
         guard loadState != .loading else {
             throw RESTAPIError.serviceUnavailable(mutationBlockedMessage)
         }
-        let envelope: SamouraiBackupEnvelope
-        do {
-            envelope = try backupDecoder.decode(SamouraiBackupEnvelope.self, from: data)
-        } catch {
-            throw SamouraiBackupError.invalidFormat
-        }
+        let envelope = try SamouraiBackupEnvelope.decodeBackup(data, using: backupDecoder)
 
         guard envelope.format == SamouraiBackupEnvelope.formatIdentifier else {
             throw SamouraiBackupError.invalidFormat
@@ -645,9 +640,9 @@ final class SamouraiStore {
 
         let normalized = try validatedDatabase(from: envelope.database)
 
-        // Ne débloquer l'édition qu'après une écriture réussie. En récupération,
-        // conserver d'abord le fichier rejeté, même s'il n'est pas décodable.
-        try persistence.writer.flush(normalized, preservingCurrentFile: loadState != .ready, createAutoBackup: false)
+        // Sérialiser la restauration avec les écritures en attente et conserver
+        // le fichier remplacé, y compris en fonctionnement normal.
+        try persistence.writer.flush(normalized, preservingCurrentFile: true, createAutoBackup: false)
 
         applyDatabase(normalized)
         loadState = .ready

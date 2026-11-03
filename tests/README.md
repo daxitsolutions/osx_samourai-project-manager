@@ -66,7 +66,7 @@ Les sauvegardes manuelles utilisent une enveloppe JSON pour les deux extensions 
 | 2026-11-02 | Issue #36 — réimport des risques sans perte d’identité ni d’historique | [Résultats et limites](reports/2026-11-02-issue-36.md) |
 | 2026-11-02 | Issue #37 — annulation d’import sans résultat partiel | [Résultats et limites](reports/2026-11-02-issue-37.md) |
 | 2026-11-02 | Issue #38 — doublons internes d’un import de ressources | [Résultats et limites](reports/2026-11-02-issue-38.md) |
-| 2026-11-02 | Issue #46 — socle métier et allers-retours des sauvegardes | [Résultats et limites](reports/2026-11-02-issue-46.md) |
+| 2026-11-02 | Issue #46 — socle métier et sauvegardes (revalidé le 2026-11-03 avec main) | [Résultats et limites](reports/2026-11-02-issue-46.md) |
 | 2026-11-02 | Issue #39 — API REST limitée à la boucle locale | [Résultats et limites](reports/2026-11-02-issue-39.md) |
 | 2026-11-02 | Issue #42 — moteur métier commun des imports | [Résultats et limites](reports/2026-11-02-issue-42.md) |
 | 2026-11-02 | Issue #41 — validation, normalisation et publication communes | [Résultats et limites](reports/2026-11-02-issue-41.md) |
